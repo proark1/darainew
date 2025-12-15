@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Task, CalendarEvent } from '@/types/flux';
+import { Task, CalendarEvent, AssistantPersonality } from '@/types/flux';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 
@@ -62,6 +62,7 @@ export function useAIChat() {
     messages,
     tasks,
     events,
+    personality,
     onDelta,
     onToolCall,
     onDone,
@@ -69,6 +70,7 @@ export function useAIChat() {
     messages: Message[];
     tasks?: Task[];
     events?: CalendarEvent[];
+    personality?: AssistantPersonality;
     onDelta: (text: string) => void;
     onToolCall: (toolCall: ToolCall) => void;
     onDone: () => void;
@@ -98,6 +100,7 @@ export function useAIChat() {
             startTime: e.startTime.toISOString(),
             endTime: e.endTime.toISOString(),
           })),
+          personality,
         }),
       });
 
