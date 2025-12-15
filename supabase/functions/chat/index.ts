@@ -14,7 +14,15 @@ interface ChatRequest {
   messages: Message[];
   tasks?: { id: string; title: string; completed: boolean; category: string; priority: string }[];
   events?: { id: string; title: string; startTime: string; endTime: string }[];
+  personality?: 'balanced' | 'strict' | 'supportive' | 'creative';
 }
+
+const personalityPrompts: Record<string, string> = {
+  balanced: 'Be friendly, balanced, and adaptable. Match the user\'s energy and provide helpful guidance.',
+  strict: 'Be direct, no-nonsense, and focused on productivity. Push the user to take action immediately. Use short, commanding sentences. Hold them accountable. No excuses. Be like a drill sergeant for productivity.',
+  supportive: 'Be warm, encouraging, and empathetic. Celebrate every small win. Understand when things are hard. Offer gentle encouragement and break tasks into manageable steps. Be like a supportive friend.',
+  creative: 'Be playful, creative, and imaginative. Use metaphors and storytelling. Make productivity feel like an adventure. Inject humor and fun into interactions.',
+};
 
 const systemPrompt = `You are Flux, an intelligent AI productivity assistant. You help users manage tasks, schedule events, and stay organized.
 
@@ -45,7 +53,8 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, tasks, events }: ChatRequest = await req.json();
+    const { messages, tasks, events, personality = 'balanced' }: ChatRequest = await req.json();
+    const personalityAddition = personalityPrompts[personality] || personalityPrompts.balanced;
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     
     if (!GEMINI_API_KEY) {
@@ -62,7 +71,7 @@ serve(async (req) => {
       contextMessage += `\nUpcoming events:\n${events.map(e => `- ${e.title} at ${e.startTime}`).join('\n')}`;
     }
 
-    const fullSystemPrompt = systemPrompt + contextMessage;
+    const fullSystemPrompt = systemPrompt + '\n\nPersonality: ' + personalityAddition + contextMessage;
 
     // Convert messages to Gemini format
     const geminiMessages = messages.map(msg => ({
