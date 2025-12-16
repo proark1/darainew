@@ -86,6 +86,9 @@ const Index = () => {
     const MAX_EVENTS_PER_MESSAGE = 10;
     let tasksCreatedThisMessage = 0;
     let eventsCreatedThisMessage = 0;
+    // Track titles to prevent duplicate tasks/events in same message
+    const createdTaskTitles = new Set<string>();
+    const createdEventTitles = new Set<string>();
 
     // Keep prompts small and avoid runaway token usage
     const conversationMessages = (() => {
@@ -124,6 +127,13 @@ const Index = () => {
                 console.warn('Task creation rate limit reached for this message');
                 return;
               }
+              // Dedupe: skip if we already created a task with this title in this message
+              const taskTitle = (toolCall.task.title || 'New Task').toLowerCase().trim();
+              if (createdTaskTitles.has(taskTitle)) {
+                console.warn('Duplicate task title skipped:', taskTitle);
+                return;
+              }
+              createdTaskTitles.add(taskTitle);
               tasksCreatedThisMessage++;
               
               const newTask = await addTask({
@@ -155,6 +165,13 @@ const Index = () => {
               console.warn('Event creation rate limit reached for this message');
               return;
             }
+            // Dedupe: skip if we already created an event with this title in this message
+            const eventTitle = (toolCall.event.title || 'New Event').toLowerCase().trim();
+            if (createdEventTitles.has(eventTitle)) {
+              console.warn('Duplicate event title skipped:', eventTitle);
+              return;
+            }
+            createdEventTitles.add(eventTitle);
             eventsCreatedThisMessage++;
             
             const newEvent = await addEvent({
