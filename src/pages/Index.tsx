@@ -4,11 +4,12 @@ import { useDatabase } from '@/hooks/useDatabase';
 import { useSettings } from '@/hooks/useSettings';
 import { useAIChat } from '@/hooks/useAIChat';
 import { useTaskNotifications } from '@/hooks/useTaskNotifications';
+import { useSharedItemsRealtime } from '@/hooks/useSharedItemsRealtime';
 import { StandardMode } from '@/components/layout/StandardMode';
 import { GhostMode } from '@/components/ghost/GhostMode';
 import { ProfileSettingsDialog } from '@/components/settings/ProfileSettingsDialog';
 import { ShareDialog } from '@/components/sharing/ShareDialog';
-import { CalendarEvent, ChatMessage, AppMode } from '@/types/flux';
+import { CalendarEvent, ChatMessage, AppMode, Task } from '@/types/flux';
 import { useToast } from '@/hooks/use-toast';
 
 const Index = () => {
@@ -33,7 +34,28 @@ const Index = () => {
     shareItem,
     getSharedWith,
     removeShare,
+    fetchSharedWithMe,
   } = useDatabase(user?.id);
+
+  // Shared items state
+  const [sharedTasks, setSharedTasks] = useState<Task[]>([]);
+  const [sharedEvents, setSharedEvents] = useState<CalendarEvent[]>([]);
+
+  // Fetch shared items
+  const loadSharedItems = useCallback(async () => {
+    const { sharedTasks: tasks, sharedEvents: events } = await fetchSharedWithMe();
+    setSharedTasks(tasks);
+    setSharedEvents(events);
+  }, [fetchSharedWithMe]);
+
+  useEffect(() => {
+    if (user?.id) {
+      loadSharedItems();
+    }
+  }, [user?.id, loadSharedItems]);
+
+  // Real-time notifications for shares
+  useSharedItemsRealtime({ userId: user?.id, onNewShare: loadSharedItems });
 
   // Task notifications
   useTaskNotifications({
@@ -344,6 +366,8 @@ const Index = () => {
         <StandardMode
           tasks={tasks}
           events={events}
+          sharedTasks={sharedTasks}
+          sharedEvents={sharedEvents}
           messages={messages}
           isProcessing={isProcessing || isStreaming}
           onAddTask={handleAddTask}

@@ -359,6 +359,51 @@ export function useDatabase(userId: string | undefined) {
     return { error };
   }, []);
 
+  // Fetch items shared with the current user
+  const fetchSharedWithMe = useCallback(async () => {
+    if (!userId) return { sharedTasks: [], sharedEvents: [] };
+
+    // Fetch shared items where current user is the recipient
+    const { data: sharedItems } = await supabase
+      .from('shared_items')
+      .select('*')
+      .eq('shared_with_id', userId);
+
+    if (!sharedItems || sharedItems.length === 0) {
+      return { sharedTasks: [], sharedEvents: [] };
+    }
+
+    const taskIds = sharedItems.filter(s => s.item_type === 'task').map(s => s.item_id);
+    const eventIds = sharedItems.filter(s => s.item_type === 'event').map(s => s.item_id);
+
+    let sharedTasks: Task[] = [];
+    let sharedEvents: CalendarEvent[] = [];
+
+    if (taskIds.length > 0) {
+      const { data: tasksData } = await supabase
+        .from('tasks')
+        .select('*')
+        .in('id', taskIds);
+      
+      if (tasksData) {
+        sharedTasks = tasksData.map(dbTaskToTask);
+      }
+    }
+
+    if (eventIds.length > 0) {
+      const { data: eventsData } = await supabase
+        .from('events')
+        .select('*')
+        .in('id', eventIds);
+      
+      if (eventsData) {
+        sharedEvents = eventsData.map(dbEventToEvent);
+      }
+    }
+
+    return { sharedTasks, sharedEvents };
+  }, [userId]);
+
   return {
     tasks,
     events,
@@ -375,6 +420,7 @@ export function useDatabase(userId: string | undefined) {
     shareItem,
     getSharedWith,
     removeShare,
+    fetchSharedWithMe,
     refetch: fetchData,
   };
 }

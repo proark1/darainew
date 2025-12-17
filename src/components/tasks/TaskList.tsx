@@ -46,9 +46,11 @@ import {
 } from 'lucide-react';
 import { format, isPast, isToday, isTomorrow } from 'date-fns';
 
+import { SidebarFilter } from '@/components/layout/Sidebar';
+
 interface TaskListProps {
   tasks: Task[];
-  filter: TaskCategory | 'all';
+  filter: SidebarFilter;
   onToggleComplete: (id: string) => void;
   onDeleteTask: (id: string) => void;
   onDeleteTasks?: (ids: string[]) => Promise<{ error: string | null }> | void;
@@ -383,7 +385,7 @@ export function TaskList({
     })
   );
 
-  const filteredTasks = filter === 'all' 
+  const filteredTasks = filter === 'all' || filter === 'shared'
     ? tasks 
     : tasks.filter(task => task.category === filter);
 
@@ -409,7 +411,7 @@ export function TaskList({
     if (newTaskTitle.trim()) {
       onAddTask({
         title: newTaskTitle.trim(),
-        category: filter === 'all' ? 'personal' : filter,
+        category: (filter === 'all' || filter === 'shared') ? 'personal' : filter,
         priority: 'medium',
         completed: false,
         dueDate: newTaskDueDate,

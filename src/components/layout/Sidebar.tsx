@@ -10,13 +10,16 @@ import {
   ChevronRight,
   Sparkles,
   LogOut,
-  UserCircle
+  UserCircle,
+  Users
 } from 'lucide-react';
 import { TaskCategory } from '@/types/flux';
 
+export type SidebarFilter = TaskCategory | 'all' | 'shared';
+
 interface SidebarProps {
-  activeFilter: TaskCategory | 'all';
-  onFilterChange: (filter: TaskCategory | 'all') => void;
+  activeFilter: SidebarFilter;
+  onFilterChange: (filter: SidebarFilter) => void;
   onVoiceMode: () => void;
   onOpenSettings: () => void;
   onEditProfile?: () => void;
@@ -26,10 +29,11 @@ interface SidebarProps {
 export function Sidebar({ activeFilter, onFilterChange, onVoiceMode, onOpenSettings, onEditProfile, onSignOut }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
 
-  const navItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', filter: 'all' as const },
-    { icon: Briefcase, label: 'Business', filter: 'business' as const },
-    { icon: User, label: 'Personal', filter: 'personal' as const },
+  const navItems: { icon: typeof LayoutDashboard; label: string; filter: SidebarFilter }[] = [
+    { icon: LayoutDashboard, label: 'Dashboard', filter: 'all' },
+    { icon: Briefcase, label: 'Business', filter: 'business' },
+    { icon: User, label: 'Personal', filter: 'personal' },
+    { icon: Users, label: 'Shared with me', filter: 'shared' },
   ];
 
   return (
