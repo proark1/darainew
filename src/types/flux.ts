@@ -21,6 +21,48 @@ export interface RecurrenceRule {
   endDate?: Date;
 }
 
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
+export interface TaskAttachment {
+  id: string;
+  name: string;
+  url: string;
+  type: string;
+  uploadedAt: Date;
+}
+
+export interface TaskComment {
+  id: string;
+  content: string;
+  createdAt: Date;
+  updatedAt?: Date;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  color: string;
+  isArchived: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface WeeklyReview {
+  id: string;
+  weekStart: Date;
+  completedTasksCount: number;
+  incompleteTasksReviewed: string[];
+  intentions?: string;
+  celebrations?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -36,6 +78,12 @@ export interface Task {
   sortOrder?: number; // For drag-and-drop ordering
   reminderBefore?: number; // Minutes before due date to notify
   sharedBy?: { displayName?: string; email?: string }; // Who shared this item
+  projectId?: string;
+  mainResponsibleId?: string;
+  secondaryResponsibleId?: string;
+  checklist?: ChecklistItem[];
+  attachments?: TaskAttachment[];
+  comments?: TaskComment[];
 }
 
 export interface CalendarEvent {

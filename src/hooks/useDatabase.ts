@@ -18,6 +18,12 @@ interface DbTask {
   reminder_before: number | null;
   created_at: string;
   updated_at: string;
+  project_id: string | null;
+  main_responsible_id: string | null;
+  secondary_responsible_id: string | null;
+  checklist: unknown;
+  attachments: unknown;
+  comments: unknown;
 }
 
 interface DbEvent {
@@ -64,6 +70,12 @@ export function useDatabase(userId: string | undefined) {
     parentId: dbTask.parent_id || undefined,
     sortOrder: dbTask.sort_order ?? 0,
     reminderBefore: dbTask.reminder_before ?? undefined,
+    projectId: dbTask.project_id || undefined,
+    mainResponsibleId: dbTask.main_responsible_id || undefined,
+    secondaryResponsibleId: dbTask.secondary_responsible_id || undefined,
+    checklist: (dbTask.checklist as Task['checklist']) || [],
+    attachments: (dbTask.attachments as Task['attachments']) || [],
+    comments: (dbTask.comments as Task['comments']) || [],
   });
 
   // Convert DB event to app CalendarEvent
@@ -122,27 +134,35 @@ export function useDatabase(userId: string | undefined) {
   const addTask = useCallback(async (task: Omit<Task, 'id' | 'createdAt'>): Promise<Task | null> => {
     if (!userId) return null;
 
+    const insertData = {
+      user_id: userId,
+      title: task.title,
+      description: task.description,
+      category: task.category,
+      priority: task.priority,
+      completed: task.completed,
+      due_date: task.dueDate?.toISOString(),
+      recurrence_rule: task.recurrenceRule,
+      recurrence_end: task.recurrenceEnd?.toISOString(),
+      parent_id: task.parentId,
+      sort_order: task.sortOrder ?? 0,
+      reminder_before: task.reminderBefore,
+      project_id: task.projectId,
+      main_responsible_id: task.mainResponsibleId,
+      secondary_responsible_id: task.secondaryResponsibleId,
+      checklist: JSON.parse(JSON.stringify(task.checklist || [])),
+      attachments: JSON.parse(JSON.stringify(task.attachments || [])),
+      comments: JSON.parse(JSON.stringify(task.comments || [])),
+    };
+
     const { data, error } = await supabase
       .from('tasks')
-      .insert({
-        user_id: userId,
-        title: task.title,
-        description: task.description,
-        category: task.category,
-        priority: task.priority,
-        completed: task.completed,
-        due_date: task.dueDate?.toISOString(),
-        recurrence_rule: task.recurrenceRule,
-        recurrence_end: task.recurrenceEnd?.toISOString(),
-        parent_id: task.parentId,
-        sort_order: task.sortOrder ?? 0,
-        reminder_before: task.reminderBefore,
-      })
+      .insert([insertData] as any)
       .select()
       .single();
 
     if (data && !error) {
-      const newTask = dbTaskToTask(data);
+      const newTask = dbTaskToTask(data as unknown as DbTask);
       setTasks(prev => [newTask, ...prev]);
       return newTask;
     }
@@ -162,6 +182,12 @@ export function useDatabase(userId: string | undefined) {
     if (updates.parentId !== undefined) dbUpdates.parent_id = updates.parentId;
     if (updates.sortOrder !== undefined) dbUpdates.sort_order = updates.sortOrder;
     if (updates.reminderBefore !== undefined) dbUpdates.reminder_before = updates.reminderBefore;
+    if (updates.projectId !== undefined) dbUpdates.project_id = updates.projectId;
+    if (updates.mainResponsibleId !== undefined) dbUpdates.main_responsible_id = updates.mainResponsibleId;
+    if (updates.secondaryResponsibleId !== undefined) dbUpdates.secondary_responsible_id = updates.secondaryResponsibleId;
+    if (updates.checklist !== undefined) dbUpdates.checklist = updates.checklist;
+    if (updates.attachments !== undefined) dbUpdates.attachments = updates.attachments;
+    if (updates.comments !== undefined) dbUpdates.comments = updates.comments;
 
     const { error } = await supabase
       .from('tasks')
