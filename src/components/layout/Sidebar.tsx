@@ -21,7 +21,8 @@ import {
   Search,
   Calendar,
   Settings,
-  CheckSquare
+  CheckSquare,
+  Zap
 } from 'lucide-react';
 import { TaskCategory } from '@/types/flux';
 
@@ -40,7 +41,9 @@ interface SidebarProps {
   onOpenActivityFeed?: () => void;
   onOpenGlobalSearch?: () => void;
   onToggleCalendar?: () => void;
+  onOpenTodayFocus?: () => void;
   showCalendar?: boolean;
+  notificationButton?: React.ReactNode;
 }
 
 export function Sidebar({ 
@@ -55,7 +58,9 @@ export function Sidebar({
   onOpenActivityFeed,
   onOpenGlobalSearch,
   onToggleCalendar,
+  onOpenTodayFocus,
   showCalendar,
+  notificationButton,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
@@ -85,15 +90,35 @@ export function Sidebar({
             <span className="font-semibold text-foreground">Flux</span>
           </div>
         )}
-        <Button 
-          variant="ghost" 
-          size="icon"
-          className={cn("h-8 w-8 text-muted-foreground hover:text-foreground", collapsed && "mx-auto")}
-          onClick={() => setCollapsed(!collapsed)}
-        >
-          {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-        </Button>
+        <div className="flex items-center gap-1">
+          {!collapsed && notificationButton}
+          <Button 
+            variant="ghost" 
+            size="icon"
+            className={cn("h-8 w-8 text-muted-foreground hover:text-foreground", collapsed && "mx-auto")}
+            onClick={() => setCollapsed(!collapsed)}
+          >
+            {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+          </Button>
+        </div>
       </div>
+
+      {/* Today Focus Button - Prominent CTA */}
+      {onOpenTodayFocus && (
+        <div className="px-2 pt-2">
+          <Button
+            variant="default"
+            className={cn(
+              "w-full gap-2 bg-gradient-to-r from-primary to-accent hover:opacity-90",
+              collapsed ? "justify-center px-0" : "justify-start"
+            )}
+            onClick={onOpenTodayFocus}
+          >
+            <Zap className="w-4 h-4 shrink-0" />
+            {!collapsed && <span className="text-sm font-medium">Today's Focus</span>}
+          </Button>
+        </div>
+      )}
 
       {/* Main Navigation */}
       <nav className="flex-1 p-2 space-y-1 overflow-y-auto">

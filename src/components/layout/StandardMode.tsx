@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Sidebar, SidebarFilter } from './Sidebar';
 import { MobileLayout } from './MobileLayout';
 import { ChatPanel } from '../chat/ChatPanel';
@@ -6,16 +6,20 @@ import { TaskList } from '../tasks/TaskList';
 import { CalendarPanel } from '../calendar/CalendarPanel';
 import { CalendarView } from '../calendar/CalendarView';
 import { FocusTimer } from '../focus/FocusTimer';
+import { TodayFocusView } from '../focus/TodayFocusView';
 import { ProjectManager } from '../projects/ProjectManager';
 import { ActivityPanel } from '../activity/ActivityPanel';
 import { GlobalSearch } from '../search/GlobalSearch';
 import { QuickAddFAB } from '../tasks/QuickAddFAB';
 import { AICommandPanel } from '../ai/AICommandPanel';
+import { WorkspaceTabs } from '../workspace/WorkspaceTabs';
+import { NotificationCenter } from '../notifications/NotificationCenter';
+import { useNotifications } from '@/hooks/useNotifications';
 import { Task, CalendarEvent, ChatMessage, Project } from '@/types/flux';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useCelebration } from '@/hooks/useCelebration';
 import { Button } from '@/components/ui/button';
-import { List, Grid3X3, X } from 'lucide-react';
+import { List, Grid3X3, X, Mic } from 'lucide-react';
 import type { ActivityItem } from '@/hooks/useActivityFeed';
 import type { SearchResult, SearchFilters } from '@/hooks/useGlobalSearch';
 
@@ -122,13 +126,34 @@ export function StandardMode({
   const [calendarMode, setCalendarMode] = useState<'agenda' | 'grid'>('agenda');
   const [fullscreenPanel, setFullscreenPanel] = useState<FullscreenPanel>(null);
   const [showFocusTimer, setShowFocusTimer] = useState(false);
+  const [showTodayFocus, setShowTodayFocus] = useState(false);
   const [showProjectPanel, setShowProjectPanel] = useState(false);
   const [showActivityPanel, setShowActivityPanel] = useState(false);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
+  const [activeWorkspace, setActiveWorkspace] = useState<string>('all');
   const isMobile = useIsMobile();
   const { celebrate } = useCelebration();
+  const { 
+    notifications, 
+    markRead, 
+    markAllRead, 
+    deleteNotification, 
+    clearAll,
+    addNotification,
+  } = useNotifications();
+
+  // Workspace task counts
+  const workspaceTaskCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      all: tasks.filter(t => !t.completed).length,
+      family: tasks.filter(t => !t.completed && t.category === 'personal').length,
+      work: tasks.filter(t => !t.completed && t.category === 'business').length,
+      personal: tasks.filter(t => !t.completed && !t.projectId).length,
+    };
+    return counts;
+  }, [tasks]);
 
   // Wrapper for task completion with celebration
   const handleToggleTaskComplete = (id: string) => {
@@ -312,37 +337,57 @@ export function StandardMode({
         onOpenActivityFeed={() => setShowActivityPanel(true)}
         onOpenGlobalSearch={() => setShowGlobalSearch(true)}
         onToggleCalendar={() => setShowCalendar(!showCalendar)}
+        onOpenTodayFocus={() => setShowTodayFocus(true)}
         showCalendar={showCalendar}
+        notificationButton={
+          <NotificationCenter
+            notifications={notifications}
+            onMarkRead={markRead}
+            onMarkAllRead={markAllRead}
+            onDelete={deleteNotification}
+            onClearAll={clearAll}
+          />
+        }
       />
       
-      <main className="flex-1 flex overflow-hidden">
-        {/* Project Panel */}
-        {showProjectPanel && onAddProject && onUpdateProject && onDeleteProject && getProjectProgress && (
-          <div className="w-64 border-r border-border p-3 overflow-y-auto">
-            <ProjectManager
-              projects={projects}
-              tasks={tasks}
-              onAddProject={onAddProject}
-              onUpdateProject={onUpdateProject}
-              onDeleteProject={onDeleteProject}
-              getProjectProgress={getProjectProgress}
-              selectedProjectId={selectedProjectId}
-              onSelectProject={setSelectedProjectId}
-            />
-          </div>
-        )}
-
-        {/* Chat Panel */}
-        <div className="w-[400px] border-r border-border flex flex-col glass-panel-solid m-2 mr-1 rounded-xl overflow-hidden">
-          <ChatPanel 
-            messages={messages}
-            onSendMessage={onSendMessage}
-            isProcessing={isProcessing}
-            onToggleFullscreen={() => setFullscreenPanel('chat')}
+      <main className="flex-1 flex flex-col overflow-hidden">
+        {/* Workspace Tabs */}
+        <div className="px-4 pt-3 pb-1">
+          <WorkspaceTabs
+            activeWorkspace={activeWorkspace}
+            onWorkspaceChange={setActiveWorkspace}
+            workspaceTaskCounts={workspaceTaskCounts}
           />
         </div>
 
-        {/* Right Side - Tasks & Calendar */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Project Panel */}
+          {showProjectPanel && onAddProject && onUpdateProject && onDeleteProject && getProjectProgress && (
+            <div className="w-64 border-r border-border p-3 overflow-y-auto">
+              <ProjectManager
+                projects={projects}
+                tasks={tasks}
+                onAddProject={onAddProject}
+                onUpdateProject={onUpdateProject}
+                onDeleteProject={onDeleteProject}
+                getProjectProgress={getProjectProgress}
+                selectedProjectId={selectedProjectId}
+                onSelectProject={setSelectedProjectId}
+              />
+            </div>
+          )}
+
+          {/* Chat Panel */}
+          <div className="w-[400px] border-r border-border flex flex-col glass-panel-solid m-2 mr-1 rounded-xl overflow-hidden">
+            <ChatPanel 
+              messages={messages}
+              onSendMessage={onSendMessage}
+              isProcessing={isProcessing}
+              onToggleFullscreen={() => setFullscreenPanel('chat')}
+            />
+          </div>
+
+          {/* Right Side - Tasks & Calendar */}
         <div className="flex-1 flex flex-col p-2 pl-1 gap-2">
           {/* AI Commands */}
           <div className="flex items-center justify-between px-2">
@@ -426,7 +471,18 @@ export function StandardMode({
             </div>
           )}
         </div>
+        </div>
       </main>
+
+      {/* Today Focus View */}
+      {showTodayFocus && (
+        <TodayFocusView
+          tasks={tasks}
+          events={events}
+          onToggleComplete={handleToggleTaskComplete}
+          onClose={() => setShowTodayFocus(false)}
+        />
+      )}
 
       {/* Focus Timer Dialog */}
       <FocusTimer
