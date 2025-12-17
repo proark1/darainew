@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { 
@@ -11,7 +12,8 @@ import {
   Sparkles,
   LogOut,
   UserCircle,
-  Users
+  Users,
+  BookUser
 } from 'lucide-react';
 import { TaskCategory } from '@/types/flux';
 
@@ -28,6 +30,7 @@ interface SidebarProps {
 
 export function Sidebar({ activeFilter, onFilterChange, onVoiceMode, onOpenSettings, onEditProfile, onSignOut }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const navigate = useNavigate();
 
   const navItems: { icon: typeof LayoutDashboard; label: string; filter: SidebarFilter }[] = [
     { icon: LayoutDashboard, label: 'Dashboard', filter: 'all' },
@@ -84,6 +87,18 @@ export function Sidebar({ activeFilter, onFilterChange, onVoiceMode, onOpenSetti
 
       {/* Bottom Actions */}
       <div className="p-3 border-t border-sidebar-border space-y-1">
+        <Button
+          variant="ghost"
+          className={cn(
+            "w-full gap-3",
+            collapsed && "justify-center px-0"
+          )}
+          onClick={() => navigate('/contacts')}
+        >
+          <BookUser className="w-5 h-5 shrink-0" />
+          {!collapsed && <span>Contacts</span>}
+        </Button>
+
         <Button
           variant="ghost"
           className={cn(
