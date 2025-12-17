@@ -10,6 +10,7 @@ import { useProjects } from '@/hooks/useProjects';
 import { useSharedProjects } from '@/hooks/useSharedProjects';
 import { useWeeklyReview } from '@/hooks/useWeeklyReview';
 import { useContacts } from '@/hooks/useContacts';
+import { useContactReminders } from '@/hooks/useContactReminders';
 import { useActivityFeed } from '@/hooks/useActivityFeed';
 import { useGlobalSearch } from '@/hooks/useGlobalSearch';
 import { StandardMode } from '@/components/layout/StandardMode';
@@ -108,7 +109,13 @@ const Index = () => {
   // Contacts for task assignment
   const { contacts } = useContacts(user?.id);
 
-  // Activity feed
+  // Contact reminders - creates tasks when contacts are due for follow-up
+  useContactReminders({
+    contacts,
+    tasks,
+    onAddTask: addTask,
+    enabled: settings.notifications.taskReminders,
+  });
   const { activities, loading: activityLoading, logActivity } = useActivityFeed(user?.id);
 
   // Global search
