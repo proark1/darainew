@@ -13,10 +13,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { 
   ArrowLeft, UserPlus, Trash2, Search, Users, Briefcase, Heart, 
   Phone, Mail, Building, Clock, Bell, MessageSquare, Check, Pencil,
-  AlertCircle, Linkedin, Twitter, Globe, MapPin
+  AlertCircle, Linkedin, Twitter, Globe, MapPin, LayoutGrid, List
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow, isPast } from 'date-fns';
@@ -93,6 +95,7 @@ export default function Contacts() {
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [formData, setFormData] = useState<ContactFormData>(defaultFormData);
   const [activeTab, setActiveTab] = useState<'personal' | 'business' | 'due'>('personal');
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
 
   const contactsDue = getContactsDue();
 
@@ -231,7 +234,10 @@ export default function Contacts() {
     const isDue = contact.nextContactDue && isPast(contact.nextContactDue);
     
     return (
-      <Card className={`hover:bg-accent/50 transition-colors ${isDue ? 'border-orange-500/50' : ''}`}>
+      <Card 
+        className={`hover:bg-accent/50 transition-colors cursor-pointer ${isDue ? 'border-orange-500/50' : ''}`}
+        onClick={() => openEditDialog(contact)}
+      >
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -284,19 +290,22 @@ export default function Contacts() {
                   <div className="flex items-center gap-2 mt-2">
                     {contact.linkedinUrl && (
                       <a href={contact.linkedinUrl} target="_blank" rel="noopener noreferrer" 
-                         className="text-muted-foreground hover:text-primary transition-colors">
+                         className="text-muted-foreground hover:text-primary transition-colors"
+                         onClick={(e) => e.stopPropagation()}>
                         <Linkedin className="w-4 h-4" />
                       </a>
                     )}
                     {contact.twitterUrl && (
                       <a href={contact.twitterUrl} target="_blank" rel="noopener noreferrer"
-                         className="text-muted-foreground hover:text-primary transition-colors">
+                         className="text-muted-foreground hover:text-primary transition-colors"
+                         onClick={(e) => e.stopPropagation()}>
                         <Twitter className="w-4 h-4" />
                       </a>
                     )}
                     {contact.websiteUrl && (
                       <a href={contact.websiteUrl} target="_blank" rel="noopener noreferrer"
-                         className="text-muted-foreground hover:text-primary transition-colors">
+                         className="text-muted-foreground hover:text-primary transition-colors"
+                         onClick={(e) => e.stopPropagation()}>
                         <Globe className="w-4 h-4" />
                       </a>
                     )}
@@ -338,7 +347,7 @@ export default function Contacts() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => handleMarkContacted(contact)}
+                onClick={(e) => { e.stopPropagation(); handleMarkContacted(contact); }}
                 className="text-green-500 hover:text-green-600 hover:bg-green-500/10"
                 title="Mark as contacted"
               >
@@ -347,7 +356,7 @@ export default function Contacts() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => openEditDialog(contact)}
+                onClick={(e) => { e.stopPropagation(); openEditDialog(contact); }}
                 title="Edit"
               >
                 <Pencil className="w-4 h-4" />
@@ -355,7 +364,7 @@ export default function Contacts() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => handleDelete(contact)}
+                onClick={(e) => { e.stopPropagation(); handleDelete(contact); }}
                 className="text-destructive hover:text-destructive"
                 title="Delete"
               >
@@ -365,6 +374,124 @@ export default function Contacts() {
           </div>
         </CardContent>
       </Card>
+    );
+  };
+
+  const ContactTable = ({ contacts }: { contacts: Contact[] }) => {
+    if (contacts.length === 0) {
+      return (
+        <div className="text-center py-8 text-muted-foreground">
+          No contacts found.
+        </div>
+      );
+    }
+
+    return (
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Company / Role</TableHead>
+              <TableHead>Location</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>Tags</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="w-[100px]">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {contacts.map((contact) => {
+              const isDue = contact.nextContactDue && isPast(contact.nextContactDue);
+              return (
+                <TableRow 
+                  key={contact.id} 
+                  className="cursor-pointer"
+                  onClick={() => openEditDialog(contact)}
+                >
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                          {getInitials(contact.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium">{contact.name}</p>
+                        {getTierBadge(contact)}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-sm">
+                      {contact.company && <p>{contact.company}</p>}
+                      {contact.role && <p className="text-muted-foreground">{contact.role}</p>}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-sm text-muted-foreground">
+                      {[contact.city, contact.country].filter(Boolean).join(', ') || '-'}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-sm">{contact.email || '-'}</span>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {contact.tags.slice(0, 2).map((tag, i) => (
+                        <Badge key={i} variant="secondary" className="text-xs">
+                          {tag}
+                        </Badge>
+                      ))}
+                      {contact.tags.length > 2 && (
+                        <Badge variant="outline" className="text-xs">
+                          +{contact.tags.length - 2}
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {isDue ? (
+                      <Badge variant="outline" className="text-orange-500 border-orange-500">
+                        <Bell className="w-3 h-3 mr-1" />
+                        Due
+                      </Badge>
+                    ) : contact.lastContactedAt ? (
+                      <span className="text-xs text-muted-foreground">
+                        {formatDistanceToNow(contact.lastContactedAt, { addSuffix: true })}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Never</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-green-500 hover:text-green-600"
+                        onClick={(e) => { e.stopPropagation(); handleMarkContacted(contact); }}
+                        title="Mark as contacted"
+                      >
+                        <Check className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={(e) => { e.stopPropagation(); handleDelete(contact); }}
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
     );
   };
 
@@ -652,20 +779,31 @@ export default function Contacts() {
         </Card>
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-          <TabsList className="grid w-full grid-cols-3 mb-4">
-            <TabsTrigger value="personal" className="gap-2">
-              <Heart className="w-4 h-4" />
-              Personal ({personalContacts.length})
-            </TabsTrigger>
-            <TabsTrigger value="business" className="gap-2">
-              <Briefcase className="w-4 h-4" />
-              Business ({businessContacts.length})
-            </TabsTrigger>
-            <TabsTrigger value="due" className="gap-2">
-              <AlertCircle className="w-4 h-4" />
-              Due ({contactsDue.length})
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex items-center justify-between mb-4">
+            <TabsList className="grid grid-cols-3">
+              <TabsTrigger value="personal" className="gap-2">
+                <Heart className="w-4 h-4" />
+                Personal ({personalContacts.length})
+              </TabsTrigger>
+              <TabsTrigger value="business" className="gap-2">
+                <Briefcase className="w-4 h-4" />
+                Business ({businessContacts.length})
+              </TabsTrigger>
+              <TabsTrigger value="due" className="gap-2">
+                <AlertCircle className="w-4 h-4" />
+                Due ({contactsDue.length})
+              </TabsTrigger>
+            </TabsList>
+
+            <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as 'cards' | 'table')}>
+              <ToggleGroupItem value="cards" aria-label="Card view">
+                <LayoutGrid className="w-4 h-4" />
+              </ToggleGroupItem>
+              <ToggleGroupItem value="table" aria-label="Table view">
+                <List className="w-4 h-4" />
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
 
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">
@@ -674,51 +812,63 @@ export default function Contacts() {
           ) : (
             <>
               <TabsContent value="personal">
-                <ScrollArea className="h-[calc(100vh-400px)]">
-                  <div className="space-y-3 pr-4">
-                    {filterContacts(personalContacts).length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">
-                        No personal contacts yet. Add family, friends, or acquaintances!
-                      </div>
-                    ) : (
-                      filterContacts(personalContacts).map(contact => (
-                        <ContactCard key={contact.id} contact={contact} />
-                      ))
-                    )}
-                  </div>
-                </ScrollArea>
+                {viewMode === 'cards' ? (
+                  <ScrollArea className="h-[calc(100vh-400px)]">
+                    <div className="space-y-3 pr-4">
+                      {filterContacts(personalContacts).length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          No personal contacts yet. Add family, friends, or acquaintances!
+                        </div>
+                      ) : (
+                        filterContacts(personalContacts).map(contact => (
+                          <ContactCard key={contact.id} contact={contact} />
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+                ) : (
+                  <ContactTable contacts={filterContacts(personalContacts)} />
+                )}
               </TabsContent>
 
               <TabsContent value="business">
-                <ScrollArea className="h-[calc(100vh-400px)]">
-                  <div className="space-y-3 pr-4">
-                    {filterContacts(businessContacts).length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">
-                        No business contacts yet. Build your professional network!
-                      </div>
-                    ) : (
-                      filterContacts(businessContacts).map(contact => (
-                        <ContactCard key={contact.id} contact={contact} />
-                      ))
-                    )}
-                  </div>
-                </ScrollArea>
+                {viewMode === 'cards' ? (
+                  <ScrollArea className="h-[calc(100vh-400px)]">
+                    <div className="space-y-3 pr-4">
+                      {filterContacts(businessContacts).length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          No business contacts yet. Build your professional network!
+                        </div>
+                      ) : (
+                        filterContacts(businessContacts).map(contact => (
+                          <ContactCard key={contact.id} contact={contact} />
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+                ) : (
+                  <ContactTable contacts={filterContacts(businessContacts)} />
+                )}
               </TabsContent>
 
               <TabsContent value="due">
-                <ScrollArea className="h-[calc(100vh-400px)]">
-                  <div className="space-y-3 pr-4">
-                    {contactsDue.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">
-                        🎉 You're all caught up! No contacts due for follow-up.
-                      </div>
-                    ) : (
-                      contactsDue.map(contact => (
-                        <ContactCard key={contact.id} contact={contact} />
-                      ))
-                    )}
-                  </div>
-                </ScrollArea>
+                {viewMode === 'cards' ? (
+                  <ScrollArea className="h-[calc(100vh-400px)]">
+                    <div className="space-y-3 pr-4">
+                      {contactsDue.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          You're all caught up! No contacts due for follow-up.
+                        </div>
+                      ) : (
+                        contactsDue.map(contact => (
+                          <ContactCard key={contact.id} contact={contact} />
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+                ) : (
+                  <ContactTable contacts={contactsDue} />
+                )}
               </TabsContent>
             </>
           )}
