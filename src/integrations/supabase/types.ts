@@ -154,6 +154,39 @@ export type Database = {
         }
         Relationships: []
       }
+      projects: {
+        Row: {
+          color: string
+          created_at: string
+          description: string | null
+          id: string
+          is_archived: boolean
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_archived?: boolean
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_archived?: boolean
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       shared_items: {
         Row: {
           created_at: string
@@ -285,51 +318,69 @@ export type Database = {
       }
       tasks: {
         Row: {
+          attachments: Json | null
           category: string
+          checklist: Json | null
+          comments: Json | null
           completed: boolean
           created_at: string
           description: string | null
           due_date: string | null
           id: string
+          main_responsible_id: string | null
           parent_id: string | null
           priority: string
+          project_id: string | null
           recurrence_end: string | null
           recurrence_rule: string | null
           reminder_before: number | null
+          secondary_responsible_id: string | null
           sort_order: number | null
           title: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          attachments?: Json | null
           category?: string
+          checklist?: Json | null
+          comments?: Json | null
           completed?: boolean
           created_at?: string
           description?: string | null
           due_date?: string | null
           id?: string
+          main_responsible_id?: string | null
           parent_id?: string | null
           priority?: string
+          project_id?: string | null
           recurrence_end?: string | null
           recurrence_rule?: string | null
           reminder_before?: number | null
+          secondary_responsible_id?: string | null
           sort_order?: number | null
           title: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          attachments?: Json | null
           category?: string
+          checklist?: Json | null
+          comments?: Json | null
           completed?: boolean
           created_at?: string
           description?: string | null
           due_date?: string | null
           id?: string
+          main_responsible_id?: string | null
           parent_id?: string | null
           priority?: string
+          project_id?: string | null
           recurrence_end?: string | null
           recurrence_rule?: string | null
           reminder_before?: number | null
+          secondary_responsible_id?: string | null
           sort_order?: number | null
           title?: string
           updated_at?: string
@@ -337,10 +388,31 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "tasks_main_responsible_id_fkey"
+            columns: ["main_responsible_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "tasks_parent_id_fkey"
             columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_secondary_responsible_id_fkey"
+            columns: ["secondary_responsible_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -366,6 +438,42 @@ export type Database = {
           id?: string
           nickname?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      weekly_reviews: {
+        Row: {
+          celebrations: string | null
+          completed_tasks_count: number | null
+          created_at: string
+          id: string
+          incomplete_tasks_reviewed: string[] | null
+          intentions: string | null
+          updated_at: string
+          user_id: string
+          week_start: string
+        }
+        Insert: {
+          celebrations?: string | null
+          completed_tasks_count?: number | null
+          created_at?: string
+          id?: string
+          incomplete_tasks_reviewed?: string[] | null
+          intentions?: string | null
+          updated_at?: string
+          user_id: string
+          week_start: string
+        }
+        Update: {
+          celebrations?: string | null
+          completed_tasks_count?: number | null
+          created_at?: string
+          id?: string
+          incomplete_tasks_reviewed?: string[] | null
+          intentions?: string | null
+          updated_at?: string
+          user_id?: string
+          week_start?: string
         }
         Relationships: []
       }

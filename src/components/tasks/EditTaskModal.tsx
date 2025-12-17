@@ -7,18 +7,27 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Task, TaskPriority, TaskCategory } from '@/types/flux';
-import { RecurrenceSelector } from '@/components/shared/RecurrenceSelector';
-import { getRecurrenceDescription, recurrencePresets, toRRuleString } from '@/lib/recurrence';
-import { X, Calendar as CalendarIcon, Trash2, Repeat, Bell, Clock } from 'lucide-react';
+import { Task, TaskPriority, TaskCategory, Project, ChecklistItem } from '@/types/flux';
+import { recurrencePresets, toRRuleString, getRecurrenceDescription } from '@/lib/recurrence';
+import { X, Calendar as CalendarIcon, Trash2, Repeat, Bell, Clock, User, Users, FolderOpen, Plus, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import { RecurrenceFrequency } from '@/types/flux';
+import { Checkbox } from '@/components/ui/checkbox';
+
+interface Contact {
+  id: string;
+  userId: string;
+  email: string;
+  displayName?: string;
+}
 
 interface EditTaskModalProps {
   task: Task;
   onClose: () => void;
   onSave: (id: string, updates: Partial<Task>) => void;
   onDelete: (id: string) => void;
+  projects?: Project[];
+  contacts?: Contact[];
 }
 
 const REMINDER_OPTIONS = [
@@ -42,7 +51,7 @@ const WEEKDAYS = [
   { value: 0, label: 'Sun' },
 ];
 
-export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModalProps) {
+export function EditTaskModal({ task, onClose, onSave, onDelete, projects = [], contacts = [] }: EditTaskModalProps) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description || '');
   const [priority, setPriority] = useState<TaskPriority>(task.priority);
@@ -52,6 +61,11 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
   const [reminderBefore, setReminderBefore] = useState<number>(task.reminderBefore ?? 0);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showRecurrenceEditor, setShowRecurrenceEditor] = useState(false);
+  const [projectId, setProjectId] = useState<string | undefined>(task.projectId);
+  const [mainResponsibleId, setMainResponsibleId] = useState<string | undefined>(task.mainResponsibleId);
+  const [secondaryResponsibleId, setSecondaryResponsibleId] = useState<string | undefined>(task.secondaryResponsibleId);
+  const [checklist, setChecklist] = useState<ChecklistItem[]>(task.checklist || []);
+  const [newChecklistItem, setNewChecklistItem] = useState('');
   
   // Custom recurrence state
   const [customFrequency, setCustomFrequency] = useState<RecurrenceFrequency>('weekly');
@@ -70,6 +84,10 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
       dueDate,
       recurrenceRule,
       reminderBefore: reminderBefore > 0 ? reminderBefore : undefined,
+      projectId,
+      mainResponsibleId,
+      secondaryResponsibleId,
+      checklist,
     });
     onClose();
   };
@@ -101,9 +119,35 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
     );
   };
 
+  const addChecklistItem = () => {
+    if (!newChecklistItem.trim()) return;
+    setChecklist(prev => [...prev, {
+      id: crypto.randomUUID(),
+      text: newChecklistItem.trim(),
+      completed: false,
+    }]);
+    setNewChecklistItem('');
+  };
+
+  const toggleChecklistItem = (id: string) => {
+    setChecklist(prev => prev.map(item =>
+      item.id === id ? { ...item, completed: !item.completed } : item
+    ));
+  };
+
+  const removeChecklistItem = (id: string) => {
+    setChecklist(prev => prev.filter(item => item.id !== id));
+  };
+
+  const getContactDisplay = (contactId: string | undefined) => {
+    if (!contactId) return 'Not assigned';
+    const contact = contacts.find(c => c.userId === contactId);
+    return contact?.displayName || contact?.email || 'Unknown';
+  };
+
   return (
     <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="glass-panel-solid w-full max-w-md animate-scale-in max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="glass-panel-solid w-full max-w-lg animate-scale-in max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border shrink-0">
           <h2 className="text-lg font-semibold">Edit Task</h2>
@@ -126,16 +170,84 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
             />
           </div>
 
-          {/* Description */}
+          {/* Description with Markdown support hint */}
           <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description">Description (Markdown supported)</Label>
             <Textarea
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional description"
-              rows={2}
+              placeholder="Optional description - supports **bold**, *italic*, - lists..."
+              rows={3}
             />
+          </div>
+
+          {/* Project */}
+          {projects.length > 0 && (
+            <div className="space-y-2">
+              <Label>Project</Label>
+              <Select value={projectId || '_none'} onValueChange={(v) => setProjectId(v === '_none' ? undefined : v)}>
+                <SelectTrigger>
+                  <div className="flex items-center gap-2">
+                    <FolderOpen className="w-4 h-4" />
+                    <SelectValue placeholder="Select project" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">No project</SelectItem>
+                  {projects.filter(p => !p.isArchived).map(project => (
+                    <SelectItem key={project.id} value={project.id}>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: project.color }} />
+                        {project.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Responsibles */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Main Responsible</Label>
+              <Select value={mainResponsibleId || '_none'} onValueChange={(v) => setMainResponsibleId(v === '_none' ? undefined : v)}>
+                <SelectTrigger>
+                  <div className="flex items-center gap-2">
+                    <User className="w-4 h-4" />
+                    <span className="truncate">{getContactDisplay(mainResponsibleId)}</span>
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">Not assigned</SelectItem>
+                  {contacts.map(contact => (
+                    <SelectItem key={contact.userId} value={contact.userId}>
+                      {contact.displayName || contact.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Secondary Responsible</Label>
+              <Select value={secondaryResponsibleId || '_none'} onValueChange={(v) => setSecondaryResponsibleId(v === '_none' ? undefined : v)}>
+                <SelectTrigger>
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    <span className="truncate">{getContactDisplay(secondaryResponsibleId)}</span>
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">Not assigned</SelectItem>
+                  {contacts.map(contact => (
+                    <SelectItem key={contact.userId} value={contact.userId}>
+                      {contact.displayName || contact.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Priority & Category */}
@@ -184,7 +296,6 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
                     selected={dueDate}
                     onSelect={(date) => {
                       if (date) {
-                        // Preserve the time from the existing dueDate if any
                         const hours = dueDate?.getHours() || 9;
                         const minutes = dueDate?.getMinutes() || 0;
                         date.setHours(hours, minutes, 0, 0);
@@ -322,6 +433,38 @@ export function EditTaskModal({ task, onClose, onSave, onDelete }: EditTaskModal
                 </div>
               </PopoverContent>
             </Popover>
+          </div>
+
+          {/* Checklist */}
+          <div className="space-y-2">
+            <Label>Checklist</Label>
+            <div className="space-y-2">
+              {checklist.map(item => (
+                <div key={item.id} className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
+                  <Checkbox
+                    checked={item.completed}
+                    onCheckedChange={() => toggleChecklistItem(item.id)}
+                  />
+                  <span className={cn("flex-1 text-sm", item.completed && "line-through text-muted-foreground")}>
+                    {item.text}
+                  </span>
+                  <Button variant="ghost" size="iconSm" onClick={() => removeChecklistItem(item.id)}>
+                    <X className="w-3 h-3" />
+                  </Button>
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <Input
+                  value={newChecklistItem}
+                  onChange={(e) => setNewChecklistItem(e.target.value)}
+                  placeholder="Add checklist item..."
+                  onKeyDown={(e) => e.key === 'Enter' && addChecklistItem()}
+                />
+                <Button size="sm" onClick={addChecklistItem} disabled={!newChecklistItem.trim()}>
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
           </div>
 
           {/* Reminder */}
