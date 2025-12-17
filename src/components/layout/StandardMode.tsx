@@ -5,6 +5,7 @@ import { ChatPanel } from '../chat/ChatPanel';
 import { TaskList } from '../tasks/TaskList';
 import { CalendarPanel } from '../calendar/CalendarPanel';
 import { CalendarView } from '../calendar/CalendarView';
+import { FocusTimer } from '../focus/FocusTimer';
 import { Task, CalendarEvent, ChatMessage } from '@/types/flux';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
@@ -66,6 +67,7 @@ export function StandardMode({
   const [filter, setFilter] = useState<SidebarFilter>('all');
   const [calendarMode, setCalendarMode] = useState<'agenda' | 'grid'>('agenda');
   const [fullscreenPanel, setFullscreenPanel] = useState<FullscreenPanel>(null);
+  const [showFocusTimer, setShowFocusTimer] = useState(false);
   const isMobile = useIsMobile();
 
   // Get tasks based on current filter
@@ -180,6 +182,7 @@ export function StandardMode({
         onOpenSettings={onOpenSettings}
         onEditProfile={onEditProfile}
         onSignOut={onSignOut}
+        onOpenFocusTimer={() => setShowFocusTimer(true)}
       />
       
       <main className="flex-1 flex overflow-hidden">
@@ -261,6 +264,13 @@ export function StandardMode({
           </div>
         </div>
       </main>
+
+      {/* Focus Timer Dialog */}
+      <FocusTimer
+        tasks={tasks}
+        isOpen={showFocusTimer}
+        onClose={() => setShowFocusTimer(false)}
+      />
     </div>
   );
 }
