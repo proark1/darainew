@@ -5,6 +5,11 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { ChatPanel } from '../chat/ChatPanel';
 import { TaskList } from '../tasks/TaskList';
 import { CalendarPanel } from '../calendar/CalendarPanel';
+import { TodayFocusView } from '../focus/TodayFocusView';
+import { WorkspaceTabs } from '../workspace/WorkspaceTabs';
+import { NotificationCenter } from '../notifications/NotificationCenter';
+import { VoiceQuickAdd } from '../tasks/VoiceQuickAdd';
+import { useNotifications } from '@/hooks/useNotifications';
 import { Task, CalendarEvent, ChatMessage } from '@/types/flux';
 import { SidebarFilter } from './Sidebar';
 import { 
@@ -20,7 +25,8 @@ import {
   LayoutDashboard,
   Briefcase,
   User,
-  Users
+  Users,
+  Target
 } from 'lucide-react';
 
 interface MobileLayoutProps {
@@ -49,7 +55,7 @@ interface MobileLayoutProps {
   onSignOut?: () => void;
 }
 
-type Tab = 'chat' | 'tasks' | 'calendar';
+type Tab = 'chat' | 'tasks' | 'calendar' | 'focus';
 
 export function MobileLayout({
   tasks,
@@ -79,6 +85,15 @@ export function MobileLayout({
   const [activeTab, setActiveTab] = useState<Tab>('chat');
   const [filter, setFilter] = useState<SidebarFilter>('all');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeWorkspace, setActiveWorkspace] = useState<string>('all');
+  
+  const { 
+    notifications, 
+    markRead, 
+    markAllRead, 
+    deleteNotification, 
+    clearAll 
+  } = useNotifications();
 
   // Get tasks/events based on current filter
   const displayTasks = filter === 'shared' ? sharedTasks : tasks;
@@ -86,6 +101,7 @@ export function MobileLayout({
 
   const tabs = [
     { id: 'chat' as Tab, icon: MessageSquare, label: 'Chat' },
+    { id: 'focus' as Tab, icon: Target, label: 'Focus' },
     { id: 'tasks' as Tab, icon: CheckSquare, label: 'Tasks' },
     { id: 'calendar' as Tab, icon: Calendar, label: 'Calendar' },
   ];
@@ -96,6 +112,14 @@ export function MobileLayout({
     { icon: User, label: 'Personal', filter: 'personal' },
     { icon: Users, label: 'Shared with me', filter: 'shared' },
   ];
+
+  // Workspace task counts
+  const workspaceTaskCounts: Record<string, number> = {
+    all: tasks.filter(t => !t.completed).length,
+    family: tasks.filter(t => !t.completed && t.category === 'personal').length,
+    work: tasks.filter(t => !t.completed && t.category === 'business').length,
+    personal: tasks.filter(t => !t.completed && !t.projectId).length,
+  };
 
   return (
     <div className="flex flex-col h-screen w-full bg-background">
@@ -203,18 +227,28 @@ export function MobileLayout({
             <span className="font-semibold">Flux</span>
           </div>
         </div>
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          onClick={onVoiceMode}
-          className="text-primary hover:text-primary hover:bg-primary/10"
-        >
-          <Mic className="w-5 h-5" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <NotificationCenter
+            notifications={notifications}
+            onMarkRead={markRead}
+            onMarkAllRead={markAllRead}
+            onDelete={deleteNotification}
+            onClearAll={clearAll}
+          />
+        </div>
       </header>
 
+      {/* Workspace Tabs */}
+      <div className="px-3 py-2 border-b border-border">
+        <WorkspaceTabs
+          activeWorkspace={activeWorkspace}
+          onWorkspaceChange={setActiveWorkspace}
+          workspaceTaskCounts={workspaceTaskCounts}
+        />
+      </div>
+
       {/* Content */}
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 overflow-hidden relative">
         <div className={cn(
           "h-full",
           activeTab === 'chat' ? 'block' : 'hidden'
@@ -223,6 +257,17 @@ export function MobileLayout({
             messages={messages}
             onSendMessage={onSendMessage}
             isProcessing={isProcessing}
+          />
+        </div>
+        <div className={cn(
+          "h-full",
+          activeTab === 'focus' ? 'block' : 'hidden'
+        )}>
+          <TodayFocusView
+            tasks={tasks}
+            events={events}
+            onToggleComplete={onToggleTaskComplete}
+            onClose={() => setActiveTab('tasks')}
           />
         </div>
         <div className={cn(
@@ -258,6 +303,11 @@ export function MobileLayout({
             onUpdateTask={onUpdateTask}
             onDeleteTask={onDeleteTask}
           />
+        </div>
+
+        {/* Voice Quick Add FAB */}
+        <div className="absolute bottom-4 right-4 z-10">
+          <VoiceQuickAdd onVoiceCommand={onSendMessage} />
         </div>
       </main>
 

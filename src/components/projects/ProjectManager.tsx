@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import { FolderPlus, Archive, Trash2, Pencil, Check, X } from 'lucide-react';
+import { FolderPlus, Archive, Trash2, Pencil, Users } from 'lucide-react';
 
 const PROJECT_COLORS = [
   '#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6',
@@ -23,6 +23,7 @@ interface ProjectManagerProps {
   getProjectProgress: (projectId: string, tasks: { projectId?: string; completed: boolean }[]) => number;
   selectedProjectId?: string;
   onSelectProject?: (projectId: string | undefined) => void;
+  onShareProject?: (projectId: string, projectName: string) => void;
 }
 
 export function ProjectManager({
@@ -34,6 +35,7 @@ export function ProjectManager({
   getProjectProgress,
   selectedProjectId,
   onSelectProject,
+  onShareProject,
 }: ProjectManagerProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -78,6 +80,16 @@ export function ProjectManager({
           <span className="text-xs text-muted-foreground">{taskCount} tasks</span>
           
           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {onShareProject && (
+              <Button
+                variant="ghost"
+                size="iconSm"
+                onClick={(e) => { e.stopPropagation(); onShareProject(project.id, project.name); }}
+                title="Share project"
+              >
+                <Users className="w-3 h-3" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="iconSm"

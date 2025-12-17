@@ -77,6 +77,7 @@ interface StandardModeProps {
   onUpdateProject?: (id: string, updates: Partial<Project>) => void;
   onDeleteProject?: (id: string) => void;
   getProjectProgress?: (projectId: string, tasks: { projectId?: string; completed: boolean }[]) => number;
+  onShareProject?: (projectId: string, projectName: string) => void;
 }
 
 type FullscreenPanel = 'chat' | 'tasks' | 'calendar' | null;
@@ -121,6 +122,7 @@ export function StandardMode({
   onUpdateProject,
   onDeleteProject,
   getProjectProgress,
+  onShareProject,
 }: StandardModeProps) {
   const [filter, setFilter] = useState<SidebarFilter>('all');
   const [calendarMode, setCalendarMode] = useState<'agenda' | 'grid'>('agenda');
@@ -373,6 +375,7 @@ export function StandardMode({
                 getProjectProgress={getProjectProgress}
                 selectedProjectId={selectedProjectId}
                 onSelectProject={setSelectedProjectId}
+                onShareProject={onShareProject}
               />
             </div>
           )}

@@ -7,6 +7,7 @@ import { useTaskNotifications } from '@/hooks/useTaskNotifications';
 import { useSharedItemsRealtime } from '@/hooks/useSharedItemsRealtime';
 import { useTags } from '@/hooks/useTags';
 import { useProjects } from '@/hooks/useProjects';
+import { useSharedProjects } from '@/hooks/useSharedProjects';
 import { useWeeklyReview } from '@/hooks/useWeeklyReview';
 import { useContacts } from '@/hooks/useContacts';
 import { useActivityFeed } from '@/hooks/useActivityFeed';
@@ -15,6 +16,7 @@ import { StandardMode } from '@/components/layout/StandardMode';
 import { GhostMode } from '@/components/ghost/GhostMode';
 import { ProfileSettingsDialog } from '@/components/settings/ProfileSettingsDialog';
 import { ShareDialog } from '@/components/sharing/ShareDialog';
+import { ShareProjectDialog } from '@/components/projects/ShareProjectDialog';
 import { MorningDigest } from '@/components/notifications/MorningDigest';
 import { WeeklyReviewDialog } from '@/components/review/WeeklyReviewDialog';
 import { CalendarEvent, ChatMessage, AppMode, Task } from '@/types/flux';
@@ -86,6 +88,15 @@ const Index = () => {
     getProjectProgress,
   } = useProjects(user?.id);
 
+  // Shared projects
+  const {
+    sharedProjects,
+    projectMembers,
+    shareProject,
+    getProjectMembers,
+    removeProjectMember,
+  } = useSharedProjects(user?.id);
+
   // Weekly review
   const {
     currentReview,
@@ -143,6 +154,10 @@ const Index = () => {
     type: 'task' | 'event';
     id: string;
     title: string;
+  } | null>(null);
+  const [shareProjectDialog, setShareProjectDialog] = useState<{
+    projectId: string;
+    projectName: string;
   } | null>(null);
 
   // Weekly stats for review dialog
@@ -487,6 +502,10 @@ const Index = () => {
           onUpdateProject={updateProject}
           onDeleteProject={deleteProject}
           getProjectProgress={getProjectProgress}
+          onShareProject={(projectId, projectName) => {
+            setShareProjectDialog({ projectId, projectName });
+            getProjectMembers(projectId);
+          }}
         />
       ) : (
         <GhostMode 
@@ -513,6 +532,24 @@ const Index = () => {
           onRemoveShare={removeShare}
           onGetRecentContacts={getRecentContacts}
           onClose={() => setShareDialog(null)}
+        />
+      )}
+
+      {shareProjectDialog && (
+        <ShareProjectDialog
+          open={!!shareProjectDialog}
+          onOpenChange={(open) => !open && setShareProjectDialog(null)}
+          projectName={shareProjectDialog.projectName}
+          members={(projectMembers[shareProjectDialog.projectId] || []).map(m => ({
+            id: m.id,
+            userId: m.userId,
+            role: m.role,
+            userEmail: m.userEmail,
+            userDisplayName: m.userDisplayName,
+          }))}
+          onShare={(email, role) => shareProject(shareProjectDialog.projectId, email, role)}
+          onRemoveMember={removeProjectMember}
+          isOwner={true}
         />
       )}
 
