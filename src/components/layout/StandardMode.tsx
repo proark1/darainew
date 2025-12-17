@@ -1,19 +1,20 @@
 import { useState } from 'react';
-import { Sidebar } from './Sidebar';
+import { Sidebar, SidebarFilter } from './Sidebar';
 import { MobileLayout } from './MobileLayout';
 import { ChatPanel } from '../chat/ChatPanel';
 import { TaskList } from '../tasks/TaskList';
 import { CalendarPanel } from '../calendar/CalendarPanel';
 import { CalendarView } from '../calendar/CalendarView';
-import { TaskCategory, Task, CalendarEvent, ChatMessage } from '@/types/flux';
+import { Task, CalendarEvent, ChatMessage } from '@/types/flux';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { List, Grid3X3, X } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 interface StandardModeProps {
   tasks: Task[];
   events: CalendarEvent[];
+  sharedTasks?: Task[];
+  sharedEvents?: CalendarEvent[];
   messages: ChatMessage[];
   isProcessing: boolean;
   onAddTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
@@ -40,6 +41,8 @@ type FullscreenPanel = 'chat' | 'tasks' | 'calendar' | null;
 export function StandardMode({
   tasks,
   events,
+  sharedTasks = [],
+  sharedEvents = [],
   messages,
   isProcessing,
   onAddTask,
@@ -60,10 +63,14 @@ export function StandardMode({
   onShareEvent,
   onSignOut,
 }: StandardModeProps) {
-  const [filter, setFilter] = useState<TaskCategory | 'all'>('all');
+  const [filter, setFilter] = useState<SidebarFilter>('all');
   const [calendarMode, setCalendarMode] = useState<'agenda' | 'grid'>('agenda');
   const [fullscreenPanel, setFullscreenPanel] = useState<FullscreenPanel>(null);
   const isMobile = useIsMobile();
+
+  // Get tasks based on current filter
+  const displayTasks = filter === 'shared' ? sharedTasks : tasks;
+  const displayEvents = filter === 'shared' ? sharedEvents : events;
 
   // Use mobile layout on small screens
   if (isMobile) {
@@ -71,6 +78,8 @@ export function StandardMode({
       <MobileLayout
         tasks={tasks}
         events={events}
+        sharedTasks={sharedTasks}
+        sharedEvents={sharedEvents}
         messages={messages}
         isProcessing={isProcessing}
         onAddTask={onAddTask}
@@ -115,7 +124,7 @@ export function StandardMode({
           )}
           {fullscreenPanel === 'tasks' && (
             <TaskList
-              tasks={tasks}
+              tasks={displayTasks}
               filter={filter}
               onToggleComplete={onToggleTaskComplete}
               onDeleteTask={onDeleteTask}
@@ -189,7 +198,7 @@ export function StandardMode({
           {/* Tasks */}
           <div className="flex-1 glass-panel-solid rounded-xl overflow-hidden">
             <TaskList
-              tasks={tasks}
+              tasks={displayTasks}
               filter={filter}
               onToggleComplete={onToggleTaskComplete}
               onDeleteTask={onDeleteTask}
@@ -225,8 +234,8 @@ export function StandardMode({
             <div className="h-[calc(100%-2.5rem)]">
               {calendarMode === 'agenda' ? (
                 <CalendarPanel
-                  events={events}
-                  tasks={tasks}
+                  events={displayEvents}
+                  tasks={displayTasks}
                   onAddEvent={onAddEvent}
                   onUpdateEvent={onUpdateEvent}
                   onDeleteEvent={onDeleteEvent}
@@ -240,8 +249,8 @@ export function StandardMode({
                 />
               ) : (
                 <CalendarView
-                  events={events}
-                  tasks={tasks}
+                  events={displayEvents}
+                  tasks={displayTasks}
                   onToggleTaskComplete={onToggleTaskComplete}
                   onUpdateTask={onUpdateTask}
                   onDeleteTask={onDeleteTask}

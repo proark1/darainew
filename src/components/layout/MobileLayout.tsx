@@ -5,7 +5,8 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { ChatPanel } from '../chat/ChatPanel';
 import { TaskList } from '../tasks/TaskList';
 import { CalendarPanel } from '../calendar/CalendarPanel';
-import { TaskCategory, Task, CalendarEvent, ChatMessage } from '@/types/flux';
+import { Task, CalendarEvent, ChatMessage } from '@/types/flux';
+import { SidebarFilter } from './Sidebar';
 import { 
   Menu, 
   MessageSquare, 
@@ -18,12 +19,15 @@ import {
   Sparkles,
   LayoutDashboard,
   Briefcase,
-  User
+  User,
+  Users
 } from 'lucide-react';
 
 interface MobileLayoutProps {
   tasks: Task[];
   events: CalendarEvent[];
+  sharedTasks?: Task[];
+  sharedEvents?: CalendarEvent[];
   messages: ChatMessage[];
   isProcessing: boolean;
   onAddTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
@@ -50,6 +54,8 @@ type Tab = 'chat' | 'tasks' | 'calendar';
 export function MobileLayout({
   tasks,
   events,
+  sharedTasks = [],
+  sharedEvents = [],
   messages,
   isProcessing,
   onAddTask,
@@ -71,8 +77,12 @@ export function MobileLayout({
   onSignOut,
 }: MobileLayoutProps) {
   const [activeTab, setActiveTab] = useState<Tab>('chat');
-  const [filter, setFilter] = useState<TaskCategory | 'all'>('all');
+  const [filter, setFilter] = useState<SidebarFilter>('all');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Get tasks/events based on current filter
+  const displayTasks = filter === 'shared' ? sharedTasks : tasks;
+  const displayEvents = filter === 'shared' ? sharedEvents : events;
 
   const tabs = [
     { id: 'chat' as Tab, icon: MessageSquare, label: 'Chat' },
@@ -80,10 +90,11 @@ export function MobileLayout({
     { id: 'calendar' as Tab, icon: Calendar, label: 'Calendar' },
   ];
 
-  const navItems = [
-    { icon: LayoutDashboard, label: 'All Tasks', filter: 'all' as const },
-    { icon: Briefcase, label: 'Business', filter: 'business' as const },
-    { icon: User, label: 'Personal', filter: 'personal' as const },
+  const navItems: { icon: typeof LayoutDashboard; label: string; filter: SidebarFilter }[] = [
+    { icon: LayoutDashboard, label: 'All Tasks', filter: 'all' },
+    { icon: Briefcase, label: 'Business', filter: 'business' },
+    { icon: User, label: 'Personal', filter: 'personal' },
+    { icon: Users, label: 'Shared with me', filter: 'shared' },
   ];
 
   return (
@@ -219,7 +230,7 @@ export function MobileLayout({
           activeTab === 'tasks' ? 'block' : 'hidden'
         )}>
           <TaskList
-            tasks={tasks}
+            tasks={displayTasks}
             filter={filter}
             onToggleComplete={onToggleTaskComplete}
             onDeleteTask={onDeleteTask}
@@ -235,8 +246,8 @@ export function MobileLayout({
           activeTab === 'calendar' ? 'block' : 'hidden'
         )}>
           <CalendarPanel
-            events={events}
-            tasks={tasks}
+            events={displayEvents}
+            tasks={displayTasks}
             onAddEvent={onAddEvent}
             onUpdateEvent={onUpdateEvent}
             onDeleteEvent={onDeleteEvent}
