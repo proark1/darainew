@@ -34,6 +34,7 @@ const Index = () => {
     shareItem,
     getSharedWith,
     removeShare,
+    getRecentContacts,
     fetchSharedWithMe,
   } = useDatabase(user?.id);
 
@@ -411,6 +412,7 @@ const Index = () => {
           onShare={(email, permission) => shareItem(shareDialog.type, shareDialog.id, email, permission)}
           onGetSharedWith={() => getSharedWith(shareDialog.type, shareDialog.id)}
           onRemoveShare={removeShare}
+          onGetRecentContacts={getRecentContacts}
           onClose={() => setShareDialog(null)}
         />
       )}

@@ -1,9 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { X, Share2, UserPlus, Trash2, Loader2 } from 'lucide-react';
+import { X, Share2, UserPlus, Trash2, Loader2, User } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface Contact {
+  userId: string;
+  email: string;
+  displayName?: string;
+}
 
 interface ShareDialogProps {
   itemType: 'task' | 'event';
@@ -12,6 +19,7 @@ interface ShareDialogProps {
   onShare: (email: string, permission: 'view' | 'edit') => Promise<{ error: string | null }>;
   onGetSharedWith: () => Promise<any[]>;
   onRemoveShare: (shareId: string) => Promise<{ error: any }>;
+  onGetRecentContacts?: () => Promise<Contact[]>;
   onClose: () => void;
 }
 
@@ -22,17 +30,21 @@ export function ShareDialog({
   onShare,
   onGetSharedWith,
   onRemoveShare,
+  onGetRecentContacts,
   onClose,
 }: ShareDialogProps) {
   const { toast } = useToast();
   const [email, setEmail] = useState('');
   const [permission, setPermission] = useState<'view' | 'edit'>('view');
   const [sharedWith, setSharedWith] = useState<any[]>([]);
+  const [recentContacts, setRecentContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   useEffect(() => {
     loadSharedWith();
+    loadRecentContacts();
   }, []);
 
   const loadSharedWith = async () => {
@@ -42,11 +54,36 @@ export function ShareDialog({
     setLoading(false);
   };
 
+  const loadRecentContacts = async () => {
+    if (onGetRecentContacts) {
+      const contacts = await onGetRecentContacts();
+      setRecentContacts(contacts);
+    }
+  };
+
+  // Filter suggestions based on input and exclude already shared users
+  const filteredSuggestions = useMemo(() => {
+    if (!email.trim()) return recentContacts;
+    
+    const searchTerm = email.toLowerCase();
+    return recentContacts.filter(contact => 
+      contact.email.toLowerCase().includes(searchTerm) ||
+      contact.displayName?.toLowerCase().includes(searchTerm)
+    );
+  }, [email, recentContacts]);
+
+  // Filter out contacts already shared with
+  const availableSuggestions = useMemo(() => {
+    const sharedUserIds = new Set(sharedWith.map(s => s.shared_with_id));
+    return filteredSuggestions.filter(c => !sharedUserIds.has(c.userId));
+  }, [filteredSuggestions, sharedWith]);
+
   const handleShare = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) return;
 
     setSharing(true);
+    setShowSuggestions(false);
     const { error } = await onShare(email.trim(), permission);
     setSharing(false);
 
@@ -64,6 +101,11 @@ export function ShareDialog({
       setEmail('');
       loadSharedWith();
     }
+  };
+
+  const handleSelectContact = (contact: Contact) => {
+    setEmail(contact.email);
+    setShowSuggestions(false);
   };
 
   const handleRemove = async (shareId: string, userEmail: string) => {
@@ -100,13 +142,49 @@ export function ShareDialog({
           {/* Share form */}
           <form onSubmit={handleShare} className="space-y-3">
             <div className="flex gap-2">
-              <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter email address"
-                className="flex-1"
-              />
+              <div className="relative flex-1">
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onFocus={() => setShowSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                  placeholder="Enter email address"
+                  autoComplete="off"
+                />
+                
+                {/* Autocomplete suggestions */}
+                {showSuggestions && availableSuggestions.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
+                    {availableSuggestions.map((contact) => (
+                      <button
+                        key={contact.userId}
+                        type="button"
+                        className={cn(
+                          "w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 transition-colors",
+                          "first:rounded-t-lg last:rounded-b-lg"
+                        )}
+                        onMouseDown={() => handleSelectContact(contact)}
+                      >
+                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                          <User className="w-4 h-4 text-primary" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          {contact.displayName && (
+                            <p className="text-sm font-medium truncate">{contact.displayName}</p>
+                          )}
+                          <p className={cn(
+                            "text-xs truncate",
+                            contact.displayName ? "text-muted-foreground" : "text-sm"
+                          )}>
+                            {contact.email}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <Select value={permission} onValueChange={(v: 'view' | 'edit') => setPermission(v)}>
                 <SelectTrigger className="w-24">
                   <SelectValue />

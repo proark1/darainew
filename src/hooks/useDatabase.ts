@@ -374,6 +374,33 @@ export function useDatabase(userId: string | undefined) {
     return { error };
   }, []);
 
+  // Get unique contacts the user has shared items with before
+  const getRecentContacts = useCallback(async () => {
+    if (!userId) return [];
+
+    const { data } = await supabase
+      .from('shared_items')
+      .select('shared_with_id')
+      .eq('owner_id', userId);
+
+    if (!data || data.length === 0) return [];
+
+    // Get unique user IDs
+    const uniqueUserIds = [...new Set(data.map(item => item.shared_with_id))];
+
+    // Fetch profile info for these users
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('user_id, email, display_name')
+      .in('user_id', uniqueUserIds);
+
+    return profiles?.map(p => ({
+      userId: p.user_id,
+      email: p.email || '',
+      displayName: p.display_name || undefined,
+    })) || [];
+  }, [userId]);
+
   // Fetch items shared with the current user
   const fetchSharedWithMe = useCallback(async () => {
     if (!userId) return { sharedTasks: [], sharedEvents: [] };
@@ -463,6 +490,7 @@ export function useDatabase(userId: string | undefined) {
     shareItem,
     getSharedWith,
     removeShare,
+    getRecentContacts,
     fetchSharedWithMe,
     refetch: fetchData,
   };
