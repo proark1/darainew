@@ -204,14 +204,14 @@ export function FocusTimer({ tasks, isOpen, onClose }: FocusTimerProps) {
 
           {/* Task Selector */}
           <Select 
-            value={selectedTaskId || ''} 
-            onValueChange={(val) => setSelectedTaskId(val || null)}
+            value={selectedTaskId || '_none'} 
+            onValueChange={(val) => setSelectedTaskId(val === '_none' ? null : val)}
           >
             <SelectTrigger>
               <SelectValue placeholder="Link to a task (optional)" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">No task</SelectItem>
+              <SelectItem value="_none">No task</SelectItem>
               {incompleteTasks.map(task => (
                 <SelectItem key={task.id} value={task.id}>
                   {task.title}
