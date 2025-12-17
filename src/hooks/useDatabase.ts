@@ -353,16 +353,31 @@ export function useDatabase(userId: string | undefined) {
   }, [userId]);
 
   const getSharedWith = useCallback(async (itemType: 'task' | 'event', itemId: string) => {
-    const { data } = await supabase
+    // Fetch shared items first
+    const { data: sharedItems } = await supabase
       .from('shared_items')
-      .select(`
-        *,
-        shared_with:profiles!shared_items_shared_with_id_fkey(email, display_name)
-      `)
+      .select('*')
       .eq('item_type', itemType)
       .eq('item_id', itemId);
 
-    return data || [];
+    if (!sharedItems || sharedItems.length === 0) return [];
+
+    // Get unique user IDs
+    const userIds = [...new Set(sharedItems.map(item => item.shared_with_id))];
+
+    // Fetch profile info for these users
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('user_id, email, display_name')
+      .in('user_id', userIds);
+
+    // Map profiles to shared items
+    const profileMap = new Map(profiles?.map(p => [p.user_id, p]) || []);
+
+    return sharedItems.map(item => ({
+      ...item,
+      shared_with: profileMap.get(item.shared_with_id) || null,
+    }));
   }, []);
 
   const removeShare = useCallback(async (shareId: string) => {
