@@ -13,7 +13,9 @@ import {
   LogOut,
   UserCircle,
   Users,
-  BookUser
+  BookUser,
+  BarChart3,
+  Target
 } from 'lucide-react';
 import { TaskCategory } from '@/types/flux';
 
@@ -26,14 +28,15 @@ interface SidebarProps {
   onOpenSettings: () => void;
   onEditProfile?: () => void;
   onSignOut?: () => void;
+  onOpenFocusTimer?: () => void;
 }
 
-export function Sidebar({ activeFilter, onFilterChange, onVoiceMode, onOpenSettings, onEditProfile, onSignOut }: SidebarProps) {
+export function Sidebar({ activeFilter, onFilterChange, onVoiceMode, onOpenSettings, onEditProfile, onSignOut, onOpenFocusTimer }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
 
   const navItems: { icon: typeof LayoutDashboard; label: string; filter: SidebarFilter }[] = [
-    { icon: LayoutDashboard, label: 'Dashboard', filter: 'all' },
+    { icon: LayoutDashboard, label: 'All Tasks', filter: 'all' },
     { icon: Briefcase, label: 'Business', filter: 'business' },
     { icon: User, label: 'Personal', filter: 'personal' },
     { icon: Users, label: 'Shared with me', filter: 'shared' },
@@ -68,6 +71,21 @@ export function Sidebar({ activeFilter, onFilterChange, onVoiceMode, onOpenSetti
 
       {/* Navigation */}
       <nav className="flex-1 p-3 space-y-1">
+        {/* Dashboard Link */}
+        <Button
+          variant="ghost"
+          className={cn(
+            "w-full justify-start gap-3 mb-2",
+            collapsed && "justify-center px-0"
+          )}
+          onClick={() => navigate('/dashboard')}
+        >
+          <BarChart3 className="w-5 h-5 shrink-0 text-primary" />
+          {!collapsed && <span>Dashboard</span>}
+        </Button>
+
+        <div className="border-b border-sidebar-border mb-2" />
+
         {navItems.map((item) => (
           <Button
             key={item.filter}
@@ -87,6 +105,20 @@ export function Sidebar({ activeFilter, onFilterChange, onVoiceMode, onOpenSetti
 
       {/* Bottom Actions */}
       <div className="p-3 border-t border-sidebar-border space-y-1">
+        {onOpenFocusTimer && (
+          <Button
+            variant="outline"
+            className={cn(
+              "w-full gap-3 border-primary/50 text-primary hover:bg-primary/10",
+              collapsed && "justify-center px-0"
+            )}
+            onClick={onOpenFocusTimer}
+          >
+            <Target className="w-5 h-5 shrink-0" />
+            {!collapsed && <span>Focus Mode</span>}
+          </Button>
+        )}
+
         <Button
           variant="ghost"
           className={cn(

@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      chat_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          is_pinned: boolean
+          role: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          role: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          role?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       events: {
         Row: {
           attendees: string[] | null
@@ -58,6 +85,44 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      focus_sessions: {
+        Row: {
+          completed_at: string | null
+          duration_minutes: number
+          id: string
+          is_completed: boolean
+          started_at: string
+          task_id: string | null
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          duration_minutes: number
+          id?: string
+          is_completed?: boolean
+          started_at?: string
+          task_id?: string | null
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          duration_minutes?: number
+          id?: string
+          is_completed?: boolean
+          started_at?: string
+          task_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "focus_sessions_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -116,6 +181,45 @@ export type Database = {
           owner_id?: string
           permission?: string
           shared_with_id?: string
+        }
+        Relationships: []
+      }
+      task_templates: {
+        Row: {
+          category: string
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          priority: string
+          recurrence_rule: string | null
+          reminder_before: number | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          priority?: string
+          recurrence_rule?: string | null
+          reminder_before?: number | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          priority?: string
+          recurrence_rule?: string | null
+          reminder_before?: number | null
+          title?: string
+          user_id?: string
         }
         Relationships: []
       }
