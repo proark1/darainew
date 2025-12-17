@@ -10,6 +10,7 @@ import { Task, TaskCategory, TaskPriority, Project } from '@/types/flux';
 import { RecurrenceSelector } from '@/components/shared/RecurrenceSelector';
 import { getRecurrenceDescription } from '@/lib/recurrence';
 import { EditTaskModal } from './EditTaskModal';
+import { TaskTagBadges } from './TaskTagBadges';
 import { 
   DndContext, 
   closestCenter, 
@@ -49,6 +50,12 @@ import { format, isPast, isToday, isTomorrow } from 'date-fns';
 
 import { SidebarFilter } from '@/components/layout/Sidebar';
 
+interface Tag {
+  id: string;
+  name: string;
+  color: string;
+}
+
 interface Contact {
   id: string;
   userId: string;
@@ -70,6 +77,8 @@ interface TaskListProps {
   onToggleFullscreen?: () => void;
   projects?: Project[];
   contacts?: Contact[];
+  tags?: Tag[];
+  getTaskTags?: (taskId: string) => Tag[];
 }
 
 const priorityColors: Record<TaskPriority, string> = {
@@ -96,6 +105,7 @@ interface SortableTaskItemProps {
   onUpdateTask?: (id: string, updates: Partial<Task>) => void;
   onEditTask?: (task: Task) => void;
   onAddSubtask: (parentId: string) => void;
+  tags?: Tag[];
   level?: number;
 }
 
@@ -111,6 +121,7 @@ function SortableTaskItem({
   onUpdateTask,
   onEditTask,
   onAddSubtask,
+  tags = [],
   level = 0
 }: SortableTaskItemProps) {
   const [isExpanded, setIsExpanded] = useState(true);
@@ -297,6 +308,9 @@ function SortableTaskItem({
                 Shared by {task.sharedBy.displayName || task.sharedBy.email || 'someone'}
               </span>
             )}
+            {tags.length > 0 && (
+              <TaskTagBadges tags={tags} size="sm" />
+            )}
           </div>
         </div>
 
@@ -363,6 +377,7 @@ function SortableTaskItem({
               onUpdateTask={onUpdateTask}
               onEditTask={onEditTask}
               onAddSubtask={onAddSubtask}
+              tags={[]}
               level={level + 1}
             />
           ))}
@@ -384,6 +399,8 @@ export function TaskList({
   onShareTask,
   projects = [],
   contacts = [],
+  tags = [],
+  getTaskTags,
 }: TaskListProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [addingSubtaskFor, setAddingSubtaskFor] = useState<string | null>(null);

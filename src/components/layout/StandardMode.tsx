@@ -9,8 +9,10 @@ import { FocusTimer } from '../focus/FocusTimer';
 import { ProjectManager } from '../projects/ProjectManager';
 import { ActivityPanel } from '../activity/ActivityPanel';
 import { GlobalSearch } from '../search/GlobalSearch';
+import { QuickAddFAB } from '../tasks/QuickAddFAB';
 import { Task, CalendarEvent, ChatMessage, Project } from '@/types/flux';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useCelebration } from '@/hooks/useCelebration';
 import { Button } from '@/components/ui/button';
 import { List, Grid3X3, X } from 'lucide-react';
 import type { ActivityItem } from '@/hooks/useActivityFeed';
@@ -125,6 +127,21 @@ export function StandardMode({
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
   const isMobile = useIsMobile();
+  const { celebrate } = useCelebration();
+
+  // Wrapper for task completion with celebration
+  const handleToggleTaskComplete = (id: string) => {
+    const task = tasks.find(t => t.id === id);
+    if (task && !task.completed) {
+      // Task is being completed
+      if (task.priority === 'high') {
+        celebrate({ type: 'highPriorityComplete' });
+      } else {
+        celebrate({ type: 'taskComplete' });
+      }
+    }
+    onToggleTaskComplete(id);
+  };
 
   // Sort tasks by due date (closest first), then by priority
   const sortTasksByDueDate = (tasksToSort: Task[]) => {
@@ -235,7 +252,7 @@ export function StandardMode({
             <TaskList
               tasks={displayTasks}
               filter={filter}
-              onToggleComplete={onToggleTaskComplete}
+              onToggleComplete={handleToggleTaskComplete}
               onDeleteTask={onDeleteTask}
               onDeleteTasks={onDeleteTasks}
               onAddTask={onAddTask}
@@ -331,7 +348,7 @@ export function StandardMode({
             <TaskList
               tasks={displayTasks}
               filter={filter}
-              onToggleComplete={onToggleTaskComplete}
+              onToggleComplete={handleToggleTaskComplete}
               onDeleteTask={onDeleteTask}
               onDeleteTasks={onDeleteTasks}
               onAddTask={onAddTask}
@@ -426,6 +443,9 @@ export function StandardMode({
           onSelectResult={handleSelectSearchResult}
         />
       )}
+
+      {/* Quick Add FAB */}
+      <QuickAddFAB onAddTask={onAddTask} />
     </div>
   );
 }
