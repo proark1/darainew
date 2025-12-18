@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Sidebar, SidebarFilter } from './Sidebar';
+import { Sidebar, SidebarFilter, ActivePanel } from './Sidebar';
 import { MobileLayout } from './MobileLayout';
 import { ChatPanel } from '../chat/ChatPanel';
 import { TeamChatPanel } from '../chat/TeamChatPanel';
@@ -16,6 +16,7 @@ import { QuickAddFAB } from '../tasks/QuickAddFAB';
 import { AICommandPanel } from '../ai/AICommandPanel';
 import { WorkspaceTabs } from '../workspace/WorkspaceTabs';
 import { RealtimeNotificationCenter } from '../notifications/RealtimeNotificationCenter';
+import { CallHistory } from '../calling/CallHistory';
 import { useAuth } from '@/hooks/useAuth';
 import { Task, CalendarEvent, ChatMessage, Project } from '@/types/flux';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -131,13 +132,17 @@ export function StandardMode({
   const [showProjectPanel, setShowProjectPanel] = useState(false);
   const [showActivityPanel, setShowActivityPanel] = useState(false);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
-  const [showCalendar, setShowCalendar] = useState(false);
-  const [showTeamChat, setShowTeamChat] = useState(false);
+  const [activePanel, setActivePanel] = useState<ActivePanel>('tasks');
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
   const [activeWorkspace, setActiveWorkspace] = useState<string>('all');
   const isMobile = useIsMobile();
   const { celebrate } = useCelebration();
   const { user } = useAuth();
+
+  // Derive showCalendar and showTeamChat from activePanel for compatibility
+  const showCalendar = activePanel === 'calendar';
+  const showTeamChat = activePanel === 'chat';
+  const showCalls = activePanel === 'calls';
 
   // Workspace task counts
   const workspaceTaskCounts = useMemo(() => {
@@ -207,7 +212,7 @@ export function StandardMode({
       setSelectedProjectId(undefined);
       // Could scroll to the task or open edit modal
     } else if (result.type === 'event') {
-      setShowCalendar(true);
+      setActivePanel('calendar');
     } else if (result.type === 'project') {
       setShowProjectPanel(true);
       setSelectedProjectId(result.id);
@@ -343,16 +348,9 @@ export function StandardMode({
         onToggleProjects={() => setShowProjectPanel(!showProjectPanel)}
         onOpenActivityFeed={() => setShowActivityPanel(true)}
         onOpenGlobalSearch={() => setShowGlobalSearch(true)}
-        onToggleCalendar={() => setShowCalendar(!showCalendar)}
         onOpenTodayFocus={() => setShowTodayFocus(true)}
-        onToggleTeamChat={() => setShowTeamChat(!showTeamChat)}
-        onOpenTasks={() => {
-          setShowTeamChat(false);
-          setShowCalendar(false);
-        }}
-        showCalendar={showCalendar}
-        showTeamChat={showTeamChat}
-        showTasks={!showTeamChat && !showCalendar}
+        onPanelChange={setActivePanel}
+        activePanel={activePanel}
         notificationButton={
           <RealtimeNotificationCenter userId={user?.id} />
         }
@@ -418,7 +416,7 @@ export function StandardMode({
                 variant={showTeamChat ? 'secondary' : 'ghost'}
                 size="sm"
                 className="h-7 px-2"
-                onClick={() => setShowTeamChat(!showTeamChat)}
+                onClick={() => setActivePanel(showTeamChat ? 'tasks' : 'chat')}
                 title="Team Chat"
               >
                 <MessageCircle className="w-4 h-4" />
