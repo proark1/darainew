@@ -355,21 +355,11 @@ export function TeamChatPanel({ userId }: TeamChatPanelProps) {
             </div>
           )}
           
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-nowrap">
             <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt" onChange={handleFileSelect} className="hidden" />
-            <Button type="button" variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+            <Button type="button" variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="flex-shrink-0">
               <Paperclip className="w-4 h-4" />
             </Button>
-            
-            <VoiceRecordButton
-              isRecording={voiceRecorder.isRecording}
-              isProcessing={voiceRecorder.isProcessing}
-              duration={voiceRecorder.recordingDuration}
-              formatDuration={voiceRecorder.formatDuration}
-              onStart={voiceRecorder.startRecording}
-              onStop={handleVoiceSend}
-              onCancel={voiceRecorder.cancelRecording}
-            />
             
             <Input
               placeholder="Type a message..."
@@ -377,11 +367,23 @@ export function TeamChatPanel({ userId }: TeamChatPanelProps) {
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
               disabled={isSending || uploading || voiceRecorder.isRecording}
-              className="flex-1"
+              className="flex-1 min-w-0"
             />
-            <Button onClick={handleSendMessage} disabled={(!newMessage.trim() && pendingAttachments.length === 0) || isSending || uploading}>
-              <Send className="w-4 h-4" />
-            </Button>
+            
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <VoiceRecordButton
+                isRecording={voiceRecorder.isRecording}
+                isProcessing={voiceRecorder.isProcessing}
+                duration={voiceRecorder.recordingDuration}
+                formatDuration={voiceRecorder.formatDuration}
+                onStart={voiceRecorder.startRecording}
+                onStop={handleVoiceSend}
+                onCancel={voiceRecorder.cancelRecording}
+              />
+              <Button onClick={handleSendMessage} disabled={(!newMessage.trim() && pendingAttachments.length === 0) || isSending || uploading} className="flex-shrink-0">
+                <Send className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </Card>
