@@ -4,17 +4,18 @@ import type { Task, CalendarEvent } from '@/types/flux';
 
 export interface SearchResult {
   id: string;
-  type: 'task' | 'event' | 'chat' | 'contract' | 'contact';
+  type: 'task' | 'event' | 'chat' | 'contract' | 'contact' | 'project';
   title: string;
   description?: string;
   date?: Date;
   priority?: string;
   completed?: boolean;
   matchedField: string;
+  color?: string;
 }
 
 export interface SearchFilters {
-  types: ('task' | 'event' | 'chat' | 'contract' | 'contact')[];
+  types: ('task' | 'event' | 'chat' | 'contract' | 'contact' | 'project')[];
   dateRange?: { start: Date; end: Date };
   priority?: string[];
   completed?: boolean;
@@ -48,7 +49,7 @@ export function useGlobalSearch(userId: string | undefined) {
         setRecentSearches(data.map(s => ({
           id: s.id,
           query: s.query,
-          filters: (s.filters as unknown as SearchFilters) || { types: ['task', 'event', 'chat', 'contract', 'contact'] },
+          filters: (s.filters as unknown as SearchFilters) || { types: ['task', 'event', 'chat', 'contract', 'contact', 'project'] },
           createdAt: new Date(s.created_at),
         })));
       }
@@ -78,7 +79,7 @@ export function useGlobalSearch(userId: string | undefined) {
 
   const search = useCallback(async (
     query: string,
-    filters: SearchFilters = { types: ['task', 'event', 'chat', 'contract', 'contact'] }
+    filters: SearchFilters = { types: ['task', 'event', 'chat', 'contract', 'contact', 'project'] }
   ) => {
     if (!userId || !query.trim()) {
       setResults([]);
@@ -249,6 +250,36 @@ export function useGlobalSearch(userId: string | undefined) {
                 description: [contact.company, contact.role].filter(Boolean).join(' - ') || contact.email || undefined,
                 date: contact.updated_at ? new Date(contact.updated_at) : undefined,
                 matchedField,
+              });
+            }
+          });
+        }
+      }
+
+      // Search projects
+      if (filters.types.includes('project')) {
+        const { data: projects } = await supabase
+          .from('projects')
+          .select('*');
+
+        if (projects) {
+          projects.forEach(project => {
+            let matchedField = '';
+            if (fuzzyMatch(project.name, trimmedQuery)) {
+              matchedField = 'name';
+            } else if (project.description && fuzzyMatch(project.description, trimmedQuery)) {
+              matchedField = 'description';
+            }
+
+            if (matchedField) {
+              searchResults.push({
+                id: project.id,
+                type: 'project',
+                title: project.name,
+                description: project.description || undefined,
+                date: project.updated_at ? new Date(project.updated_at) : undefined,
+                matchedField,
+                color: project.color,
               });
             }
           });

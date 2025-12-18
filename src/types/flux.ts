@@ -2,6 +2,7 @@ export type TaskCategory = 'business' | 'personal' | 'family';
 export type EventCategory = 'business' | 'personal' | 'family';
 export type TimeFilter = 'today' | 'week' | 'month' | 'noDate';
 export type TaskPriority = 'high' | 'medium' | 'low';
+export type TaskStatus = 'backlog' | 'in_progress' | 'done';
 export type ThemeMode = 'dark' | 'light';
 export type ColorScheme = 'cyan' | 'purple' | 'green' | 'orange' | 'pink';
 export type AssistantPersonality = 'balanced' | 'strict' | 'supportive' | 'creative';
@@ -71,6 +72,7 @@ export interface Task {
   description?: string;
   category: TaskCategory;
   priority: TaskPriority;
+  status?: TaskStatus; // Kanban status: backlog, in_progress, done
   completed: boolean;
   createdAt: Date;
   dueDate?: Date;

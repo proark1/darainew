@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Task, CalendarEvent, TaskCategory, TaskPriority } from '@/types/flux';
+import { Task, CalendarEvent, TaskCategory, TaskPriority, TaskStatus } from '@/types/flux';
 
 interface DbTask {
   id: string;
@@ -9,6 +9,7 @@ interface DbTask {
   description: string | null;
   category: string;
   priority: string;
+  status: string;
   completed: boolean;
   due_date: string | null;
   recurrence_rule: string | null;
@@ -65,6 +66,7 @@ export function useDatabase(userId: string | undefined) {
     description: dbTask.description || undefined,
     category: dbTask.category as TaskCategory,
     priority: dbTask.priority as TaskPriority,
+    status: (dbTask.status as TaskStatus) || 'backlog',
     completed: dbTask.completed,
     createdAt: new Date(dbTask.created_at),
     dueDate: dbTask.due_date ? new Date(dbTask.due_date) : undefined,
@@ -194,6 +196,7 @@ export function useDatabase(userId: string | undefined) {
       description: task.description,
       category: task.category,
       priority: task.priority,
+      status: task.status || 'backlog',
       completed: task.completed,
       due_date: task.dueDate?.toISOString(),
       recurrence_rule: task.recurrenceRule,
@@ -229,6 +232,7 @@ export function useDatabase(userId: string | undefined) {
     if (updates.description !== undefined) dbUpdates.description = updates.description;
     if (updates.category !== undefined) dbUpdates.category = updates.category;
     if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
+    if (updates.status !== undefined) dbUpdates.status = updates.status;
     if (updates.completed !== undefined) dbUpdates.completed = updates.completed;
     if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate?.toISOString();
     if (updates.recurrenceRule !== undefined) dbUpdates.recurrence_rule = updates.recurrenceRule;

@@ -619,6 +619,7 @@ export type Database = {
           reminder_before: number | null
           secondary_responsible_id: string | null
           sort_order: number | null
+          status: string
           title: string
           trashed: boolean
           trashed_at: string | null
@@ -644,6 +645,7 @@ export type Database = {
           reminder_before?: number | null
           secondary_responsible_id?: string | null
           sort_order?: number | null
+          status?: string
           title: string
           trashed?: boolean
           trashed_at?: string | null
@@ -669,6 +671,7 @@ export type Database = {
           reminder_before?: number | null
           secondary_responsible_id?: string | null
           sort_order?: number | null
+          status?: string
           title?: string
           trashed?: boolean
           trashed_at?: string | null
