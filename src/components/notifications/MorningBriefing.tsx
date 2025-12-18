@@ -60,10 +60,17 @@ export function MorningBriefing({
   const overdueTasks = tasks.filter(t => !t.completed && t.dueDate && isPast(t.dueDate) && !isToday(t.dueDate));
   const todayEvents = events.filter(e => isToday(e.startTime)).sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
   
-  // Smart Top 3 tasks (prioritized by: overdue > high priority today > due today)
+  // Smart Top 3 tasks - ONLY overdue and due today
   const top3Tasks = useMemo(() => {
     const sorted = [...tasks]
-      .filter(t => !t.completed)
+      .filter(t => {
+        if (t.completed) return false;
+        if (!t.dueDate) return false;
+        // Only include overdue or due today
+        const isOverdue = isPast(t.dueDate) && !isToday(t.dueDate);
+        const isDueToday = isToday(t.dueDate);
+        return isOverdue || isDueToday;
+      })
       .sort((a, b) => {
         // Overdue first
         const aOverdue = a.dueDate && isPast(a.dueDate) && !isToday(a.dueDate);
@@ -83,6 +90,29 @@ export function MorningBriefing({
         return 0;
       });
     return sorted.slice(0, 3);
+  }, [tasks]);
+
+  // Next Week tasks (due in next 7 days, excluding today)
+  const nextWeekTasks = useMemo(() => {
+    const today = startOfDay(new Date());
+    const nextWeekEnd = addDays(today, 7);
+    
+    return [...tasks]
+      .filter(t => {
+        if (t.completed) return false;
+        if (!t.dueDate) return false;
+        const dueDate = startOfDay(t.dueDate);
+        // Exclude today, include next 7 days
+        return dueDate > today && dueDate <= nextWeekEnd;
+      })
+      .sort((a, b) => {
+        // Sort by due date first
+        if (a.dueDate && b.dueDate) return a.dueDate.getTime() - b.dueDate.getTime();
+        // Then by priority
+        const priorityOrder = { high: 0, medium: 1, low: 2 };
+        return priorityOrder[a.priority] - priorityOrder[b.priority];
+      })
+      .slice(0, 5);
   }, [tasks]);
 
   // Projects needing attention (most overdue tasks)
@@ -332,6 +362,36 @@ export function MorningBriefing({
               )}
             </div>
           </div>
+
+          {/* Next Week Tasks */}
+          {nextWeekTasks.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-blue-500" />
+                <span className="text-sm font-medium">Next Week</span>
+              </div>
+              <div className="space-y-1">
+                {nextWeekTasks.map((task) => (
+                  <div key={task.id} className="flex items-center justify-between text-sm p-2 rounded bg-muted/50">
+                    <span className="truncate flex items-center gap-2">
+                      {task.title}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        {isTomorrow(task.dueDate!) ? 'Tomorrow' : format(task.dueDate!, 'EEE, MMM d')}
+                      </span>
+                      <Badge 
+                        variant={task.priority === 'high' ? 'destructive' : task.priority === 'medium' ? 'default' : 'secondary'}
+                        className="text-xs"
+                      >
+                        {task.priority}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Projects Needing Attention */}
           {projectsNeedingAttention.length > 0 && (
