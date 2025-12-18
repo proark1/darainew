@@ -21,8 +21,6 @@ import {
   VolumeX,
   AlertCircle,
   Loader2,
-  Phone,
-  PhoneOff
 } from 'lucide-react';
 
 interface GhostModeProps {
@@ -40,6 +38,8 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
   const [displayTranscript, setDisplayTranscript] = useState('');
   const [aiResponse, setAiResponse] = useState('');
   const aiResponseRef = useRef('');
+  const isConnectingRef = useRef(false);
+  const hasAutoStartedRef = useRef(false);
 
   // Get current user
   const { user } = useAuth();
@@ -227,20 +227,28 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
       setAiResponse(aiResponseRef.current);
     },
     onError: (error) => {
+      console.error('Voice error:', error);
       toast({
         variant: 'destructive',
         title: 'Voice Error',
         description: error,
       });
       setConnectionStatus('error');
+      isConnectingRef.current = false;
       setTimeout(() => setConnectionStatus('disconnected'), 2000);
     },
     onConnectionChange: (status) => {
+      console.log('Connection status changed:', status);
       setConnectionStatus(status);
       if (status === 'connected') {
+        isConnectingRef.current = false;
         aiResponseRef.current = '';
         setAiResponse('');
         setDisplayTranscript('');
+      } else if (status === 'disconnected') {
+        isConnectingRef.current = false;
+      } else if (status === 'error') {
+        isConnectingRef.current = false;
       }
     },
     onSpeakingChange: (speaking) => {
@@ -293,14 +301,34 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
   }, [isListening, isSpeaking, isConnected]);
 
   const handleStartSession = useCallback(async () => {
+    // Prevent multiple simultaneous connection attempts
+    if (isConnectingRef.current || isConnected) {
+      console.log('Already connecting or connected, skipping...');
+      return;
+    }
+    
+    isConnectingRef.current = true;
     setConnectionStatus('connecting');
     aiResponseRef.current = '';
     setAiResponse('');
     setDisplayTranscript('');
-    await connect();
-  }, [connect]);
+    
+    try {
+      await connect();
+    } catch (err) {
+      console.error('Failed to start session:', err);
+      isConnectingRef.current = false;
+      setConnectionStatus('error');
+      toast({
+        variant: 'destructive',
+        title: 'Connection Failed',
+        description: err instanceof Error ? err.message : 'Failed to connect to voice service',
+      });
+    }
+  }, [connect, isConnected, toast]);
 
   const handleEndSession = useCallback(() => {
+    isConnectingRef.current = false;
     disconnect();
     setConnectionStatus('disconnected');
   }, [disconnect]);
@@ -317,13 +345,16 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose, handleEndSession]);
 
-  // Auto-start session when component mounts
+  // Auto-start session when component mounts (only once)
   useEffect(() => {
-    const timer = setTimeout(() => {
-      handleStartSession();
-    }, 500);
-    return () => clearTimeout(timer);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!hasAutoStartedRef.current) {
+      hasAutoStartedRef.current = true;
+      const timer = setTimeout(() => {
+        handleStartSession();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [handleStartSession]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -343,6 +374,10 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
 
   const currentStatus = statusConfig[connectionStatus];
   const StatusIcon = currentStatus.icon;
+
+  // Determine mic button state
+  const isMicActive = isListening && !isSpeaking && !isMuted;
+  const isSessionActive = isConnected || connectionStatus === 'connecting';
 
   return (
     <div className="fixed inset-0 ghost-gradient z-50 flex flex-col animate-fade-in">
@@ -403,6 +438,10 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
                 Connecting to AI...
               </p>
             </div>
+          ) : connectionStatus === 'error' ? (
+            <p className="text-lg text-destructive">
+              Connection failed. Tap mic to retry.
+            </p>
           ) : isListening && !isSpeaking ? (
             <p className="text-lg text-muted-foreground">
               Listening... say something
@@ -413,7 +452,7 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
             </p>
           ) : connectionStatus === 'disconnected' ? (
             <p className="text-lg text-muted-foreground">
-              Press the button to start
+              Tap the microphone to start
             </p>
           ) : (
             <p className="text-lg text-muted-foreground">
@@ -424,52 +463,69 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
       </main>
 
       {/* Footer Controls */}
-      <footer className="absolute bottom-0 left-0 right-0 p-8 flex items-center justify-center gap-4">
+      <footer className="absolute bottom-0 left-0 right-0 p-8 flex items-center justify-center gap-6">
         {/* Speaker Mute */}
         <Button
           variant="ghost"
           size="icon"
           onClick={() => setIsMuted(!isMuted)}
           className={cn(
-            "rounded-full w-12 h-12",
-            isMuted ? "text-destructive" : "text-muted-foreground"
+            "rounded-full w-14 h-14 transition-all",
+            isMuted 
+              ? "bg-destructive/20 text-destructive hover:bg-destructive/30" 
+              : "bg-muted/50 text-muted-foreground hover:bg-muted"
           )}
           title={isMuted ? "Unmute speaker" : "Mute speaker"}
         >
           {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
         </Button>
 
-        {/* Main Action Button */}
-        {!isConnected ? (
-          <Button
-            onClick={handleStartSession}
-            disabled={connectionStatus === 'connecting'}
-            className={cn(
-              "rounded-full w-20 h-20 bg-ghost-primary hover:bg-ghost-primary/80",
-              connectionStatus === 'connecting' && "opacity-50"
-            )}
-          >
-            {connectionStatus === 'connecting' ? (
-              <Loader2 className="w-10 h-10 animate-spin" />
+        {/* Main Microphone Button */}
+        <Button
+          onClick={isSessionActive ? handleEndSession : handleStartSession}
+          disabled={connectionStatus === 'connecting'}
+          className={cn(
+            "rounded-full w-24 h-24 transition-all shadow-lg",
+            connectionStatus === 'connecting' && "opacity-70 cursor-wait",
+            isSessionActive 
+              ? isMicActive
+                ? "bg-success hover:bg-success/80 animate-pulse"
+                : isSpeaking
+                  ? "bg-purple-500 hover:bg-purple-600"
+                  : "bg-ghost-primary hover:bg-ghost-primary/80"
+              : "bg-muted hover:bg-muted/80"
+          )}
+          title={isSessionActive ? "End session" : "Start voice session"}
+        >
+          {connectionStatus === 'connecting' ? (
+            <Loader2 className="w-12 h-12 animate-spin text-white" />
+          ) : isSessionActive ? (
+            isMicActive ? (
+              <Mic className="w-12 h-12 text-white" />
+            ) : isSpeaking ? (
+              <Volume2 className="w-12 h-12 text-white animate-pulse" />
             ) : (
-              <Phone className="w-10 h-10" />
-            )}
-          </Button>
-        ) : (
-          <Button
-            onClick={handleEndSession}
-            className="rounded-full w-20 h-20 bg-destructive hover:bg-destructive/80"
-          >
-            <PhoneOff className="w-10 h-10" />
-          </Button>
-        )}
+              <MicOff className="w-12 h-12 text-white/70" />
+            )
+          ) : (
+            <Mic className="w-12 h-12 text-foreground/70" />
+          )}
+        </Button>
 
-        {/* Mic indicator */}
+        {/* Status indicator */}
         <div className={cn(
-          "rounded-full w-12 h-12 flex items-center justify-center",
-          isListening && !isSpeaking ? "text-success" : "text-muted-foreground"
+          "rounded-full w-14 h-14 flex items-center justify-center transition-all",
+          isSessionActive 
+            ? isMicActive 
+              ? "bg-success/20 text-success" 
+              : isSpeaking
+                ? "bg-purple-500/20 text-purple-400"
+                : "bg-muted/50 text-muted-foreground"
+            : "bg-muted/30 text-muted-foreground/50"
         )}>
-          {isListening && !isSpeaking ? (
+          {isSpeaking ? (
+            <Volume2 className="w-6 h-6 animate-pulse" />
+          ) : isMicActive ? (
             <Mic className="w-6 h-6 animate-pulse" />
           ) : (
             <MicOff className="w-6 h-6" />
