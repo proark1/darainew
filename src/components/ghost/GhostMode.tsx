@@ -75,6 +75,7 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
   const [buttonPulse, setButtonPulse] = useState(false);
   const aiResponseRef = useRef('');
   const isConnectingRef = useRef(false);
+  const disconnectRef = useRef<() => void>(() => {});
 
   // Get current user
   const { user } = useAuth();
@@ -396,12 +397,17 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
 
   // Do not auto-start: user initiates the call explicitly via the call button.
 
-  // Cleanup on unmount
+  // Keep disconnectRef updated to the latest disconnect function
+  useEffect(() => {
+    disconnectRef.current = disconnect;
+  }, [disconnect]);
+
+  // Cleanup on unmount ONLY - empty dependency array prevents premature disconnect
   useEffect(() => {
     return () => {
-      disconnect();
+      disconnectRef.current();
     };
-  }, [disconnect]);
+  }, []);
 
   const statusConfig = {
     connecting: { color: 'text-warning', icon: Loader2, label: 'Connecting...', animate: true },
