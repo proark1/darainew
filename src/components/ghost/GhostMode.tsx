@@ -35,6 +35,7 @@ type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'processin
 export function GhostMode({ onClose, onCommand, personality = 'balanced' }: GhostModeProps) {
   const { toast } = useToast();
   const [isMuted, setIsMuted] = useState(false);
+  const [isMicMuted, setIsMicMuted] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [displayTranscript, setDisplayTranscript] = useState('');
   const [aiResponse, setAiResponse] = useState('');
@@ -273,6 +274,16 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
+  // Auto-start listening when Voice Mode opens
+  useEffect(() => {
+    if (isSupported) {
+      const timer = setTimeout(() => {
+        handleStartListening();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isSupported]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     return () => {
       if (silenceTimeoutRef.current) {
@@ -356,7 +367,7 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
                 Processing with Gemini...
               </p>
             </div>
-          ) : isListening && !isPaused ? (
+          ) : isListening && !isPaused && !isMicMuted ? (
             <p className="text-lg text-muted-foreground">
               Listening... say something
             </p>
@@ -364,9 +375,13 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
             <p className="text-lg text-purple-300">
               AI is speaking...
             </p>
+          ) : isMicMuted ? (
+            <p className="text-lg text-warning">
+              Microphone muted
+            </p>
           ) : (
             <p className="text-lg text-muted-foreground">
-              Tap the microphone to start
+              Starting voice mode...
             </p>
           )}
         </div>
@@ -374,6 +389,7 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
 
       {/* Footer Controls */}
       <footer className="absolute bottom-0 left-0 right-0 p-8 flex items-center justify-center gap-4">
+        {/* Speaker Mute */}
         <Button
           variant="ghost"
           size="icon"
@@ -385,29 +401,51 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
             "rounded-full w-12 h-12",
             isMuted ? "text-destructive" : "text-muted-foreground"
           )}
+          title={isMuted ? "Unmute speaker" : "Mute speaker"}
         >
           {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
         </Button>
 
+        {/* Mic Mute - pauses listening but keeps session active */}
         <Button
-          variant={isListening ? "ghost" : "default"}
+          variant="ghost"
           size="icon"
-          onClick={isListening ? handleStopListening : handleStartListening}
-          disabled={(!isSupported && !isListening) || isProcessing}
+          onClick={() => {
+            if (isMicMuted) {
+              setIsMicMuted(false);
+              resumeListening();
+            } else {
+              setIsMicMuted(true);
+              pauseListening();
+            }
+          }}
+          disabled={!isListening}
           className={cn(
             "rounded-full w-20 h-20 transition-all",
-            isListening && "bg-ghost-primary/20 border-2 border-ghost-primary animate-pulse",
-            !isListening && "bg-ghost-primary hover:bg-ghost-primary/90"
+            isListening && !isMicMuted && "bg-ghost-primary/20 border-2 border-ghost-primary",
+            isListening && isMicMuted && "bg-destructive/20 border-2 border-destructive",
+            !isListening && "bg-muted"
           )}
+          title={isMicMuted ? "Unmute microphone" : "Mute microphone"}
         >
-          {isListening ? (
-            <MicOff className="w-8 h-8" />
+          {isMicMuted ? (
+            <MicOff className="w-8 h-8 text-destructive" />
           ) : (
-            <Mic className="w-8 h-8" />
+            <Mic className={cn("w-8 h-8", isListening ? "text-ghost-primary" : "text-muted-foreground")} />
           )}
         </Button>
 
-        <div className="w-12" /> {/* Spacer for symmetry */}
+        {/* Stop Session */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleStopListening}
+          disabled={!isListening}
+          className="rounded-full w-12 h-12 text-muted-foreground hover:text-destructive"
+          title="End voice session"
+        >
+          <X className="w-6 h-6" />
+        </Button>
       </footer>
 
       {/* Keyboard shortcut hint */}
