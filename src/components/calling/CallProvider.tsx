@@ -76,6 +76,7 @@ export function CallProvider({ userId, children }: CallProviderProps) {
     isAudioMuted,
     isVideoOff,
     isScreenSharing,
+    peerConnection,
     startCall,
     answerCall,
     declineCall,
@@ -158,6 +159,7 @@ export function CallProvider({ userId, children }: CallProviderProps) {
         isAudioMuted={isAudioMuted}
         isVideoOff={isVideoOff}
         isScreenSharing={isScreenSharing}
+        peerConnection={peerConnection}
         onAnswer={handleAnswer}
         onDecline={handleDecline}
         onEndCall={handleEndCall}

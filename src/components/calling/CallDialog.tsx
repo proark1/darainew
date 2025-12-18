@@ -13,6 +13,9 @@ import {
   MonitorOff,
 } from 'lucide-react';
 import type { CallStatus, CallType } from '@/hooks/useWebRTCCall';
+import { useCallQuality } from '@/hooks/useCallQuality';
+import { CallQualityIndicator } from './CallQualityIndicator';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 interface CallDialogProps {
   isOpen: boolean;
@@ -24,6 +27,7 @@ interface CallDialogProps {
   isAudioMuted: boolean;
   isVideoOff: boolean;
   isScreenSharing: boolean;
+  peerConnection: RTCPeerConnection | null;
   onAnswer: () => void;
   onDecline: () => void;
   onEndCall: () => void;
@@ -42,6 +46,7 @@ export function CallDialog({
   isAudioMuted,
   isVideoOff,
   isScreenSharing,
+  peerConnection,
   onAnswer,
   onDecline,
   onEndCall,
@@ -51,6 +56,7 @@ export function CallDialog({
 }: CallDialogProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const qualityStats = useCallQuality(peerConnection);
 
   // Attach local stream to video element
   useEffect(() => {
@@ -75,12 +81,19 @@ export function CallDialog({
   const isConnected = callStatus === 'connected';
 
   return (
-    <Dialog open={isOpen} onOpenChange={() => {}}>
-      <DialogContent 
-        className="sm:max-w-[600px] md:max-w-[800px] p-0 overflow-hidden bg-background/95 backdrop-blur-sm"
-        onPointerDownOutside={(e) => e.preventDefault()}
-      >
-        <div className="relative w-full aspect-video bg-muted/50 rounded-t-lg overflow-hidden">
+    <TooltipProvider>
+      <Dialog open={isOpen} onOpenChange={() => {}}>
+        <DialogContent 
+          className="sm:max-w-[600px] md:max-w-[800px] p-0 overflow-hidden bg-background/95 backdrop-blur-sm"
+          onPointerDownOutside={(e) => e.preventDefault()}
+        >
+          <div className="relative w-full aspect-video bg-muted/50 rounded-t-lg overflow-hidden">
+            {/* Call quality indicator - shown when connected */}
+            {isConnected && (
+              <div className="absolute top-4 left-4 z-10">
+                <CallQualityIndicator stats={qualityStats} />
+              </div>
+            )}
           {/* Remote video (main view) */}
           {isConnected && remoteStream && callType === 'video' ? (
             <video
@@ -187,5 +200,6 @@ export function CallDialog({
         </div>
       </DialogContent>
     </Dialog>
+    </TooltipProvider>
   );
 }
