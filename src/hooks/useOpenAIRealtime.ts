@@ -140,6 +140,7 @@ export function useOpenAIRealtime({
   
   const currentTranscriptRef = useRef<string>('');
   const pendingFunctionCallRef = useRef<{ name: string; callId: string; args: string } | null>(null);
+  const isConnectingRef = useRef(false);
 
   // Handle function calls from OpenAI
   const handleFunctionCall = useCallback(async (name: string, args: any, callId: string) => {
@@ -807,6 +808,25 @@ export function useOpenAIRealtime({
   }, [contextData, addTask, updateTask, trashTask, toggleTaskComplete, addContact, updateContact, deleteContact, markContacted, addEvent, updateEvent, deleteEvent, addContract, updateContract, deleteContract, addProject, updateProject, deleteProject, refetch, refetchContacts, refetchContracts, refetchProjects]);
 
   const connect = useCallback(async () => {
+    // Prevent multiple simultaneous connection attempts
+    if (isConnectingRef.current) {
+      console.log('Already connecting, skipping...');
+      return;
+    }
+    
+    // Close any existing connection first
+    if (pcRef.current) {
+      console.log('Closing existing connection before reconnecting...');
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+    if (dcRef.current) {
+      dcRef.current.close();
+      dcRef.current = null;
+    }
+    
+    isConnectingRef.current = true;
+    
     try {
       onConnectionChange?.('connecting');
       console.log('Getting ephemeral token...');
@@ -961,9 +981,11 @@ export function useOpenAIRealtime({
       
       await pc.setRemoteDescription(answer);
       console.log('WebRTC connection established');
+      isConnectingRef.current = false;
       
     } catch (err) {
       console.error('Connection error:', err);
+      isConnectingRef.current = false;
       onConnectionChange?.('error');
       onError?.(err instanceof Error ? err.message : 'Connection failed');
     }
@@ -971,6 +993,7 @@ export function useOpenAIRealtime({
 
   const disconnect = useCallback(() => {
     console.log('Disconnecting...');
+    isConnectingRef.current = false;
     
     audioRecorderRef.current?.stop();
     audioRecorderRef.current = null;
