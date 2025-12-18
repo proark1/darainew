@@ -16,7 +16,8 @@ import {
   CheckCircle2,
   Circle,
   FileText,
-  Users
+  Users,
+  FolderOpen
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import type { SearchResult, SearchFilters } from '@/hooks/useGlobalSearch';
@@ -39,6 +40,7 @@ const typeIcons: Record<string, React.ElementType> = {
   chat: MessageSquare,
   contract: FileText,
   contact: Users,
+  project: FolderOpen,
 };
 
 const priorityColors: Record<string, string> = {
@@ -60,7 +62,7 @@ export function GlobalSearch({
 }: GlobalSearchProps) {
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<SearchFilters>({
-    types: ['task', 'event', 'chat', 'contract', 'contact'],
+    types: ['task', 'event', 'chat', 'contract', 'contact', 'project'],
   });
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<NodeJS.Timeout>();
@@ -94,7 +96,7 @@ export function GlobalSearch({
     };
   }, [query, filters, onSearch, onClearResults]);
 
-  const toggleTypeFilter = (type: 'task' | 'event' | 'chat' | 'contract' | 'contact') => {
+  const toggleTypeFilter = (type: 'task' | 'event' | 'chat' | 'contract' | 'contact' | 'project') => {
     setFilters(prev => ({
       ...prev,
       types: prev.types.includes(type)
@@ -147,11 +149,12 @@ export function GlobalSearch({
           {/* Type Filters */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm text-muted-foreground">Filter:</span>
-            {(['task', 'event', 'chat', 'contract', 'contact'] as const).map((type) => {
+            {(['task', 'event', 'chat', 'contract', 'contact', 'project'] as const).map((type) => {
               const Icon = typeIcons[type];
               const isActive = filters.types.includes(type);
               const label = type === 'contract' ? 'Contracts' : 
                            type === 'contact' ? 'Contacts' : 
+                           type === 'project' ? 'Projects' :
                            type.charAt(0).toUpperCase() + type.slice(1) + 's';
               return (
                 <Button

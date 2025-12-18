@@ -3,6 +3,7 @@ import { Sidebar, SidebarFilter } from './Sidebar';
 import { MobileLayout } from './MobileLayout';
 import { ChatPanel } from '../chat/ChatPanel';
 import { TaskList } from '../tasks/TaskList';
+import { KanbanBoard } from '../tasks/KanbanBoard';
 import { CalendarPanel } from '../calendar/CalendarPanel';
 import { CalendarView } from '../calendar/CalendarView';
 import { FocusTimer } from '../focus/FocusTimer';
@@ -19,7 +20,7 @@ import { Task, CalendarEvent, ChatMessage, Project } from '@/types/flux';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useCelebration } from '@/hooks/useCelebration';
 import { Button } from '@/components/ui/button';
-import { List, Grid3X3, X, Mic } from 'lucide-react';
+import { List, Grid3X3, X, Mic, LayoutGrid } from 'lucide-react';
 import type { ActivityItem } from '@/hooks/useActivityFeed';
 import type { SearchResult, SearchFilters } from '@/hooks/useGlobalSearch';
 import type { Contact } from '@/hooks/useContacts';
@@ -122,6 +123,7 @@ export function StandardMode({
 }: StandardModeProps) {
   const [filter, setFilter] = useState<SidebarFilter>('all');
   const [calendarMode, setCalendarMode] = useState<'agenda' | 'grid'>('agenda');
+  const [taskViewMode, setTaskViewMode] = useState<'list' | 'kanban'>('list');
   const [fullscreenPanel, setFullscreenPanel] = useState<FullscreenPanel>(null);
   const [showFocusTimer, setShowFocusTimer] = useState(false);
   const [showTodayFocus, setShowTodayFocus] = useState(false);
@@ -200,9 +202,19 @@ export function StandardMode({
     // Navigate to the result based on type
     if (result.type === 'task') {
       setFilter('all');
+      setSelectedProjectId(undefined);
       // Could scroll to the task or open edit modal
     } else if (result.type === 'event') {
-      // Could navigate to calendar
+      setShowCalendar(true);
+    } else if (result.type === 'project') {
+      setShowProjectPanel(true);
+      setSelectedProjectId(result.id);
+    } else if (result.type === 'contract') {
+      // Navigate to contracts page
+      window.location.href = '/contracts';
+    } else if (result.type === 'contact') {
+      // Navigate to contacts page
+      window.location.href = '/contacts';
     }
   };
 
@@ -383,7 +395,7 @@ export function StandardMode({
 
           {/* Right Side - Tasks & Calendar */}
         <div className="flex-1 flex flex-col p-2 pl-1 gap-2">
-          {/* AI Commands */}
+          {/* AI Commands + View Toggle */}
           <div className="flex items-center justify-between px-2">
             <AICommandPanel
               tasks={tasks}
@@ -394,24 +406,53 @@ export function StandardMode({
                 }
               }}
             />
+            <div className="flex items-center gap-1">
+              <Button
+                variant={taskViewMode === 'list' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-7 px-2"
+                onClick={() => setTaskViewMode('list')}
+              >
+                <List className="w-4 h-4" />
+              </Button>
+              <Button
+                variant={taskViewMode === 'kanban' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-7 px-2"
+                onClick={() => setTaskViewMode('kanban')}
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
 
-          {/* Tasks - takes full height when calendar hidden */}
+          {/* Tasks - List or Kanban view */}
           <div className="flex-1 glass-panel-solid rounded-xl overflow-hidden">
-            <TaskList
-              tasks={displayTasks}
-              filter={filter}
-              onToggleComplete={handleToggleTaskComplete}
-              onDeleteTask={onDeleteTask}
-              onDeleteTasks={onDeleteTasks}
-              onAddTask={onAddTask}
-              onUpdateTask={onUpdateTask}
-              onReorderTasks={onReorderTasks}
-              onShareTask={onShareTask}
-              projects={projects}
-              contacts={contacts}
-              onToggleFullscreen={() => setFullscreenPanel('tasks')}
-            />
+            {taskViewMode === 'kanban' ? (
+              <KanbanBoard
+                tasks={displayTasks}
+                sharedTasks={sharedTasks}
+                projects={projects}
+                onUpdateTask={onUpdateTask || (() => {})}
+                onToggleComplete={handleToggleTaskComplete}
+              />
+            ) : (
+              <TaskList
+                tasks={displayTasks}
+                filter={filter}
+                onToggleComplete={handleToggleTaskComplete}
+                onDeleteTask={onDeleteTask}
+                onDeleteTasks={onDeleteTasks}
+                onAddTask={onAddTask}
+                onUpdateTask={onUpdateTask}
+                onReorderTasks={onReorderTasks}
+                onShareTask={onShareTask}
+                projects={projects}
+                contacts={contacts}
+                onToggleFullscreen={() => setFullscreenPanel('tasks')}
+              />
+            )}
+          </div>
           </div>
 
           {/* Calendar - only shown when toggled */}
