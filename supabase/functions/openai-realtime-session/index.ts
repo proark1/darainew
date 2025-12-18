@@ -19,15 +19,19 @@ serve(async (req) => {
     const { userProfile, contextData } = await req.json();
     console.log('Creating OpenAI Realtime session with context:', { 
       hasProfile: !!userProfile, 
-      taskCount: contextData?.allTasks?.length || 0 
+      taskCount: contextData?.allTasks?.length || 0,
+      contactCount: contextData?.allContacts?.length || 0,
+      contractCount: contextData?.allContracts?.length || 0,
+      projectCount: contextData?.allProjects?.length || 0,
     });
 
     // Build comprehensive system prompt
     const systemPrompt = buildSystemPrompt(userProfile, contextData);
     console.log('System prompt length:', systemPrompt.length);
 
-    // Define tools for task management
+    // Define all tools for full platform integration
     const tools = [
+      // ==================== TASK TOOLS ====================
       {
         type: "function",
         name: "create_task",
@@ -38,7 +42,8 @@ serve(async (req) => {
             title: { type: "string", description: "The title/name of the task" },
             priority: { type: "string", enum: ["low", "medium", "high"], description: "Task priority level" },
             category: { type: "string", enum: ["work", "personal", "health", "finance", "learning", "shopping"], description: "Task category" },
-            due_date: { type: "string", description: "Due date in ISO format (YYYY-MM-DD)" }
+            due_date: { type: "string", description: "Due date in ISO format (YYYY-MM-DD)" },
+            project_id: { type: "string", description: "Optional project ID to assign this task to" }
           },
           required: ["title"]
         }
@@ -119,6 +124,8 @@ serve(async (req) => {
           required: ["type"]
         }
       },
+
+      // ==================== CONTACT TOOLS ====================
       {
         type: "function",
         name: "search_contacts",
@@ -131,6 +138,303 @@ serve(async (req) => {
             type: { type: "string", enum: ["personal", "business", "all"], description: "Filter by contact type" }
           },
           required: ["query"]
+        }
+      },
+      {
+        type: "function",
+        name: "create_contact",
+        description: "Add a new contact. Use when user wants to add someone to their contacts.",
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Contact's full name" },
+            company: { type: "string", description: "Company or organization" },
+            role: { type: "string", description: "Job title or role" },
+            email: { type: "string", description: "Email address" },
+            phone: { type: "string", description: "Phone number" },
+            city: { type: "string", description: "City" },
+            country: { type: "string", description: "Country" },
+            contact_type: { type: "string", enum: ["personal", "business"], description: "Contact type" },
+            notes: { type: "string", description: "Notes about this contact" }
+          },
+          required: ["name"]
+        }
+      },
+      {
+        type: "function",
+        name: "update_contact",
+        description: "Update an existing contact's information.",
+        parameters: {
+          type: "object",
+          properties: {
+            contact_query: { type: "string", description: "Contact name to search for" },
+            company: { type: "string", description: "New company" },
+            role: { type: "string", description: "New role" },
+            email: { type: "string", description: "New email" },
+            phone: { type: "string", description: "New phone" },
+            city: { type: "string", description: "New city" },
+            country: { type: "string", description: "New country" },
+            notes: { type: "string", description: "New notes" }
+          },
+          required: ["contact_query"]
+        }
+      },
+      {
+        type: "function",
+        name: "mark_contact_contacted",
+        description: "Mark that you've contacted someone. This resets their follow-up timer. Use when user says they called, emailed, or met with someone.",
+        parameters: {
+          type: "object",
+          properties: {
+            contact_query: { type: "string", description: "Contact name to search for" }
+          },
+          required: ["contact_query"]
+        }
+      },
+      {
+        type: "function",
+        name: "delete_contact",
+        description: "Delete a contact from the address book.",
+        parameters: {
+          type: "object",
+          properties: {
+            contact_query: { type: "string", description: "Contact name to search for" }
+          },
+          required: ["contact_query"]
+        }
+      },
+      {
+        type: "function",
+        name: "get_contacts_due",
+        description: "Get contacts that are due for follow-up. Use when user asks who they should reach out to.",
+        parameters: {
+          type: "object",
+          properties: {},
+          required: []
+        }
+      },
+
+      // ==================== EVENT/CALENDAR TOOLS ====================
+      {
+        type: "function",
+        name: "create_event",
+        description: "Create a new calendar event or meeting. Use when user wants to schedule something.",
+        parameters: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "Event title" },
+            start_time: { type: "string", description: "Start date/time - can be natural language like 'tomorrow at 3pm' or ISO format" },
+            end_time: { type: "string", description: "End date/time - can be duration like '1 hour' or specific time" },
+            location: { type: "string", description: "Event location" },
+            description: { type: "string", description: "Event description or notes" }
+          },
+          required: ["title", "start_time"]
+        }
+      },
+      {
+        type: "function",
+        name: "search_events",
+        description: "Search for calendar events by title, date, or location.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Search term - event title or keyword" },
+            date_range: { type: "string", enum: ["today", "tomorrow", "this_week", "next_week", "this_month"], description: "Time range to search" }
+          },
+          required: []
+        }
+      },
+      {
+        type: "function",
+        name: "update_event",
+        description: "Update an existing calendar event.",
+        parameters: {
+          type: "object",
+          properties: {
+            event_query: { type: "string", description: "Event title to search for" },
+            new_title: { type: "string", description: "New title" },
+            new_start_time: { type: "string", description: "New start time" },
+            new_end_time: { type: "string", description: "New end time" },
+            new_location: { type: "string", description: "New location" }
+          },
+          required: ["event_query"]
+        }
+      },
+      {
+        type: "function",
+        name: "delete_event",
+        description: "Delete/cancel a calendar event.",
+        parameters: {
+          type: "object",
+          properties: {
+            event_query: { type: "string", description: "Event title to search for" }
+          },
+          required: ["event_query"]
+        }
+      },
+
+      // ==================== CONTRACT TOOLS ====================
+      {
+        type: "function",
+        name: "create_contract",
+        description: "Add a new contract or subscription. Use when user wants to track a service, subscription, or agreement.",
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Contract/subscription name" },
+            provider: { type: "string", description: "Service provider name" },
+            category: { type: "string", enum: ["subscription", "insurance", "utilities", "lease", "service", "membership", "software", "other"], description: "Contract category" },
+            cost_amount: { type: "number", description: "Cost amount" },
+            cost_frequency: { type: "string", enum: ["monthly", "quarterly", "yearly", "one-time"], description: "Payment frequency" },
+            renewal_date: { type: "string", description: "Renewal or expiration date" },
+            auto_renews: { type: "boolean", description: "Whether it auto-renews" },
+            notes: { type: "string", description: "Additional notes" }
+          },
+          required: ["name"]
+        }
+      },
+      {
+        type: "function",
+        name: "search_contracts",
+        description: "Search for contracts by name, provider, or category.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Search term - contract name, provider, or keyword" },
+            category: { type: "string", description: "Filter by category" }
+          },
+          required: []
+        }
+      },
+      {
+        type: "function",
+        name: "update_contract",
+        description: "Update an existing contract's information.",
+        parameters: {
+          type: "object",
+          properties: {
+            contract_query: { type: "string", description: "Contract name to search for" },
+            cost_amount: { type: "number", description: "New cost amount" },
+            cost_frequency: { type: "string", description: "New payment frequency" },
+            renewal_date: { type: "string", description: "New renewal date" },
+            is_active: { type: "boolean", description: "Active status" },
+            notes: { type: "string", description: "New notes" }
+          },
+          required: ["contract_query"]
+        }
+      },
+      {
+        type: "function",
+        name: "delete_contract",
+        description: "Delete a contract from tracking.",
+        parameters: {
+          type: "object",
+          properties: {
+            contract_query: { type: "string", description: "Contract name to search for" }
+          },
+          required: ["contract_query"]
+        }
+      },
+      {
+        type: "function",
+        name: "get_contract_costs",
+        description: "Get total subscription/contract costs. Use when user asks how much they spend on subscriptions.",
+        parameters: {
+          type: "object",
+          properties: {
+            frequency: { type: "string", enum: ["monthly", "yearly"], description: "Cost breakdown frequency" }
+          },
+          required: []
+        }
+      },
+      {
+        type: "function",
+        name: "get_expiring_contracts",
+        description: "Get contracts that are expiring soon or need renewal.",
+        parameters: {
+          type: "object",
+          properties: {
+            days: { type: "number", description: "Number of days to look ahead (default 30)" }
+          },
+          required: []
+        }
+      },
+
+      // ==================== PROJECT TOOLS ====================
+      {
+        type: "function",
+        name: "create_project",
+        description: "Create a new project to organize tasks.",
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Project name" },
+            description: { type: "string", description: "Project description" },
+            color: { type: "string", description: "Project color (hex code or name like 'blue', 'red', etc.)" }
+          },
+          required: ["name"]
+        }
+      },
+      {
+        type: "function",
+        name: "list_projects",
+        description: "List all projects with their task counts and progress.",
+        parameters: {
+          type: "object",
+          properties: {},
+          required: []
+        }
+      },
+      {
+        type: "function",
+        name: "get_project_status",
+        description: "Get detailed status of a specific project including task completion.",
+        parameters: {
+          type: "object",
+          properties: {
+            project_query: { type: "string", description: "Project name to search for" }
+          },
+          required: ["project_query"]
+        }
+      },
+      {
+        type: "function",
+        name: "add_task_to_project",
+        description: "Assign an existing task to a project.",
+        parameters: {
+          type: "object",
+          properties: {
+            task_query: { type: "string", description: "Task name to search for" },
+            project_query: { type: "string", description: "Project name to assign to" }
+          },
+          required: ["task_query", "project_query"]
+        }
+      },
+      {
+        type: "function",
+        name: "update_project",
+        description: "Update a project's name, description, or color.",
+        parameters: {
+          type: "object",
+          properties: {
+            project_query: { type: "string", description: "Project name to search for" },
+            new_name: { type: "string", description: "New project name" },
+            new_description: { type: "string", description: "New description" },
+            new_color: { type: "string", description: "New color" }
+          },
+          required: ["project_query"]
+        }
+      },
+      {
+        type: "function",
+        name: "delete_project",
+        description: "Archive/delete a project (tasks are kept but unassigned).",
+        parameters: {
+          type: "object",
+          properties: {
+            project_query: { type: "string", description: "Project name to search for" }
+          },
+          required: ["project_query"]
         }
       }
     ];
@@ -167,7 +471,7 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    console.log("Session created successfully");
+    console.log("Session created successfully with", tools.length, "tools");
 
     return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -195,30 +499,54 @@ function buildSystemPrompt(userProfile: any, contextData: any): string {
     hour12: true
   });
 
-  let prompt = `You are a helpful, friendly personal assistant with access to the user's tasks, calendar, contacts, and contracts. You can help manage their productivity and answer questions about their schedule and commitments.
+  let prompt = `You are a powerful, friendly personal assistant with FULL access to the user's productivity platform. You can manage their tasks, calendar events, contacts, contracts, and projects through voice commands.
 
 Current date and time: ${timeString}
 
 ## Your Capabilities:
+### Tasks
 - Create, complete, trash, reschedule, and edit tasks
-- Search for tasks by name or keyword
-- Provide summaries of tasks (today, overdue, upcoming)
-- Answer questions about contacts and contracts
-- Have natural conversations with context awareness
+- Search tasks and get summaries (today, overdue, upcoming)
+- Assign tasks to projects
+
+### Contacts  
+- Search contacts by name, company, location, or tags
+- Create, update, and delete contacts
+- Mark contacts as contacted (resets follow-up timer)
+- See who is due for follow-up
+
+### Calendar/Events
+- Create, update, and delete calendar events
+- Search events by date range or title
+- Schedule meetings with natural language ("tomorrow at 3pm")
+
+### Contracts/Subscriptions
+- Track subscriptions, services, and contracts
+- See total monthly/yearly costs
+- Get alerts for expiring contracts
+- Create, update, and delete contracts
+
+### Projects
+- Create and manage projects to organize tasks
+- Get project progress and status
+- Assign tasks to projects
 
 ## Important Guidelines:
-1. When the user mentions a task, search for it using fuzzy matching
-2. Always confirm before destructive actions (trash, complete)
-3. Be concise but friendly in responses
-4. Use the tools to actually perform actions - don't just describe what you would do
-5. If multiple tasks match a query, list them and ask which one
-6. Remember context from the conversation - if user confirms "yes", perform the action discussed
+1. Use fuzzy matching when searching - partial names work
+2. Always confirm before destructive actions (delete, trash)
+3. Be concise but friendly - this is voice, not text
+4. ALWAYS use tools to perform actions - don't just describe what you would do
+5. If multiple items match, list top 3 and ask which one
+6. Remember conversation context - if user says "yes", do the discussed action
+7. For dates, understand natural language: "tomorrow", "next monday", "in 3 days"
+8. When creating events, default to 1 hour duration if not specified
 
 ## Conversation Style:
-- Be warm and encouraging
-- Use natural speech patterns (contractions, casual language)
-- Keep responses brief for voice - no long lists unless asked
-- Acknowledge actions clearly: "Done!", "Got it!", "Task created!"
+- Warm and encouraging
+- Natural speech (contractions, casual language)
+- Brief responses for voice
+- Clear confirmations: "Done!", "Got it!", "Created!"
+- Proactive suggestions when relevant
 `;
 
   // Add user profile
@@ -234,40 +562,38 @@ Current date and time: ${timeString}
     if (userProfile.goals) prompt += `- Goals: ${userProfile.goals}\n`;
   }
 
-  // Add task context
+  // Add context data
   if (contextData) {
-    prompt += `\n## Current Task Context:\n`;
-    prompt += `- Total pending tasks: ${contextData.totalPendingTasks || 0}\n`;
+    prompt += `\n## Current Data Summary:\n`;
+    prompt += `- Pending tasks: ${contextData.totalPendingTasks || 0}\n`;
     prompt += `- Overdue tasks: ${contextData.totalOverdue || 0}\n`;
+    prompt += `- Total contacts: ${contextData.totalContacts || 0}\n`;
+    prompt += `- Active contracts: ${contextData.totalContracts || 0}\n`;
+    prompt += `- Total projects: ${contextData.totalProjects || 0}\n`;
 
+    // Today's tasks
     if (contextData.todayTasks?.length > 0) {
       prompt += `\n### Today's Tasks:\n`;
       contextData.todayTasks.forEach((t: any) => {
-        prompt += `- "${t.title}" (${t.priority} priority, ${t.category})\n`;
+        prompt += `- "${t.title}" (${t.priority} priority)\n`;
       });
     }
 
+    // Overdue tasks
     if (contextData.overdueTasks?.length > 0) {
       prompt += `\n### Overdue Tasks:\n`;
       contextData.overdueTasks.forEach((t: any) => {
-        prompt += `- "${t.title}" - was due ${t.dueDate}\n`;
+        prompt += `- "${t.title}" - was due ${t.dueDate?.split('T')[0]}\n`;
       });
     }
 
-    if (contextData.upcomingTasks?.length > 0) {
-      prompt += `\n### Upcoming This Week:\n`;
-      contextData.upcomingTasks.forEach((t: any) => {
-        prompt += `- "${t.title}" - due ${t.dueDate}\n`;
-      });
-    }
-
-    // All tasks for reference (used by tools)
-    if (contextData.allTasks?.length > 0) {
-      prompt += `\n### All Active Tasks (for search/matching):\n`;
-      contextData.allTasks.forEach((t: any) => {
-        const status = t.completed ? '[DONE]' : '';
-        const due = t.dueDate ? ` - due ${t.dueDate.split('T')[0]}` : '';
-        prompt += `- ID:${t.id} "${t.title}" (${t.priority}, ${t.category})${due} ${status}\n`;
+    // Upcoming events
+    if (contextData.upcomingEvents?.length > 0) {
+      prompt += `\n### Upcoming Events:\n`;
+      contextData.upcomingEvents.forEach((e: any) => {
+        const date = new Date(e.startTime).toLocaleDateString();
+        const time = new Date(e.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        prompt += `- "${e.title}" on ${date} at ${time}${e.location ? ` at ${e.location}` : ''}\n`;
       });
     }
 
@@ -279,38 +605,53 @@ Current date and time: ${timeString}
       });
     }
 
-    // ALL contacts for searching
+    // Contracts with upcoming renewals
+    if (contextData.contractsWithRenewals?.length > 0) {
+      prompt += `\n### Contracts Expiring Soon:\n`;
+      contextData.contractsWithRenewals.forEach((c: any) => {
+        prompt += `- ${c.name} - renews ${c.renewalDate?.split('T')[0]}${c.costAmount ? ` ($${c.costAmount}/${c.costFrequency})` : ''}\n`;
+      });
+    }
+
+    // Projects summary
+    if (contextData.allProjects?.length > 0) {
+      prompt += `\n### Projects:\n`;
+      contextData.allProjects.forEach((p: any) => {
+        prompt += `- "${p.name}" (ID: ${p.id})${p.description ? `: ${p.description}` : ''}\n`;
+      });
+    }
+
+    // All tasks for matching (abbreviated)
+    if (contextData.allTasks?.length > 0) {
+      prompt += `\n### All Active Tasks (for search):\n`;
+      contextData.allTasks.slice(0, 50).forEach((t: any) => {
+        const due = t.dueDate ? ` - due ${t.dueDate.split('T')[0]}` : '';
+        const project = t.projectId ? ` [Project: ${t.projectId}]` : '';
+        prompt += `- ID:${t.id} "${t.title}" (${t.priority})${due}${project}\n`;
+      });
+    }
+
+    // All contacts for matching (abbreviated)
     if (contextData.allContacts?.length > 0) {
-      prompt += `\n### All Contacts (${contextData.allContacts.length} total - use search_contacts tool to find specific ones):\n`;
-      contextData.allContacts.forEach((c: any) => {
+      prompt += `\n### All Contacts (for search - ${contextData.allContacts.length} total):\n`;
+      contextData.allContacts.slice(0, 30).forEach((c: any) => {
         const location = [c.city, c.country].filter(Boolean).join(', ');
-        const tags = c.tags?.length > 0 ? ` [${c.tags.join(', ')}]` : '';
-        prompt += `- ${c.name}`;
+        prompt += `- ID:${c.id} "${c.name}"`;
         if (c.company) prompt += ` at ${c.company}`;
         if (c.role) prompt += ` (${c.role})`;
         if (location) prompt += ` - ${location}`;
-        if (c.contactType) prompt += ` | ${c.contactType}`;
-        if (tags) prompt += tags;
-        if (c.notes) prompt += ` | Notes: ${c.notes.substring(0, 80)}`;
-        prompt += `\n`;
+        prompt += ` | ${c.contactType}\n`;
       });
     }
 
-    // Contracts
-    if (contextData.contractsWithRenewals?.length > 0) {
-      prompt += `\n### Contracts with Upcoming Renewals:\n`;
-      contextData.contractsWithRenewals.forEach((c: any) => {
-        prompt += `- ${c.name} - renews ${c.renewalDate}${c.costAmount ? ` ($${c.costAmount}/${c.costFrequency})` : ''}\n`;
-      });
-    }
-
-    // Events
-    if (contextData.upcomingEvents?.length > 0) {
-      prompt += `\n### Upcoming Events:\n`;
-      contextData.upcomingEvents.forEach((e: any) => {
-        const date = new Date(e.startTime).toLocaleDateString();
-        const time = new Date(e.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        prompt += `- "${e.title}" on ${date} at ${time}${e.location ? ` at ${e.location}` : ''}\n`;
+    // All contracts for matching
+    if (contextData.allContracts?.length > 0) {
+      prompt += `\n### All Contracts (for search - ${contextData.allContracts.length} total):\n`;
+      contextData.allContracts.slice(0, 20).forEach((c: any) => {
+        prompt += `- ID:${c.id} "${c.name}"`;
+        if (c.provider) prompt += ` (${c.provider})`;
+        if (c.costAmount) prompt += ` - $${c.costAmount}/${c.costFrequency}`;
+        prompt += ` | ${c.category}\n`;
       });
     }
   }
