@@ -86,6 +86,68 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_group_members: {
+        Row: {
+          group_id: string
+          id: string
+          joined_at: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          group_id: string
+          id?: string
+          joined_at?: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          group_id?: string
+          id?: string
+          joined_at?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_group_members_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "chat_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_groups: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           content: string
@@ -183,6 +245,8 @@ export type Database = {
           created_at: string
           id: string
           is_read: boolean
+          reactions: Json | null
+          read_at: string | null
           recipient_id: string
           sender_id: string
         }
@@ -192,6 +256,8 @@ export type Database = {
           created_at?: string
           id?: string
           is_read?: boolean
+          reactions?: Json | null
+          read_at?: string | null
           recipient_id: string
           sender_id: string
         }
@@ -201,6 +267,8 @@ export type Database = {
           created_at?: string
           id?: string
           is_read?: boolean
+          reactions?: Json | null
+          read_at?: string | null
           recipient_id?: string
           sender_id?: string
         }
@@ -288,6 +356,73 @@ export type Database = {
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      group_message_reads: {
+        Row: {
+          id: string
+          message_id: string
+          read_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          message_id: string
+          read_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          message_id?: string
+          read_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_message_reads_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "group_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      group_messages: {
+        Row: {
+          attachments: Json | null
+          content: string
+          created_at: string
+          group_id: string
+          id: string
+          reactions: Json | null
+          sender_id: string
+        }
+        Insert: {
+          attachments?: Json | null
+          content?: string
+          created_at?: string
+          group_id: string
+          id?: string
+          reactions?: Json | null
+          sender_id: string
+        }
+        Update: {
+          attachments?: Json | null
+          content?: string
+          created_at?: string
+          group_id?: string
+          id?: string
+          reactions?: Json | null
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_messages_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "chat_groups"
             referencedColumns: ["id"]
           },
         ]
