@@ -486,6 +486,7 @@ export function useWebRTCCall({ userId, onIncomingCall }: UseWebRTCCallOptions) 
     isAudioMuted,
     isVideoOff,
     isScreenSharing,
+    peerConnection: peerConnection.current,
     startCall,
     answerCall,
     declineCall,
