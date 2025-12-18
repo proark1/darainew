@@ -7,6 +7,7 @@ import { useUserProfile } from '@/hooks/useUserProfile';
 import { useDatabase } from '@/hooks/useDatabase';
 import { useContacts } from '@/hooks/useContacts';
 import { useContracts } from '@/hooks/useContracts';
+import { useProjects } from '@/hooks/useProjects';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import type { AssistantPersonality } from '@/types/flux';
@@ -48,9 +49,10 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
   const { profile } = useUserProfile();
   
   // Fetch real data from the platform
-  const { tasks, events, addTask, updateTask, trashTask, toggleTaskComplete, refetch } = useDatabase(userId);
-  const { contacts } = useContacts(userId);
-  const { contracts } = useContracts(userId);
+  const { tasks, events, addTask, updateTask, trashTask, toggleTaskComplete, addEvent, updateEvent, deleteEvent, refetch } = useDatabase(userId);
+  const { contacts, addContact, updateContact, deleteContact, markContacted, refetch: refetchContacts } = useContacts(userId);
+  const { contracts, addContract, updateContract, deleteContract, refetch: refetchContracts } = useContracts(userId);
+  const { projects, addProject, updateProject, deleteProject, refetch: refetchProjects } = useProjects(userId);
 
   // Prepare context data for the AI
   const contextData = useMemo(() => {
@@ -87,6 +89,9 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
       return c.renewalDate <= nextWeek;
     }).slice(0, 5);
 
+    // Active projects
+    const activeProjects = projects.filter(p => !p.isArchived);
+
     // All tasks for voice command matching (include id)
     const allTasks = tasks.filter(t => !t.trashed).map(t => ({
       id: t.id,
@@ -95,10 +100,65 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
       priority: String(t.priority),
       dueDate: t.dueDate?.toISOString() || null,
       completed: t.completed,
+      projectId: t.projectId || null,
+    }));
+
+    // All events for matching
+    const allEvents = events.map(e => ({
+      id: e.id,
+      title: e.title,
+      startTime: e.startTime.toISOString(),
+      endTime: e.endTime.toISOString(),
+      location: e.location || null,
+    }));
+
+    // All contacts for matching
+    const allContacts = contacts.slice(0, 100).map(c => ({
+      id: c.id,
+      name: c.name,
+      company: c.company || null,
+      role: c.role || null,
+      city: c.city || null,
+      country: c.country || null,
+      contactType: c.contactType,
+      personalTier: c.personalTier || null,
+      businessLevel: c.businessLevel || null,
+      notes: c.notes || null,
+      tags: c.tags || [],
+      phone: c.phone || null,
+      email: c.email || null,
+      nextContactDue: c.nextContactDue?.toISOString() || null,
+      lastContactedAt: c.lastContactedAt?.toISOString() || null,
+    }));
+
+    // All contracts for matching
+    const allContracts = activeContracts.map(c => ({
+      id: c.id,
+      name: c.name,
+      provider: c.provider || null,
+      category: String(c.category),
+      costAmount: c.costAmount || null,
+      costFrequency: c.costFrequency || null,
+      renewalDate: c.renewalDate?.toISOString() || null,
+      autoRenews: c.autoRenews,
+      isActive: c.isActive,
+      notes: c.notes || null,
+    }));
+
+    // All projects for matching
+    const allProjects = activeProjects.map(p => ({
+      id: p.id,
+      name: p.name,
+      description: p.description || null,
+      color: p.color,
     }));
 
     return {
       allTasks,
+      allEvents,
+      allContacts,
+      allContracts,
+      allProjects,
       overdueTasks: overdueTasks.slice(0, 5).map(t => ({
         title: t.title,
         category: String(t.category),
@@ -130,21 +190,6 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
         role: c.role || null,
         nextContactDue: c.nextContactDue?.toISOString() || null
       })),
-      // ALL contacts for AI searching
-      allContacts: contacts.slice(0, 100).map(c => ({
-        name: c.name,
-        company: c.company || null,
-        role: c.role || null,
-        city: c.city || null,
-        country: c.country || null,
-        contactType: c.contactType,
-        personalTier: c.personalTier || null,
-        businessLevel: c.businessLevel || null,
-        notes: c.notes || null,
-        tags: c.tags || [],
-        phone: c.phone || null,
-        email: c.email || null,
-      })),
       contractsWithRenewals: contractsWithRenewals.map(c => ({
         name: c.name,
         category: String(c.category),
@@ -156,9 +201,10 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
       totalOverdue: overdueTasks.length,
       totalEvents: events.length,
       totalContacts: contacts.length,
-      totalContracts: activeContracts.length
+      totalContracts: activeContracts.length,
+      totalProjects: activeProjects.length,
     };
-  }, [tasks, events, contacts, contracts]);
+  }, [tasks, events, contacts, contracts, projects]);
 
   // OpenAI Realtime hook
   const {
@@ -173,12 +219,10 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
     onTranscript: (text, isFinal) => {
       setDisplayTranscript(text);
       if (isFinal) {
-        // Clear after a moment
         setTimeout(() => setDisplayTranscript(''), 3000);
       }
     },
     onResponse: (text) => {
-      // Accumulate response text
       aiResponseRef.current += text;
       setAiResponse(aiResponseRef.current);
     },
@@ -204,19 +248,39 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
         setConnectionStatus('speaking');
       } else if (isConnected) {
         setConnectionStatus('connected');
-        // Clear AI response after speaking ends
         setTimeout(() => {
           aiResponseRef.current = '';
           setAiResponse('');
         }, 2000);
       }
     },
-    // Pass task operations
+    // Task operations
     addTask,
     updateTask,
     trashTask,
     toggleTaskComplete,
+    // Contact operations
+    addContact,
+    updateContact,
+    deleteContact,
+    markContacted,
+    // Event operations
+    addEvent,
+    updateEvent,
+    deleteEvent,
+    // Contract operations
+    addContract,
+    updateContract,
+    deleteContract,
+    // Project operations
+    addProject,
+    updateProject,
+    deleteProject,
+    // Refetch functions
     refetch,
+    refetchContacts,
+    refetchContracts,
+    refetchProjects,
   });
 
   // Update connection status based on state
