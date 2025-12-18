@@ -21,11 +21,13 @@ import {
   CheckSquare,
   Zap,
   FileText,
-  MessageCircle
+  MessageCircle,
+  Phone
 } from 'lucide-react';
 import { TaskCategory } from '@/types/flux';
 
 export type SidebarFilter = TaskCategory | 'all' | 'shared';
+export type ActivePanel = 'tasks' | 'chat' | 'calendar' | 'calls' | null;
 
 interface SidebarProps {
   onVoiceMode: () => void;
@@ -37,13 +39,9 @@ interface SidebarProps {
   onToggleProjects?: () => void;
   onOpenActivityFeed?: () => void;
   onOpenGlobalSearch?: () => void;
-  onToggleCalendar?: () => void;
+  onPanelChange?: (panel: ActivePanel) => void;
   onOpenTodayFocus?: () => void;
-  onToggleTeamChat?: () => void;
-  onOpenTasks?: () => void;
-  showCalendar?: boolean;
-  showTeamChat?: boolean;
-  showTasks?: boolean;
+  activePanel?: ActivePanel;
   notificationButton?: React.ReactNode;
 }
 
@@ -56,18 +54,20 @@ export function Sidebar({
   onToggleProjects,
   onOpenActivityFeed,
   onOpenGlobalSearch,
-  onToggleCalendar,
+  onPanelChange,
   onOpenTodayFocus,
-  onToggleTeamChat,
-  onOpenTasks,
-  showCalendar,
-  showTeamChat,
-  showTasks,
+  activePanel,
   notificationButton,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  const handlePanelClick = (panel: ActivePanel) => {
+    if (onPanelChange) {
+      onPanelChange(activePanel === panel ? 'tasks' : panel);
+    }
+  };
 
   return (
     <aside 
@@ -143,51 +143,60 @@ export function Sidebar({
           )}
           
           {/* Tasks */}
-          {onOpenTasks && (
-            <Button
-              variant={showTasks ? 'secondary' : 'ghost'}
-              className={cn(
-                "w-full h-9 gap-3",
-                collapsed ? "justify-center px-0" : "justify-start",
-                showTasks && "bg-sidebar-accent text-sidebar-primary font-medium"
-              )}
-              onClick={onOpenTasks}
-            >
-              <CheckSquare className="w-4 h-4 shrink-0" />
-              {!collapsed && <span className="text-sm">Tasks</span>}
-            </Button>
-          )}
+          <Button
+            variant={activePanel === 'tasks' ? 'secondary' : 'ghost'}
+            className={cn(
+              "w-full h-9 gap-3",
+              collapsed ? "justify-center px-0" : "justify-start",
+              activePanel === 'tasks' && "bg-sidebar-accent text-sidebar-primary font-medium"
+            )}
+            onClick={() => handlePanelClick('tasks')}
+          >
+            <CheckSquare className="w-4 h-4 shrink-0" />
+            {!collapsed && <span className="text-sm">Tasks</span>}
+          </Button>
 
           {/* Team Chat */}
-          {onToggleTeamChat && (
-            <Button
-              variant={showTeamChat ? 'secondary' : 'ghost'}
-              className={cn(
-                "w-full h-9 gap-3",
-                collapsed ? "justify-center px-0" : "justify-start",
-                showTeamChat && "bg-sidebar-accent text-sidebar-primary font-medium"
-              )}
-              onClick={onToggleTeamChat}
-            >
-              <MessageCircle className="w-4 h-4 shrink-0" />
-              {!collapsed && <span className="text-sm">Chat</span>}
-            </Button>
-          )}
+          <Button
+            variant={activePanel === 'chat' ? 'secondary' : 'ghost'}
+            className={cn(
+              "w-full h-9 gap-3",
+              collapsed ? "justify-center px-0" : "justify-start",
+              activePanel === 'chat' && "bg-sidebar-accent text-sidebar-primary font-medium"
+            )}
+            onClick={() => handlePanelClick('chat')}
+          >
+            <MessageCircle className="w-4 h-4 shrink-0" />
+            {!collapsed && <span className="text-sm">Chat</span>}
+          </Button>
           
-          {onToggleCalendar && (
-            <Button
-              variant={showCalendar ? 'secondary' : 'ghost'}
-              className={cn(
-                "w-full h-9 gap-3",
-                collapsed ? "justify-center px-0" : "justify-start",
-                showCalendar && "bg-sidebar-accent text-sidebar-primary font-medium"
-              )}
-              onClick={onToggleCalendar}
-            >
-              <Calendar className="w-4 h-4 shrink-0" />
-              {!collapsed && <span className="text-sm">Calendar</span>}
-            </Button>
-          )}
+          {/* Calendar */}
+          <Button
+            variant={activePanel === 'calendar' ? 'secondary' : 'ghost'}
+            className={cn(
+              "w-full h-9 gap-3",
+              collapsed ? "justify-center px-0" : "justify-start",
+              activePanel === 'calendar' && "bg-sidebar-accent text-sidebar-primary font-medium"
+            )}
+            onClick={() => handlePanelClick('calendar')}
+          >
+            <Calendar className="w-4 h-4 shrink-0" />
+            {!collapsed && <span className="text-sm">Calendar</span>}
+          </Button>
+
+          {/* Call History */}
+          <Button
+            variant={activePanel === 'calls' ? 'secondary' : 'ghost'}
+            className={cn(
+              "w-full h-9 gap-3",
+              collapsed ? "justify-center px-0" : "justify-start",
+              activePanel === 'calls' && "bg-sidebar-accent text-sidebar-primary font-medium"
+            )}
+            onClick={() => handlePanelClick('calls')}
+          >
+            <Phone className="w-4 h-4 shrink-0" />
+            {!collapsed && <span className="text-sm">Calls</span>}
+          </Button>
 
           {onToggleProjects && (
             <Button

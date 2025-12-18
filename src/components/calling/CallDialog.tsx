@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -15,6 +15,7 @@ import {
 import type { CallStatus, CallType } from '@/hooks/useWebRTCCall';
 import { useCallQuality } from '@/hooks/useCallQuality';
 import { CallQualityIndicator } from './CallQualityIndicator';
+import { InCallChat } from './InCallChat';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 interface CallDialogProps {
@@ -28,6 +29,9 @@ interface CallDialogProps {
   isVideoOff: boolean;
   isScreenSharing: boolean;
   peerConnection: RTCPeerConnection | null;
+  sessionId?: string | null;
+  userId?: string;
+  userName?: string;
   onAnswer: () => void;
   onDecline: () => void;
   onEndCall: () => void;
@@ -47,6 +51,9 @@ export function CallDialog({
   isVideoOff,
   isScreenSharing,
   peerConnection,
+  sessionId,
+  userId,
+  userName,
   onAnswer,
   onDecline,
   onEndCall,
@@ -58,6 +65,7 @@ export function CallDialog({
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const qualityStats = useCallQuality(peerConnection);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   // Attach local stream to video element
   useEffect(() => {
@@ -108,8 +116,19 @@ export function CallDialog({
             {isConnected && (
               <div className="absolute top-4 left-4 z-10">
                 <CallQualityIndicator stats={qualityStats} />
-              </div>
-            )}
+            </div>
+          )}
+          
+          {/* In-Call Chat */}
+          {isConnected && sessionId && userId && (
+            <InCallChat
+              sessionId={sessionId}
+              userId={userId}
+              userName={userName || 'You'}
+              isOpen={isChatOpen}
+              onToggle={() => setIsChatOpen(!isChatOpen)}
+            />
+          )}
           {/* Remote video (main view) */}
           {isConnected && remoteStream && callType === 'video' ? (
             <video

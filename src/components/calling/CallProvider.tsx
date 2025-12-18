@@ -38,10 +38,11 @@ export function useCall() {
 
 interface CallProviderProps {
   userId: string;
+  userName?: string;
   children: ReactNode;
 }
 
-export function CallProvider({ userId, children }: CallProviderProps) {
+export function CallProvider({ userId, userName, children }: CallProviderProps) {
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [incomingCallerName, setIncomingCallerName] = useState('');
@@ -160,6 +161,9 @@ export function CallProvider({ userId, children }: CallProviderProps) {
         isVideoOff={isVideoOff}
         isScreenSharing={isScreenSharing}
         peerConnection={peerConnection}
+        sessionId={currentSession?.id || null}
+        userId={userId}
+        userName={userName}
         onAnswer={handleAnswer}
         onDecline={handleDecline}
         onEndCall={handleEndCall}
