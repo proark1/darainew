@@ -1149,6 +1149,8 @@ export function useOpenAIRealtime({
     const emitDisconnected = opts?.emitDisconnected ?? true;
 
     console.log('Cleaning up connection...');
+    // Increment connectAttemptRef to cancel any in-flight connection attempts
+    connectAttemptRef.current++;
     isConnectingRef.current = false;
     dcIsOpenRef.current = false;
     rtcReadyRef.current = false;
