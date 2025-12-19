@@ -279,8 +279,8 @@ export function MorningBriefing({
   if (!visible) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm animate-in fade-in duration-300 p-4 overflow-y-auto">
-      <Card className="w-full max-w-lg border-primary/20 bg-card/95 backdrop-blur shadow-2xl my-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm animate-in fade-in duration-300 p-4 md:p-6 lg:p-8 overflow-y-auto">
+      <Card className="w-full max-w-lg md:max-w-3xl lg:max-w-5xl xl:max-w-6xl border-primary/20 bg-card/95 backdrop-blur shadow-2xl my-4">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
