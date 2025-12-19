@@ -30,6 +30,7 @@ import {
 import { TaskCategory } from '@/types/flux';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export type SidebarFilter = TaskCategory | 'all' | 'shared';
 export type ActivePanel = 'tasks' | 'chat' | 'calendar' | 'calls' | 'assistant' | 'dashboard' | 'projects' | 'contacts' | 'contracts' | 'activity' | 'settings' | 'notes' | 'habits' | 'admin' | 'family' | null;
@@ -61,6 +62,7 @@ export function Sidebar({
   const [collapsed, setCollapsed] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const { user } = useAuth();
+  const { t } = useLanguage();
 
   useEffect(() => {
     const checkAdmin = async () => {
@@ -123,7 +125,7 @@ export function Sidebar({
             onClick={onOpenTodayFocus}
           >
             <Zap className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="text-sm font-medium">Today's Focus</span>}
+            {!collapsed && <span className="text-sm font-medium">{t('nav.todayFocus')}</span>}
           </Button>
         </div>
       )}
@@ -141,7 +143,7 @@ export function Sidebar({
             onClick={onOpenGlobalSearch}
           >
             <Search className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="text-sm">Search</span>}
+            {!collapsed && <span className="text-sm">{t('nav.search')}</span>}
             {!collapsed && <span className="ml-auto text-xs text-muted-foreground/60">⌘K</span>}
           </Button>
         )}
@@ -151,7 +153,7 @@ export function Sidebar({
         {/* Main Views */}
         <div className={cn("space-y-0.5", !collapsed && "mb-2")}>
           {!collapsed && (
-            <span className="text-xs font-medium text-muted-foreground px-3 py-1.5 block">Main</span>
+            <span className="text-xs font-medium text-muted-foreground px-3 py-1.5 block">{t('nav.main')}</span>
           )}
           
           {/* AI Assistant */}
@@ -165,7 +167,7 @@ export function Sidebar({
             onClick={() => handlePanelClick('assistant')}
           >
             <Sparkles className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="text-sm">Assistant</span>}
+            {!collapsed && <span className="text-sm">{t('nav.assistant')}</span>}
           </Button>
 
           {/* Tasks */}
@@ -179,7 +181,7 @@ export function Sidebar({
             onClick={() => handlePanelClick('tasks')}
           >
             <CheckSquare className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="text-sm">Tasks</span>}
+            {!collapsed && <span className="text-sm">{t('nav.tasks')}</span>}
           </Button>
 
           {/* Team Chat */}
@@ -193,7 +195,7 @@ export function Sidebar({
             onClick={() => handlePanelClick('chat')}
           >
             <MessageCircle className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="text-sm">Chat</span>}
+            {!collapsed && <span className="text-sm">{t('nav.chat')}</span>}
           </Button>
           
           {/* Calendar */}
@@ -207,7 +209,7 @@ export function Sidebar({
             onClick={() => handlePanelClick('calendar')}
           >
             <Calendar className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="text-sm">Calendar</span>}
+            {!collapsed && <span className="text-sm">{t('nav.calendar')}</span>}
           </Button>
 
           {/* Call History */}
@@ -221,7 +223,7 @@ export function Sidebar({
             onClick={() => handlePanelClick('calls')}
           >
             <Phone className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="text-sm">Calls</span>}
+            {!collapsed && <span className="text-sm">{t('nav.calls')}</span>}
           </Button>
 
           {/* Projects */}
@@ -235,7 +237,7 @@ export function Sidebar({
             onClick={() => handlePanelClick('projects')}
           >
             <FolderKanban className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="text-sm">Projects</span>}
+            {!collapsed && <span className="text-sm">{t('nav.projects')}</span>}
           </Button>
 
           {/* Dashboard */}
@@ -249,7 +251,7 @@ export function Sidebar({
             onClick={() => handlePanelClick('dashboard')}
           >
             <LayoutDashboard className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="text-sm">Dashboard</span>}
+            {!collapsed && <span className="text-sm">{t('nav.dashboard')}</span>}
           </Button>
 
           {/* Activity */}
@@ -263,7 +265,7 @@ export function Sidebar({
             onClick={() => handlePanelClick('activity')}
           >
             <Activity className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="text-sm">Activity</span>}
+            {!collapsed && <span className="text-sm">{t('nav.activity')}</span>}
           </Button>
 
           {/* Family Hub */}
@@ -277,7 +279,7 @@ export function Sidebar({
             onClick={() => handlePanelClick('family')}
           >
             <Home className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="text-sm">Family</span>}
+            {!collapsed && <span className="text-sm">{t('nav.family')}</span>}
           </Button>
         </div>
 
@@ -286,7 +288,7 @@ export function Sidebar({
         {/* Productivity */}
         <div className={cn("space-y-0.5")}>
           {!collapsed && (
-            <span className="text-xs font-medium text-muted-foreground px-3 py-1.5 block">Productivity</span>
+            <span className="text-xs font-medium text-muted-foreground px-3 py-1.5 block">{t('nav.productivity')}</span>
           )}
 
           {onOpenFocusTimer && (
@@ -299,7 +301,7 @@ export function Sidebar({
               onClick={onOpenFocusTimer}
             >
               <Target className="w-4 h-4 shrink-0" />
-              {!collapsed && <span className="text-sm">Focus Mode</span>}
+              {!collapsed && <span className="text-sm">{t('nav.focusMode')}</span>}
             </Button>
           )}
 
@@ -313,7 +315,7 @@ export function Sidebar({
               onClick={onOpenWeeklyReview}
             >
               <CalendarCheck className="w-4 h-4 shrink-0" />
-              {!collapsed && <span className="text-sm">Weekly Review</span>}
+              {!collapsed && <span className="text-sm">{t('nav.weeklyReview')}</span>}
             </Button>
           )}
 
@@ -328,7 +330,7 @@ export function Sidebar({
             onClick={() => handlePanelClick('notes')}
           >
             <StickyNote className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="text-sm">Notes</span>}
+            {!collapsed && <span className="text-sm">{t('nav.notes')}</span>}
           </Button>
 
           {/* Habits */}
@@ -342,7 +344,7 @@ export function Sidebar({
             onClick={() => handlePanelClick('habits')}
           >
             <Flame className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="text-sm">Habits</span>}
+            {!collapsed && <span className="text-sm">{t('nav.habits')}</span>}
           </Button>
 
           {/* Contacts */}
@@ -356,7 +358,7 @@ export function Sidebar({
             onClick={() => handlePanelClick('contacts')}
           >
             <BookUser className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="text-sm">Contacts</span>}
+            {!collapsed && <span className="text-sm">{t('nav.contacts')}</span>}
           </Button>
 
           {/* Contracts */}
@@ -370,7 +372,7 @@ export function Sidebar({
             onClick={() => handlePanelClick('contracts')}
           >
             <FileText className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="text-sm">Contracts</span>}
+            {!collapsed && <span className="text-sm">{t('nav.contracts')}</span>}
           </Button>
         </div>
       </nav>
@@ -386,7 +388,7 @@ export function Sidebar({
           onClick={onVoiceMode}
         >
           <Mic className="w-4 h-4 shrink-0" />
-          {!collapsed && <span className="text-sm">Voice Mode</span>}
+          {!collapsed && <span className="text-sm">{t('nav.voiceMode')}</span>}
         </Button>
 
         <Button
@@ -399,7 +401,7 @@ export function Sidebar({
           onClick={() => handlePanelClick('settings')}
         >
           <Settings className="w-4 h-4 shrink-0" />
-          {!collapsed && <span className="text-sm">Settings</span>}
+          {!collapsed && <span className="text-sm">{t('nav.settings')}</span>}
         </Button>
 
         {isAdmin && (
@@ -413,7 +415,7 @@ export function Sidebar({
             onClick={() => handlePanelClick('admin')}
           >
             <BarChart3 className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="text-sm">Admin</span>}
+            {!collapsed && <span className="text-sm">{t('nav.admin')}</span>}
           </Button>
         )}
 
@@ -427,7 +429,7 @@ export function Sidebar({
             onClick={onSignOut}
           >
             <LogOut className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="text-sm">Sign Out</span>}
+            {!collapsed && <span className="text-sm">{t('nav.signOut')}</span>}
           </Button>
         )}
       </div>
