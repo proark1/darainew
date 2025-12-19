@@ -12,19 +12,94 @@ import {
   Calendar,
   Star,
   ChevronRight,
+  Users,
 } from 'lucide-react';
 import { useFamilyMembers, FamilyMember } from '@/hooks/useFamilyMembers';
 import { useFamilyEvents } from '@/hooks/useFamilyEvents';
+import { useContacts, Contact, FamilyRelationship } from '@/hooks/useContacts';
+import { useAuth } from '@/hooks/useAuth';
 import { EditFamilyMemberDialog } from './EditFamilyMemberDialog';
 import { format, differenceInYears } from 'date-fns';
 
+// Child-related relationships from contacts
+const CHILD_RELATIONSHIPS: FamilyRelationship[] = ['son', 'daughter', 'grandson', 'granddaughter'];
+
+// Transform contact to display format
+interface ChildDisplay {
+  id: string;
+  name: string;
+  birth_date: string | null;
+  school_name: string | null;
+  school_grade: string | null;
+  activities: { name: string; schedule: string; location?: string }[];
+  allergies: string[] | null;
+  medical_notes: string | null;
+  teacher_name: string | null;
+  teacher_contact: string | null;
+  milestones: { title: string; date: string; notes?: string }[];
+  relationship: string;
+  isFromContacts: boolean;
+  sourceContact?: Contact;
+  sourceMember?: FamilyMember;
+}
+
 export function ChildDashboard() {
+  const { user } = useAuth();
   const { members, getChildren, getUpcomingBirthdays, isLoading } = useFamilyMembers();
+  const { contacts, loading: contactsLoading } = useContacts(user?.id);
   const { getEventsByMember } = useFamilyEvents();
-  const [selectedChild, setSelectedChild] = useState<FamilyMember | null>(null);
+  const [selectedChild, setSelectedChild] = useState<ChildDisplay | null>(null);
   const [editingChild, setEditingChild] = useState<FamilyMember | null>(null);
 
-  const children = getChildren();
+  // Get children from family_members
+  const familyMemberChildren = getChildren();
+  
+  // Get linked contact IDs from family members
+  const linkedContactIds = new Set(members.filter(m => m.contact_id).map(m => m.contact_id));
+  
+  // Get child contacts that aren't already linked to family members
+  const childContacts = contacts.filter(c => 
+    c.familyRelationship && 
+    CHILD_RELATIONSHIPS.includes(c.familyRelationship) &&
+    !linkedContactIds.has(c.id)
+  );
+
+  // Combine both sources
+  const allChildren: ChildDisplay[] = [
+    ...familyMemberChildren.map(m => ({
+      id: m.id,
+      name: m.name,
+      birth_date: m.birth_date,
+      school_name: m.school_name,
+      school_grade: m.school_grade,
+      activities: m.activities,
+      allergies: m.allergies,
+      medical_notes: m.medical_notes,
+      teacher_name: m.teacher_name,
+      teacher_contact: m.teacher_contact,
+      milestones: m.milestones,
+      relationship: m.relationship,
+      isFromContacts: false,
+      sourceMember: m,
+    })),
+    ...childContacts.map(c => ({
+      id: c.id,
+      name: c.name,
+      birth_date: null,
+      school_name: null,
+      school_grade: null,
+      activities: [],
+      allergies: null,
+      medical_notes: c.notes || null,
+      teacher_name: null,
+      teacher_contact: null,
+      milestones: [],
+      relationship: c.familyRelationship || 'child',
+      isFromContacts: true,
+      sourceContact: c,
+    })),
+  ];
+
   const upcomingBirthdays = getUpcomingBirthdays(30);
 
   const getAge = (birthDate: string | null) => {
@@ -36,7 +111,18 @@ export function ChildDashboard() {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
-  if (isLoading) {
+  const getRelationshipLabel = (relationship: string) => {
+    const labels: Record<string, string> = {
+      son: 'Son',
+      daughter: 'Daughter',
+      grandson: 'Grandson',
+      granddaughter: 'Granddaughter',
+      child: 'Child',
+    };
+    return labels[relationship] || relationship;
+  };
+
+  if (isLoading || contactsLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -44,12 +130,12 @@ export function ChildDashboard() {
     );
   }
 
-  if (children.length === 0) {
+  if (allChildren.length === 0) {
     return (
       <Card className="p-8 text-center">
         <p className="text-muted-foreground mb-2">No children added to your family yet</p>
         <p className="text-sm text-muted-foreground">
-          Add a child from the Members tab to see their dashboard here
+          Add a child from the Members tab or mark a contact as family with son/daughter relationship
         </p>
       </Card>
     );
@@ -90,8 +176,8 @@ export function ChildDashboard() {
 
       {/* Child Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {children.map((child) => {
-          const childEvents = getEventsByMember(child.id);
+        {allChildren.map((child) => {
+          const childEvents = child.sourceMember ? getEventsByMember(child.id) : [];
           const age = getAge(child.birth_date);
           
           return (
@@ -99,7 +185,7 @@ export function ChildDashboard() {
               key={child.id} 
               className={`cursor-pointer transition-all hover:shadow-md ${
                 selectedChild?.id === child.id ? 'ring-2 ring-primary' : ''
-              }`}
+              } ${child.isFromContacts ? 'border-dashed' : ''}`}
               onClick={() => setSelectedChild(selectedChild?.id === child.id ? null : child)}
             >
               <CardContent className="p-4">
@@ -110,11 +196,20 @@ export function ChildDashboard() {
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="font-medium truncate">{child.name}</h4>
                       {age !== null && (
                         <Badge variant="outline" className="text-xs">
                           {age} yrs
+                        </Badge>
+                      )}
+                      <Badge variant="secondary" className="text-xs">
+                        {getRelationshipLabel(child.relationship)}
+                      </Badge>
+                      {child.isFromContacts && (
+                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                          <Users className="h-2 w-2 mr-1" />
+                          Contact
                         </Badge>
                       )}
                     </div>
@@ -166,9 +261,16 @@ export function ChildDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-lg">{selectedChild.name}'s Details</CardTitle>
-            <Button variant="outline" size="sm" onClick={() => setEditingChild(selectedChild)}>
-              Edit Profile
-            </Button>
+            {selectedChild.sourceMember && (
+              <Button variant="outline" size="sm" onClick={() => setEditingChild(selectedChild.sourceMember!)}>
+                Edit Profile
+              </Button>
+            )}
+            {selectedChild.isFromContacts && (
+              <Badge variant="outline" className="text-muted-foreground">
+                From Contacts - Add as family member for full features
+              </Badge>
+            )}
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="info">
