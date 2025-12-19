@@ -10,7 +10,7 @@ import { CalendarView } from '../calendar/CalendarView';
 import { FocusTimer } from '../focus/FocusTimer';
 import { TodayFocusView } from '../focus/TodayFocusView';
 import { ProjectManager } from '../projects/ProjectManager';
-import { ActivityPanel } from '../activity/ActivityPanel';
+import { ActivityFeed } from '../activity/ActivityFeed';
 import { GlobalSearch } from '../search/GlobalSearch';
 import { QuickAddFAB } from '../tasks/QuickAddFAB';
 import { AICommandPanel } from '../ai/AICommandPanel';
@@ -25,7 +25,7 @@ import { Task, CalendarEvent, ChatMessage, Project } from '@/types/flux';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useCelebration } from '@/hooks/useCelebration';
 import { Button } from '@/components/ui/button';
-import { List, Grid3X3, X, LayoutGrid } from 'lucide-react';
+import { List, Grid3X3, X, LayoutGrid, Activity } from 'lucide-react';
 import type { ActivityItem } from '@/hooks/useActivityFeed';
 import type { SearchResult, SearchFilters } from '@/hooks/useGlobalSearch';
 import type { Contact } from '@/hooks/useContacts';
@@ -132,7 +132,7 @@ export function StandardMode({
   const [fullscreenPanel, setFullscreenPanel] = useState<FullscreenPanel>(null);
   const [showFocusTimer, setShowFocusTimer] = useState(false);
   const [showTodayFocus, setShowTodayFocus] = useState(false);
-  const [showActivityPanel, setShowActivityPanel] = useState(false);
+  
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [activePanel, setActivePanel] = useState<ActivePanel>('tasks');
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
@@ -347,7 +347,7 @@ export function StandardMode({
         onSignOut={onSignOut}
         onOpenFocusTimer={() => setShowFocusTimer(true)}
         onOpenWeeklyReview={onOpenWeeklyReview}
-        onOpenActivityFeed={() => setShowActivityPanel(true)}
+        
         onOpenGlobalSearch={() => setShowGlobalSearch(true)}
         onOpenTodayFocus={() => setShowTodayFocus(true)}
         onPanelChange={setActivePanel}
@@ -554,6 +554,17 @@ export function StandardMode({
                 <ContractsPanel userId={user.id} />
               </div>
             )}
+
+            {/* Activity Panel */}
+            {activePanel === 'activity' && (
+              <div className="flex-1 glass-panel-solid rounded-xl overflow-hidden p-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Activity className="h-5 w-5" />
+                  <h2 className="text-lg font-semibold">Activity Feed</h2>
+                </div>
+                <ActivityFeed activities={activities} loading={activityLoading} />
+              </div>
+            )}
           </div>
         </div>
       </main>
@@ -575,13 +586,6 @@ export function StandardMode({
         onClose={() => setShowFocusTimer(false)}
       />
 
-      {/* Activity Panel */}
-      <ActivityPanel
-        open={showActivityPanel}
-        onOpenChange={setShowActivityPanel}
-        activities={activities}
-        loading={activityLoading}
-      />
 
       {/* Global Search */}
       {onSearch && onClearSearchResults && onClearRecentSearches && (
