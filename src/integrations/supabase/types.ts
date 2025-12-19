@@ -912,6 +912,50 @@ export type Database = {
           },
         ]
       }
+      meal_plans: {
+        Row: {
+          created_at: string
+          custom_meal_name: string | null
+          id: string
+          meal_date: string
+          meal_type: string
+          notes: string | null
+          recipe_id: string | null
+          servings: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          custom_meal_name?: string | null
+          id?: string
+          meal_date: string
+          meal_type?: string
+          notes?: string | null
+          recipe_id?: string | null
+          servings?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          custom_meal_name?: string | null
+          id?: string
+          meal_date?: string
+          meal_type?: string
+          notes?: string | null
+          recipe_id?: string | null
+          servings?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meal_plans_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notes: {
         Row: {
           content: string
@@ -1078,6 +1122,95 @@ export type Database = {
           id?: string
           is_archived?: boolean
           name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      recipe_ingredients: {
+        Row: {
+          category: string | null
+          created_at: string
+          id: string
+          name: string
+          quantity: number | null
+          recipe_id: string
+          unit: string | null
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          quantity?: number | null
+          recipe_id: string
+          unit?: string | null
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          quantity?: number | null
+          recipe_id?: string
+          unit?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_ingredients_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipes: {
+        Row: {
+          category: string | null
+          cook_time_minutes: number | null
+          created_at: string
+          description: string | null
+          id: string
+          image_url: string | null
+          instructions: string | null
+          name: string
+          prep_time_minutes: number | null
+          servings: number | null
+          tags: string[] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          cook_time_minutes?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          instructions?: string | null
+          name: string
+          prep_time_minutes?: number | null
+          servings?: number | null
+          tags?: string[] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          cook_time_minutes?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          instructions?: string | null
+          name?: string
+          prep_time_minutes?: number | null
+          servings?: number | null
+          tags?: string[] | null
           updated_at?: string
           user_id?: string
         }

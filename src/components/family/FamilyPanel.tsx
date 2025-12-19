@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, ListTodo, Calendar, Baby, ShoppingCart } from 'lucide-react';
+import { Users, ListTodo, Calendar, Baby, ShoppingCart, Utensils } from 'lucide-react';
 import { FamilyMembersList } from './FamilyMembersList';
 import { HouseholdTasksList } from './HouseholdTasksList';
 import { FamilyCalendarView } from './FamilyCalendarView';
 import { ChildDashboard } from './ChildDashboard';
 import { ShoppingListsPanel } from './ShoppingListsPanel';
+import { MealPlanningPanel } from './MealPlanningPanel';
 
 export function FamilyPanel() {
   const [activeTab, setActiveTab] = useState('members');
@@ -23,26 +24,30 @@ export function FamilyPanel() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className="mx-4 mt-4 grid grid-cols-5">
-          <TabsTrigger value="members" className="flex items-center gap-2">
+        <TabsList className="mx-4 mt-4 grid grid-cols-6">
+          <TabsTrigger value="members" className="flex items-center gap-1">
             <Users className="h-4 w-4" />
-            <span className="hidden sm:inline">Members</span>
+            <span className="hidden lg:inline">Members</span>
           </TabsTrigger>
-          <TabsTrigger value="children" className="flex items-center gap-2">
+          <TabsTrigger value="children" className="flex items-center gap-1">
             <Baby className="h-4 w-4" />
-            <span className="hidden sm:inline">Children</span>
+            <span className="hidden lg:inline">Children</span>
           </TabsTrigger>
-          <TabsTrigger value="tasks" className="flex items-center gap-2">
+          <TabsTrigger value="tasks" className="flex items-center gap-1">
             <ListTodo className="h-4 w-4" />
-            <span className="hidden sm:inline">Tasks</span>
+            <span className="hidden lg:inline">Tasks</span>
           </TabsTrigger>
-          <TabsTrigger value="shopping" className="flex items-center gap-2">
+          <TabsTrigger value="meals" className="flex items-center gap-1">
+            <Utensils className="h-4 w-4" />
+            <span className="hidden lg:inline">Meals</span>
+          </TabsTrigger>
+          <TabsTrigger value="shopping" className="flex items-center gap-1">
             <ShoppingCart className="h-4 w-4" />
-            <span className="hidden sm:inline">Shopping</span>
+            <span className="hidden lg:inline">Shopping</span>
           </TabsTrigger>
-          <TabsTrigger value="calendar" className="flex items-center gap-2">
+          <TabsTrigger value="calendar" className="flex items-center gap-1">
             <Calendar className="h-4 w-4" />
-            <span className="hidden sm:inline">Calendar</span>
+            <span className="hidden lg:inline">Calendar</span>
           </TabsTrigger>
         </TabsList>
 
@@ -55,6 +60,9 @@ export function FamilyPanel() {
           </TabsContent>
           <TabsContent value="tasks" className="mt-0 h-full">
             <HouseholdTasksList />
+          </TabsContent>
+          <TabsContent value="meals" className="mt-0 h-full">
+            <MealPlanningPanel />
           </TabsContent>
           <TabsContent value="shopping" className="mt-0 h-full">
             <ShoppingListsPanel />
