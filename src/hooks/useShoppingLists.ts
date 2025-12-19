@@ -141,7 +141,7 @@ export function useShoppingLists() {
     }
   };
 
-  const addItem = async (listId: string, item: Omit<ShoppingListItem, 'id' | 'list_id' | 'user_id' | 'created_at'>) => {
+  const addItem = async (listId: string, item: Omit<ShoppingListItem, 'id' | 'list_id' | 'user_id' | 'created_at'>, silent = false) => {
     if (!user?.id) return null;
 
     try {
@@ -152,11 +152,11 @@ export function useShoppingLists() {
         .single();
 
       if (error) throw error;
-      toast.success('Item added');
+      if (!silent) toast.success('Item added');
       return data;
     } catch (error: any) {
       console.error('Error adding item:', error);
-      toast.error('Failed to add item');
+      if (!silent) toast.error('Failed to add item');
       return null;
     }
   };
