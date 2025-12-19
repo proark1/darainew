@@ -17,6 +17,7 @@ import { AICommandPanel } from '../ai/AICommandPanel';
 import { WorkspaceTabs } from '../workspace/WorkspaceTabs';
 import { RealtimeNotificationCenter } from '../notifications/RealtimeNotificationCenter';
 import { CallHistory } from '../calling/CallHistory';
+import { DashboardPanel } from '../dashboard/DashboardPanel';
 import { useAuth } from '@/hooks/useAuth';
 import { Task, CalendarEvent, ChatMessage, Project } from '@/types/flux';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -129,7 +130,6 @@ export function StandardMode({
   const [fullscreenPanel, setFullscreenPanel] = useState<FullscreenPanel>(null);
   const [showFocusTimer, setShowFocusTimer] = useState(false);
   const [showTodayFocus, setShowTodayFocus] = useState(false);
-  const [showProjectPanel, setShowProjectPanel] = useState(false);
   const [showActivityPanel, setShowActivityPanel] = useState(false);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [activePanel, setActivePanel] = useState<ActivePanel>('tasks');
@@ -214,7 +214,7 @@ export function StandardMode({
     } else if (result.type === 'event') {
       setActivePanel('calendar');
     } else if (result.type === 'project') {
-      setShowProjectPanel(true);
+      setActivePanel('projects');
       setSelectedProjectId(result.id);
     } else if (result.type === 'contract') {
       // Navigate to contracts page
@@ -345,7 +345,6 @@ export function StandardMode({
         onSignOut={onSignOut}
         onOpenFocusTimer={() => setShowFocusTimer(true)}
         onOpenWeeklyReview={onOpenWeeklyReview}
-        onToggleProjects={() => setShowProjectPanel(!showProjectPanel)}
         onOpenActivityFeed={() => setShowActivityPanel(true)}
         onOpenGlobalSearch={() => setShowGlobalSearch(true)}
         onOpenTodayFocus={() => setShowTodayFocus(true)}
@@ -367,25 +366,6 @@ export function StandardMode({
         </div>
 
         <div className="flex-1 flex overflow-hidden">
-          {/* Project Panel */}
-          {showProjectPanel && onAddProject && onUpdateProject && onDeleteProject && getProjectProgress && (
-            <div className="w-64 border-r border-border p-3 overflow-y-auto">
-              <ProjectManager
-                projects={projects}
-                tasks={tasks}
-                contacts={contacts}
-                onAddProject={onAddProject}
-                onUpdateProject={onUpdateProject}
-                onDeleteProject={onDeleteProject}
-                getProjectProgress={getProjectProgress}
-                selectedProjectId={selectedProjectId}
-                onSelectProject={setSelectedProjectId}
-                onShareProject={onShareProject}
-                onShareProjectWithEmail={onShareProjectWithEmail}
-                onAddTask={(task) => onAddTask({ ...task, completed: false })}
-              />
-            </div>
-          )}
 
           {/* Main Content Area - Only one panel at a time */}
           <div className="flex-1 flex flex-col p-2 gap-2">
@@ -529,6 +509,33 @@ export function StandardMode({
             {activePanel === 'calls' && user?.id && (
               <div className="flex-1 glass-panel-solid rounded-xl overflow-hidden">
                 <CallHistory userId={user.id} />
+              </div>
+            )}
+
+            {/* Dashboard Panel */}
+            {activePanel === 'dashboard' && user?.id && (
+              <div className="flex-1 glass-panel-solid rounded-xl overflow-hidden">
+                <DashboardPanel userId={user.id} />
+              </div>
+            )}
+
+            {/* Projects Panel */}
+            {activePanel === 'projects' && onAddProject && onUpdateProject && onDeleteProject && getProjectProgress && (
+              <div className="flex-1 glass-panel-solid rounded-xl overflow-hidden p-4">
+                <ProjectManager
+                  projects={projects}
+                  tasks={tasks}
+                  contacts={contacts}
+                  onAddProject={onAddProject}
+                  onUpdateProject={onUpdateProject}
+                  onDeleteProject={onDeleteProject}
+                  getProjectProgress={getProjectProgress}
+                  selectedProjectId={selectedProjectId}
+                  onSelectProject={setSelectedProjectId}
+                  onShareProject={onShareProject}
+                  onShareProjectWithEmail={onShareProjectWithEmail}
+                  onAddTask={(task) => onAddTask({ ...task, completed: false })}
+                />
               </div>
             )}
           </div>

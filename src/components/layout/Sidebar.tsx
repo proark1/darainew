@@ -27,7 +27,7 @@ import {
 import { TaskCategory } from '@/types/flux';
 
 export type SidebarFilter = TaskCategory | 'all' | 'shared';
-export type ActivePanel = 'tasks' | 'chat' | 'calendar' | 'calls' | 'assistant' | null;
+export type ActivePanel = 'tasks' | 'chat' | 'calendar' | 'calls' | 'assistant' | 'dashboard' | 'projects' | null;
 
 interface SidebarProps {
   onVoiceMode: () => void;
@@ -36,7 +36,6 @@ interface SidebarProps {
   onSignOut?: () => void;
   onOpenFocusTimer?: () => void;
   onOpenWeeklyReview?: () => void;
-  onToggleProjects?: () => void;
   onOpenActivityFeed?: () => void;
   onOpenGlobalSearch?: () => void;
   onPanelChange?: (panel: ActivePanel) => void;
@@ -51,7 +50,6 @@ export function Sidebar({
   onSignOut, 
   onOpenFocusTimer,
   onOpenWeeklyReview,
-  onToggleProjects,
   onOpenActivityFeed,
   onOpenGlobalSearch,
   onPanelChange,
@@ -212,27 +210,29 @@ export function Sidebar({
             {!collapsed && <span className="text-sm">Calls</span>}
           </Button>
 
-          {onToggleProjects && (
-            <Button
-              variant="ghost"
-              className={cn(
-                "w-full h-9 gap-3",
-                collapsed ? "justify-center px-0" : "justify-start"
-              )}
-              onClick={onToggleProjects}
-            >
-              <FolderKanban className="w-4 h-4 shrink-0" />
-              {!collapsed && <span className="text-sm">Projects</span>}
-            </Button>
-          )}
-
+          {/* Projects */}
           <Button
-            variant={location.pathname === '/dashboard' ? 'secondary' : 'ghost'}
+            variant={activePanel === 'projects' ? 'secondary' : 'ghost'}
             className={cn(
               "w-full h-9 gap-3",
-              collapsed ? "justify-center px-0" : "justify-start"
+              collapsed ? "justify-center px-0" : "justify-start",
+              activePanel === 'projects' && "bg-sidebar-accent text-sidebar-primary font-medium"
             )}
-            onClick={() => navigate('/dashboard')}
+            onClick={() => handlePanelClick('projects')}
+          >
+            <FolderKanban className="w-4 h-4 shrink-0" />
+            {!collapsed && <span className="text-sm">Projects</span>}
+          </Button>
+
+          {/* Dashboard */}
+          <Button
+            variant={activePanel === 'dashboard' ? 'secondary' : 'ghost'}
+            className={cn(
+              "w-full h-9 gap-3",
+              collapsed ? "justify-center px-0" : "justify-start",
+              activePanel === 'dashboard' && "bg-sidebar-accent text-sidebar-primary font-medium"
+            )}
+            onClick={() => handlePanelClick('dashboard')}
           >
             <LayoutDashboard className="w-4 h-4 shrink-0" />
             {!collapsed && <span className="text-sm">Dashboard</span>}
