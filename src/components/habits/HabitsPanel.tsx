@@ -1,0 +1,313 @@
+import { useState } from 'react';
+import { useHabits } from '@/hooks/useHabits';
+import { useGoals } from '@/hooks/useGoals';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Separator } from '@/components/ui/separator';
+import { AddHabitDialog } from './AddHabitDialog';
+import { AddGoalDialog } from './AddGoalDialog';
+import { StreakDisplay } from './StreakDisplay';
+import { 
+  Plus, 
+  Check, 
+  Flame, 
+  Target,
+  Trophy,
+  RefreshCw,
+  Trash2,
+  TrendingUp
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface HabitsPanelProps {
+  userId: string;
+}
+
+export function HabitsPanel({ userId }: HabitsPanelProps) {
+  const { todayHabits, loading: habitsLoading, logHabit, deleteHabit, refetch: refetchHabits } = useHabits(userId);
+  const { goals, loading: goalsLoading, updateGoalProgress, deleteGoal, refetch: refetchGoals } = useGoals(userId);
+  const [showAddHabit, setShowAddHabit] = useState(false);
+  const [showAddGoal, setShowAddGoal] = useState(false);
+
+  const completedHabits = todayHabits.filter(h => h.isCompleted).length;
+  const totalHabits = todayHabits.length;
+  const habitProgress = totalHabits > 0 ? (completedHabits / totalHabits) * 100 : 0;
+
+  const activeGoals = goals.filter(g => !g.isCompleted);
+  const completedGoals = goals.filter(g => g.isCompleted);
+
+  const loading = habitsLoading || goalsLoading;
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-border">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+            <Target className="w-5 h-5" />
+            Habits & Goals
+          </h2>
+          <Button variant="ghost" size="icon" onClick={() => { refetchHabits(); refetchGoals(); }}>
+            <RefreshCw className="w-4 h-4" />
+          </Button>
+        </div>
+        
+        {/* Today's Progress */}
+        {totalHabits > 0 && (
+          <div className="mt-3">
+            <div className="flex items-center justify-between text-sm mb-1">
+              <span className="text-muted-foreground">Today's Progress</span>
+              <span className="font-medium">{completedHabits}/{totalHabits}</span>
+            </div>
+            <Progress value={habitProgress} className="h-2" />
+          </div>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center h-48">
+          <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <Tabs defaultValue="habits" className="flex-1 flex flex-col">
+          <TabsList className="mx-4 mt-3">
+            <TabsTrigger value="habits" className="flex-1 gap-1">
+              <Flame className="w-4 h-4" />
+              Habits
+            </TabsTrigger>
+            <TabsTrigger value="goals" className="flex-1 gap-1">
+              <Trophy className="w-4 h-4" />
+              Goals
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="habits" className="flex-1 mt-0">
+            <ScrollArea className="h-full">
+              <div className="p-4 space-y-3">
+                {/* Add Habit Button */}
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start gap-2 border-dashed"
+                  onClick={() => setShowAddHabit(true)}
+                >
+                  <Plus className="w-4 h-4" />
+                  Add New Habit
+                </Button>
+
+                {todayHabits.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Flame className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No habits yet</p>
+                    <p className="text-xs">Create your first habit to start tracking</p>
+                  </div>
+                ) : (
+                  todayHabits.map(habit => (
+                    <Card 
+                      key={habit.id}
+                      className={cn(
+                        "p-3 transition-colors",
+                        habit.isCompleted && "bg-success/10 border-success/30"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Button
+                          variant={habit.isCompleted ? "default" : "outline"}
+                          size="icon"
+                          className={cn(
+                            "h-10 w-10 shrink-0 rounded-full",
+                            habit.isCompleted && "bg-success hover:bg-success/90"
+                          )}
+                          style={{ borderColor: habit.color }}
+                          onClick={() => !habit.isCompleted && logHabit(habit.id)}
+                        >
+                          {habit.isCompleted ? (
+                            <Check className="w-5 h-5" />
+                          ) : (
+                            <span className="text-lg">{habit.icon}</span>
+                          )}
+                        </Button>
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={cn(
+                              "font-medium",
+                              habit.isCompleted && "line-through text-muted-foreground"
+                            )}>
+                              {habit.name}
+                            </span>
+                            {habit.streak > 0 && (
+                              <Badge variant="secondary" className="gap-1">
+                                <Flame className="w-3 h-3 text-orange-500" />
+                                {habit.streak}
+                              </Badge>
+                            )}
+                          </div>
+                          {habit.targetCount > 1 && (
+                            <div className="flex items-center gap-2 mt-1">
+                              <Progress 
+                                value={(habit.completedCount / habit.targetCount) * 100} 
+                                className="h-1.5 flex-1"
+                              />
+                              <span className="text-xs text-muted-foreground">
+                                {habit.completedCount}/{habit.targetCount}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => deleteHabit(habit.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </Card>
+                  ))
+                )}
+
+                {/* Streak Display */}
+                {todayHabits.length > 0 && (
+                  <>
+                    <Separator className="my-4" />
+                    <StreakDisplay habits={todayHabits} />
+                  </>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="goals" className="flex-1 mt-0">
+            <ScrollArea className="h-full">
+              <div className="p-4 space-y-3">
+                {/* Add Goal Button */}
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start gap-2 border-dashed"
+                  onClick={() => setShowAddGoal(true)}
+                >
+                  <Plus className="w-4 h-4" />
+                  Add New Goal
+                </Button>
+
+                {activeGoals.length === 0 && completedGoals.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Trophy className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No goals yet</p>
+                    <p className="text-xs">Set a goal to track your progress</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Active Goals */}
+                    {activeGoals.map(goal => {
+                      const progress = (goal.currentValue / goal.targetValue) * 100;
+                      return (
+                        <Card key={goal.id} className="p-3">
+                          <div className="flex items-start gap-3">
+                            <div 
+                              className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+                              style={{ backgroundColor: `${goal.color}20`, color: goal.color }}
+                            >
+                              <span className="text-lg">{goal.icon}</span>
+                            </div>
+                            
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium">{goal.name}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 text-destructive"
+                                  onClick={() => deleteGoal(goal.id)}
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                              
+                              <div className="mt-2">
+                                <div className="flex items-center justify-between text-sm mb-1">
+                                  <span className="text-muted-foreground">
+                                    {goal.currentValue} / {goal.targetValue} {goal.unit}
+                                  </span>
+                                  <span className="font-medium">{Math.round(progress)}%</span>
+                                </div>
+                                <Progress value={progress} className="h-2" />
+                              </div>
+
+                              {goal.targetDate && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Target: {goal.targetDate.toLocaleDateString()}
+                                </p>
+                              )}
+
+                              {/* Quick update buttons */}
+                              <div className="flex gap-2 mt-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => updateGoalProgress(goal.id, goal.currentValue + 1)}
+                                >
+                                  <TrendingUp className="w-3 h-3 mr-1" />
+                                  +1
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => updateGoalProgress(goal.id, goal.currentValue + 10)}
+                                >
+                                  +10
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </Card>
+                      );
+                    })}
+
+                    {/* Completed Goals */}
+                    {completedGoals.length > 0 && (
+                      <>
+                        <Separator className="my-4" />
+                        <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                          <Trophy className="w-4 h-4" />
+                          Completed Goals
+                        </h3>
+                        {completedGoals.map(goal => (
+                          <Card key={goal.id} className="p-3 bg-success/10 border-success/30">
+                            <div className="flex items-center gap-3">
+                              <div 
+                                className="w-8 h-8 rounded-full flex items-center justify-center"
+                                style={{ backgroundColor: `${goal.color}20`, color: goal.color }}
+                              >
+                                <Check className="w-4 h-4" />
+                              </div>
+                              <div className="flex-1">
+                                <span className="font-medium">{goal.name}</span>
+                                <p className="text-xs text-muted-foreground">
+                                  Completed {goal.completedAt?.toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+        </Tabs>
+      )}
+
+      <AddHabitDialog open={showAddHabit} onOpenChange={setShowAddHabit} userId={userId} />
+      <AddGoalDialog open={showAddGoal} onOpenChange={setShowAddGoal} userId={userId} />
+    </div>
+  );
+}

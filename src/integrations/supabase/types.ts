@@ -50,6 +50,53 @@ export type Database = {
         }
         Relationships: []
       }
+      call_recordings: {
+        Row: {
+          callee_id: string
+          caller_id: string
+          created_at: string
+          duration_seconds: number
+          file_path: string
+          file_size_bytes: number | null
+          file_url: string
+          id: string
+          session_id: string | null
+          user_id: string
+        }
+        Insert: {
+          callee_id: string
+          caller_id: string
+          created_at?: string
+          duration_seconds?: number
+          file_path: string
+          file_size_bytes?: number | null
+          file_url: string
+          id?: string
+          session_id?: string | null
+          user_id: string
+        }
+        Update: {
+          callee_id?: string
+          caller_id?: string
+          created_at?: string
+          duration_seconds?: number
+          file_path?: string
+          file_size_bytes?: number | null
+          file_url?: string
+          id?: string
+          session_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_recordings_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "call_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       call_sessions: {
         Row: {
           call_type: string
@@ -360,6 +407,60 @@ export type Database = {
           },
         ]
       }
+      goals: {
+        Row: {
+          color: string | null
+          completed_at: string | null
+          created_at: string
+          current_value: number
+          description: string | null
+          icon: string | null
+          id: string
+          is_completed: boolean
+          linked_habits: string[] | null
+          name: string
+          target_date: string | null
+          target_value: number
+          unit: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          color?: string | null
+          completed_at?: string | null
+          created_at?: string
+          current_value?: number
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_completed?: boolean
+          linked_habits?: string[] | null
+          name: string
+          target_date?: string | null
+          target_value?: number
+          unit?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          color?: string | null
+          completed_at?: string | null
+          created_at?: string
+          current_value?: number
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_completed?: boolean
+          linked_habits?: string[] | null
+          name?: string
+          target_date?: string | null
+          target_value?: number
+          unit?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       group_message_reads: {
         Row: {
           id: string
@@ -426,6 +527,170 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      habit_logs: {
+        Row: {
+          completed_count: number
+          created_at: string
+          habit_id: string
+          id: string
+          log_date: string
+          notes: string | null
+          user_id: string
+        }
+        Insert: {
+          completed_count?: number
+          created_at?: string
+          habit_id: string
+          id?: string
+          log_date: string
+          notes?: string | null
+          user_id: string
+        }
+        Update: {
+          completed_count?: number
+          created_at?: string
+          habit_id?: string
+          id?: string
+          log_date?: string
+          notes?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "habit_logs_habit_id_fkey"
+            columns: ["habit_id"]
+            isOneToOne: false
+            referencedRelation: "habits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      habits: {
+        Row: {
+          color: string | null
+          created_at: string
+          days_of_week: number[] | null
+          description: string | null
+          frequency: string
+          icon: string | null
+          id: string
+          is_active: boolean
+          name: string
+          reminder_time: string | null
+          target_count: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          days_of_week?: number[] | null
+          description?: string | null
+          frequency?: string
+          icon?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          reminder_time?: string | null
+          target_count?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          days_of_week?: number[] | null
+          description?: string | null
+          frequency?: string
+          icon?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          reminder_time?: string | null
+          target_count?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notes: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          is_pinned: boolean
+          linked_items: Json | null
+          tags: string[] | null
+          title: string
+          trashed: boolean
+          trashed_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          linked_items?: Json | null
+          tags?: string[] | null
+          title?: string
+          trashed?: boolean
+          trashed_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          linked_items?: Json | null
+          tags?: string[] | null
+          title?: string
+          trashed?: boolean
+          trashed_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      offline_sync_queue: {
+        Row: {
+          created_at: string
+          id: string
+          operation: string
+          payload: Json
+          record_id: string
+          synced: boolean
+          synced_at: string | null
+          table_name: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          operation: string
+          payload: Json
+          record_id: string
+          synced?: boolean
+          synced_at?: string | null
+          table_name: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          operation?: string
+          payload?: Json
+          record_id?: string
+          synced?: boolean
+          synced_at?: string | null
+          table_name?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
