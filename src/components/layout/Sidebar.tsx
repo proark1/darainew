@@ -26,7 +26,7 @@ import {
 import { TaskCategory } from '@/types/flux';
 
 export type SidebarFilter = TaskCategory | 'all' | 'shared';
-export type ActivePanel = 'tasks' | 'chat' | 'calendar' | 'calls' | 'assistant' | 'dashboard' | 'projects' | 'contacts' | 'contracts' | null;
+export type ActivePanel = 'tasks' | 'chat' | 'calendar' | 'calls' | 'assistant' | 'dashboard' | 'projects' | 'contacts' | 'contracts' | 'activity' | null;
 
 interface SidebarProps {
   onVoiceMode: () => void;
@@ -235,19 +235,19 @@ export function Sidebar({
             {!collapsed && <span className="text-sm">Dashboard</span>}
           </Button>
 
-          {onOpenActivityFeed && (
-            <Button
-              variant="ghost"
-              className={cn(
-                "w-full h-9 gap-3",
-                collapsed ? "justify-center px-0" : "justify-start"
-              )}
-              onClick={onOpenActivityFeed}
-            >
-              <Activity className="w-4 h-4 shrink-0" />
-              {!collapsed && <span className="text-sm">Activity</span>}
-            </Button>
-          )}
+          {/* Activity */}
+          <Button
+            variant={activePanel === 'activity' ? 'secondary' : 'ghost'}
+            className={cn(
+              "w-full h-9 gap-3",
+              collapsed ? "justify-center px-0" : "justify-start",
+              activePanel === 'activity' && "bg-sidebar-accent text-sidebar-primary font-medium"
+            )}
+            onClick={() => handlePanelClick('activity')}
+          >
+            <Activity className="w-4 h-4 shrink-0" />
+            {!collapsed && <span className="text-sm">Activity</span>}
+          </Button>
         </div>
 
         <Separator className="my-2" />
