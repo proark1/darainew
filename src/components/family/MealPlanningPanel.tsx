@@ -72,18 +72,20 @@ export function MealPlanningPanel() {
     });
 
     if (list) {
+      let addedCount = 0;
       for (const ing of ingredients) {
-        await addItem(list.id, {
+        const result = await addItem(list.id, {
           name: ing.name,
           quantity: Math.ceil(ing.quantity || 1),
           unit: ing.unit,
-          category: ing.category,
+          category: ing.category || 'other',
           is_checked: false,
           notes: null,
           added_by: null,
-        });
+        }, true); // silent mode - no individual toasts
+        if (result) addedCount++;
       }
-      toast.success(`Shopping list created with ${ingredients.length} items!`);
+      toast.success(`Shopping list created with ${addedCount} items!`);
     }
   };
 
