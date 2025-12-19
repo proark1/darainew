@@ -17,7 +17,7 @@ export function MorningDigest({ tasks, events, streak, onDismiss }: MorningDiges
 
   // Check if we should show the digest (only show once per day)
   useEffect(() => {
-    const lastShown = localStorage.getItem('flux-digest-last-shown');
+    const lastShown = localStorage.getItem('darai-digest-last-shown');
     const today = startOfDay(new Date()).toISOString();
     
     if (lastShown === today) {
@@ -27,7 +27,7 @@ export function MorningDigest({ tasks, events, streak, onDismiss }: MorningDiges
 
   const handleDismiss = () => {
     const today = startOfDay(new Date()).toISOString();
-    localStorage.setItem('flux-digest-last-shown', today);
+    localStorage.setItem('darai-digest-last-shown', today);
     setVisible(false);
     onDismiss();
   };

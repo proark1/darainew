@@ -83,7 +83,7 @@ export function ChatPanel({ messages, onSendMessage, isProcessing, isFullscreen 
             <Sparkles className="w-4 h-4 text-primary" />
           </div>
           <div>
-            <h3 className="font-medium text-sm">Flux Assistant</h3>
+            <h3 className="font-medium text-sm">DarAI Assistant</h3>
             <p className="text-xs text-muted-foreground">Gemini 2.5 Flash</p>
           </div>
         </div>
@@ -257,7 +257,7 @@ export function ChatPanel({ messages, onSendMessage, isProcessing, isFullscreen 
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={isListening ? "Listening..." : "Ask Flux anything..."}
+            placeholder={isListening ? "Listening..." : "Ask DarAI anything..."}
             className="flex-1 bg-muted border-0"
             disabled={isProcessing || isListening}
           />

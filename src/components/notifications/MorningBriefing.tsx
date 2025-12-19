@@ -83,7 +83,7 @@ export function MorningBriefing({
 
   // Check if we should show the briefing (only show once per day)
   useEffect(() => {
-    const lastShown = localStorage.getItem('flux-briefing-last-shown');
+    const lastShown = localStorage.getItem('darai-briefing-last-shown');
     const today = startOfDay(new Date()).toISOString();
     
     if (lastShown === today) {
@@ -93,9 +93,9 @@ export function MorningBriefing({
 
   const handleDismiss = () => {
     const today = startOfDay(new Date()).toISOString();
-    localStorage.setItem('flux-briefing-last-shown', today);
+    localStorage.setItem('darai-briefing-last-shown', today);
     if (energyLevel) {
-      localStorage.setItem('flux-energy-level', energyLevel);
+      localStorage.setItem('darai-energy-level', energyLevel);
     }
     setVisible(false);
     onDismiss();

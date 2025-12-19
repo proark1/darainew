@@ -127,7 +127,7 @@ export function EnhancedProfileSettings({ onClose }: EnhancedProfileSettingsProp
             <div>
               <p className="font-medium text-sm">Help your AI assistant know you better</p>
               <p className="text-xs text-muted-foreground mt-1">
-                This information helps Flux give you personalized suggestions, recommend contacts when you travel, and understand your business context.
+                This information helps DarAI give you personalized suggestions, recommend contacts when you travel, and understand your business context.
               </p>
             </div>
           </div>
@@ -169,7 +169,7 @@ export function EnhancedProfileSettings({ onClose }: EnhancedProfileSettingsProp
               id="bio"
               value={bio}
               onChange={(e) => setBio(e.target.value)}
-              placeholder="Tell Flux about yourself - your background, what you do, what drives you..."
+              placeholder="Tell DarAI about yourself - your background, what you do, what drives you..."
               rows={3}
             />
           </div>
