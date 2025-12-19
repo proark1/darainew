@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,11 +21,18 @@ const mealTypes = [
 ];
 
 export function AddMealPlanDialog({ open, onOpenChange, selectedDate }: AddMealPlanDialogProps) {
-  const { recipes, addMealPlan } = useMealPlanning();
+  const { recipes, addMealPlan, refetchRecipes } = useMealPlanning();
   const [mealType, setMealType] = useState('dinner');
   const [recipeId, setRecipeId] = useState<string>('');
   const [customMealName, setCustomMealName] = useState('');
   const [servings, setServings] = useState('4');
+
+  // Refetch recipes when dialog opens to ensure we have the latest
+  useEffect(() => {
+    if (open) {
+      refetchRecipes();
+    }
+  }, [open, refetchRecipes]);
 
   const handleSubmit = async () => {
     if (!recipeId && !customMealName.trim()) return;
