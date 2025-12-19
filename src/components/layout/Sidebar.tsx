@@ -21,12 +21,14 @@ import {
   Zap,
   FileText,
   MessageCircle,
-  Phone
+  Phone,
+  Flame,
+  StickyNote
 } from 'lucide-react';
 import { TaskCategory } from '@/types/flux';
 
 export type SidebarFilter = TaskCategory | 'all' | 'shared';
-export type ActivePanel = 'tasks' | 'chat' | 'calendar' | 'calls' | 'assistant' | 'dashboard' | 'projects' | 'contacts' | 'contracts' | 'activity' | 'settings' | null;
+export type ActivePanel = 'tasks' | 'chat' | 'calendar' | 'calls' | 'assistant' | 'dashboard' | 'projects' | 'contacts' | 'contracts' | 'activity' | 'settings' | 'notes' | 'habits' | null;
 
 interface SidebarProps {
   onVoiceMode: () => void;
@@ -281,6 +283,34 @@ export function Sidebar({
               {!collapsed && <span className="text-sm">Weekly Review</span>}
             </Button>
           )}
+
+          {/* Notes */}
+          <Button
+            variant={activePanel === 'notes' ? 'secondary' : 'ghost'}
+            className={cn(
+              "w-full h-9 gap-3",
+              collapsed ? "justify-center px-0" : "justify-start",
+              activePanel === 'notes' && "bg-sidebar-accent text-sidebar-primary font-medium"
+            )}
+            onClick={() => handlePanelClick('notes')}
+          >
+            <StickyNote className="w-4 h-4 shrink-0" />
+            {!collapsed && <span className="text-sm">Notes</span>}
+          </Button>
+
+          {/* Habits */}
+          <Button
+            variant={activePanel === 'habits' ? 'secondary' : 'ghost'}
+            className={cn(
+              "w-full h-9 gap-3",
+              collapsed ? "justify-center px-0" : "justify-start",
+              activePanel === 'habits' && "bg-sidebar-accent text-sidebar-primary font-medium"
+            )}
+            onClick={() => handlePanelClick('habits')}
+          >
+            <Flame className="w-4 h-4 shrink-0" />
+            {!collapsed && <span className="text-sm">Habits</span>}
+          </Button>
 
           {/* Contacts */}
           <Button
