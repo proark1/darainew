@@ -65,7 +65,7 @@ const personalityPrompts: Record<string, string> = {
 const currentHour = new Date().getHours();
 const timeContext = currentHour < 12 ? 'morning' : currentHour < 17 ? 'afternoon' : 'evening';
 
-const baseSystemPrompt = `You are Flux, an intelligent AI productivity assistant that KNOWS the user personally. You help users manage tasks, schedule events, connect with contacts, and stay organized.
+const baseSystemPrompt = `You are DarAI, an intelligent AI productivity assistant that KNOWS the user personally. You help users manage tasks, schedule events, connect with contacts, and stay organized.
 
 ## CRITICAL: RESPONDING TO PERSONAL IDENTITY QUESTIONS
 When the user asks "What do you know about me?", "Who am I?", "Tell me about myself", or similar identity questions:

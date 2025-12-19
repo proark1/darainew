@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { UserSettings, defaultSettings, ThemeMode, ColorScheme } from '@/types/flux';
 
-const SETTINGS_KEY = 'flux-settings';
+const SETTINGS_KEY = 'darai-settings';
 
 export function useSettings() {
   const [settings, setSettings] = useState<UserSettings>(() => {

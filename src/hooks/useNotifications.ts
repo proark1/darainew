@@ -6,7 +6,7 @@ export function useNotifications() {
 
   // Load notifications from localStorage on mount
   useEffect(() => {
-    const stored = localStorage.getItem('flux_notifications');
+    const stored = localStorage.getItem('darai_notifications');
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
@@ -22,7 +22,7 @@ export function useNotifications() {
 
   // Save to localStorage when notifications change
   useEffect(() => {
-    localStorage.setItem('flux_notifications', JSON.stringify(notifications));
+    localStorage.setItem('darai_notifications', JSON.stringify(notifications));
   }, [notifications]);
 
   const addNotification = useCallback((
