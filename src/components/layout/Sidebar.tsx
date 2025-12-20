@@ -226,20 +226,6 @@ export function Sidebar({
             {!collapsed && <span className="text-sm">{t('nav.calls')}</span>}
           </Button>
 
-          {/* Projects */}
-          <Button
-            variant={activePanel === 'projects' ? 'secondary' : 'ghost'}
-            className={cn(
-              "w-full h-9 gap-3",
-              collapsed ? "justify-center px-0" : "justify-start",
-              activePanel === 'projects' && "bg-sidebar-accent text-sidebar-primary font-medium"
-            )}
-            onClick={() => handlePanelClick('projects')}
-          >
-            <FolderKanban className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="text-sm">{t('nav.projects')}</span>}
-          </Button>
-
           {/* Dashboard */}
           <Button
             variant={activePanel === 'dashboard' ? 'secondary' : 'ghost'}
@@ -252,20 +238,6 @@ export function Sidebar({
           >
             <LayoutDashboard className="w-4 h-4 shrink-0" />
             {!collapsed && <span className="text-sm">{t('nav.dashboard')}</span>}
-          </Button>
-
-          {/* Activity */}
-          <Button
-            variant={activePanel === 'activity' ? 'secondary' : 'ghost'}
-            className={cn(
-              "w-full h-9 gap-3",
-              collapsed ? "justify-center px-0" : "justify-start",
-              activePanel === 'activity' && "bg-sidebar-accent text-sidebar-primary font-medium"
-            )}
-            onClick={() => handlePanelClick('activity')}
-          >
-            <Activity className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="text-sm">{t('nav.activity')}</span>}
           </Button>
 
           {/* Family Hub */}
