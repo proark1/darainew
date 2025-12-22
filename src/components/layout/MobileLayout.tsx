@@ -12,6 +12,7 @@ import { NotificationCenter } from '../notifications/NotificationCenter';
 import { SettingsPanelContent } from '../settings/SettingsPanelContent';
 import { VoiceQuickAdd } from '../tasks/VoiceQuickAdd';
 import { FamilyPanel } from '../family/FamilyPanel';
+import { DashboardPanel } from '../dashboard/DashboardPanel';
 import { useNotifications } from '@/hooks/useNotifications';
 import { Task, CalendarEvent, ChatMessage, UserSettings } from '@/types/flux';
 import { SidebarFilter } from './Sidebar';
@@ -71,7 +72,7 @@ interface MobileLayoutProps {
   onUpdateNotifications?: (updates: Partial<UserSettings['notifications']>) => void;
 }
 
-type Tab = 'chat' | 'messages' | 'tasks' | 'calendar' | 'focus' | 'settings' | 'family';
+type Tab = 'chat' | 'messages' | 'tasks' | 'calendar' | 'focus' | 'settings' | 'family' | 'dashboard';
 
 export function MobileLayout({
   userId,
@@ -120,7 +121,7 @@ export function MobileLayout({
 
   const tabs = [
     { id: 'chat' as Tab, icon: Sparkles, label: 'Assistant' },
-    { id: 'messages' as Tab, icon: MessageCircle, label: 'Friends' },
+    { id: 'dashboard' as Tab, icon: LayoutDashboard, label: 'Dashboard' },
     { id: 'tasks' as Tab, icon: CheckSquare, label: 'Tasks' },
     { id: 'calendar' as Tab, icon: Calendar, label: 'Calendar' },
   ];
@@ -463,6 +464,12 @@ export function MobileLayout({
           activeTab === 'family' ? 'block' : 'hidden'
         )}>
           <FamilyPanel />
+        </div>
+        <div className={cn(
+          "h-full overflow-y-auto",
+          activeTab === 'dashboard' ? 'block' : 'hidden'
+        )}>
+          <DashboardPanel userId={userId} />
         </div>
 
       </main>
