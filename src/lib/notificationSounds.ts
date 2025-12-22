@@ -1,5 +1,7 @@
 // Notification sound utilities
 
+import { Capacitor } from '@capacitor/core';
+
 type SoundType = 'message' | 'call' | 'notification';
 
 const soundFrequencies: Record<SoundType, { freq: number; duration: number; pattern: number[] }> = {
@@ -86,10 +88,13 @@ export function stopRingtone(): void {
   }
 }
 
-// Service Worker registration for push notifications
+// Service Worker registration for push notifications (web only)
 let serviceWorkerRegistration: ServiceWorkerRegistration | null = null;
 
 export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  // Avoid SW caching issues in native (WKWebView supports SW and can cache stale bundles).
+  if (Capacitor.isNativePlatform()) return null;
+
   if (!('serviceWorker' in navigator)) {
     console.warn('Service workers not supported');
     return null;
@@ -111,6 +116,8 @@ export function setupServiceWorkerListener(
   onAnswer: () => void,
   onDecline: () => void
 ): () => void {
+  if (Capacitor.isNativePlatform()) return () => {};
+
   if (!('serviceWorker' in navigator)) {
     return () => {};
   }
@@ -126,7 +133,7 @@ export function setupServiceWorkerListener(
   };
 
   navigator.serviceWorker.addEventListener('message', handleMessage);
-  
+
   return () => {
     navigator.serviceWorker.removeEventListener('message', handleMessage);
   };
@@ -134,16 +141,18 @@ export function setupServiceWorkerListener(
 
 // Desktop notification helper
 export async function requestNotificationPermission(): Promise<boolean> {
+  if (Capacitor.isNativePlatform()) return false;
+
   if (!('Notification' in window)) {
     return false;
   }
-  
+
   if (Notification.permission === 'granted') {
     // Also register service worker for push notifications
     await registerServiceWorker();
     return true;
   }
-  
+
   if (Notification.permission !== 'denied') {
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
@@ -151,7 +160,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
     }
     return permission === 'granted';
   }
-  
+
   return false;
 }
 
