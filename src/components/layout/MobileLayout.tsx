@@ -133,7 +133,7 @@ export function MobileLayout({
   };
 
   return (
-    <div className="flex flex-col h-screen w-full bg-background">
+    <div className="flex flex-col h-screen w-full bg-background pt-[env(safe-area-inset-top)]">
       {/* Header */}
       <header className="h-14 px-4 flex items-center justify-between border-b border-border bg-background shrink-0">
         <div className="flex items-center gap-3">
