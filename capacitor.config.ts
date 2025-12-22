@@ -19,6 +19,11 @@ const config: CapacitorConfig = {
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],
     },
+    LocalNotifications: {
+      smallIcon: 'ic_stat_icon_config_sample',
+      iconColor: '#6366f1',
+      sound: 'default',
+    },
   },
   server: {
     // Enable hot-reload for development
