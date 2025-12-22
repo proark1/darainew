@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +24,7 @@ export function ChatPanel({ messages, onSendMessage, isProcessing, isFullscreen 
   const [contactSuggestions, setContactSuggestions] = useState<ContactSuggestion[]>([]);
   const [dismissedSuggestions, setDismissedSuggestions] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const lastFinalTranscriptRef = useRef<string>('');
 
   // Voice recognition for text input
   const {
@@ -36,12 +37,15 @@ export function ChatPanel({ messages, onSendMessage, isProcessing, isFullscreen 
     continuous: false,
   });
 
-  // Handle final transcripts from voice recognition
+  // Handle final transcripts from voice recognition (avoid loops on iOS)
   useEffect(() => {
-    if (transcript && !isListening) {
-      // Voice recognition completed with a final result
-      setInput(prev => prev + (prev ? ' ' : '') + transcript);
-    }
+    if (!transcript || isListening) return;
+
+    // Only append each final transcript once.
+    if (lastFinalTranscriptRef.current === transcript) return;
+    lastFinalTranscriptRef.current = transcript;
+
+    setInput((prev) => prev + (prev ? ' ' : '') + transcript);
   }, [transcript, isListening]);
 
   useEffect(() => {
@@ -72,6 +76,7 @@ export function ChatPanel({ messages, onSendMessage, isProcessing, isFullscreen 
     if (isListening) {
       stopListening();
     } else {
+      lastFinalTranscriptRef.current = '';
       startListening();
     }
   };
