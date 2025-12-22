@@ -31,7 +31,15 @@ import {
   User,
   Users,
   Target,
-  Home
+  Home,
+  Phone,
+  StickyNote,
+  Flame,
+  BookUser,
+  FileText,
+  Search,
+  CalendarCheck,
+  Zap
 } from 'lucide-react';
 
 interface MobileLayoutProps {
@@ -156,23 +164,74 @@ export function MobileLayout({
                 </div>
 
                 {/* Navigation */}
-                <nav className="flex-1 p-3 space-y-1">
-                  {navItems.map((item) => (
-                    <Button
-                      key={item.filter}
-                      variant={filter === item.filter && activeTab === 'tasks' ? 'secondary' : 'ghost'}
-                      className="w-full justify-start gap-3"
-                      onClick={() => {
-                        setFilter(item.filter as SidebarFilter);
-                        setActiveTab('tasks');
-                        setSidebarOpen(false);
-                      }}
-                    >
-                      <item.icon className="w-5 h-5 shrink-0" />
-                      <span>{item.label}</span>
-                    </Button>
-                  ))}
+                <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+                  {/* Main section label */}
+                  <span className="text-xs font-medium text-muted-foreground px-3 py-1.5 block">Main</span>
                   
+                  {/* AI Assistant */}
+                  <Button
+                    variant={activeTab === 'chat' ? 'secondary' : 'ghost'}
+                    className="w-full justify-start gap-3"
+                    onClick={() => {
+                      setActiveTab('chat');
+                      setSidebarOpen(false);
+                    }}
+                  >
+                    <Sparkles className="w-5 h-5 shrink-0" />
+                    <span>AI Assistant</span>
+                  </Button>
+
+                  {/* Tasks */}
+                  <Button
+                    variant={activeTab === 'tasks' ? 'secondary' : 'ghost'}
+                    className="w-full justify-start gap-3"
+                    onClick={() => {
+                      setActiveTab('tasks');
+                      setSidebarOpen(false);
+                    }}
+                  >
+                    <CheckSquare className="w-5 h-5 shrink-0" />
+                    <span>Tasks</span>
+                  </Button>
+
+                  {/* Friends/Chat */}
+                  <Button
+                    variant={activeTab === 'messages' ? 'secondary' : 'ghost'}
+                    className="w-full justify-start gap-3"
+                    onClick={() => {
+                      setActiveTab('messages');
+                      setSidebarOpen(false);
+                    }}
+                  >
+                    <MessageCircle className="w-5 h-5 shrink-0" />
+                    <span>Friends</span>
+                  </Button>
+
+                  {/* Calendar */}
+                  <Button
+                    variant={activeTab === 'calendar' ? 'secondary' : 'ghost'}
+                    className="w-full justify-start gap-3"
+                    onClick={() => {
+                      setActiveTab('calendar');
+                      setSidebarOpen(false);
+                    }}
+                  >
+                    <Calendar className="w-5 h-5 shrink-0" />
+                    <span>Calendar</span>
+                  </Button>
+
+                  {/* Dashboard */}
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start gap-3"
+                    onClick={() => {
+                      setSidebarOpen(false);
+                    }}
+                  >
+                    <LayoutDashboard className="w-5 h-5 shrink-0" />
+                    <span>Dashboard</span>
+                  </Button>
+
                   {/* Family Hub */}
                   <Button
                     variant={activeTab === 'family' ? 'secondary' : 'ghost'}
@@ -184,6 +243,70 @@ export function MobileLayout({
                   >
                     <Home className="w-5 h-5 shrink-0" />
                     <span>Family Hub</span>
+                  </Button>
+
+                  {/* Productivity section */}
+                  <span className="text-xs font-medium text-muted-foreground px-3 py-1.5 block mt-4">Productivity</span>
+
+                  {/* Today Focus */}
+                  <Button
+                    variant={activeTab === 'focus' ? 'secondary' : 'ghost'}
+                    className="w-full justify-start gap-3"
+                    onClick={() => {
+                      setActiveTab('focus');
+                      setSidebarOpen(false);
+                    }}
+                  >
+                    <Zap className="w-5 h-5 shrink-0" />
+                    <span>Today Focus</span>
+                  </Button>
+
+                  {/* Notes */}
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start gap-3"
+                    onClick={() => {
+                      setSidebarOpen(false);
+                    }}
+                  >
+                    <StickyNote className="w-5 h-5 shrink-0" />
+                    <span>Notes</span>
+                  </Button>
+
+                  {/* Habits */}
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start gap-3"
+                    onClick={() => {
+                      setSidebarOpen(false);
+                    }}
+                  >
+                    <Flame className="w-5 h-5 shrink-0" />
+                    <span>Habits</span>
+                  </Button>
+
+                  {/* Contacts */}
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start gap-3"
+                    onClick={() => {
+                      setSidebarOpen(false);
+                    }}
+                  >
+                    <BookUser className="w-5 h-5 shrink-0" />
+                    <span>Contacts</span>
+                  </Button>
+
+                  {/* Contracts */}
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start gap-3"
+                    onClick={() => {
+                      setSidebarOpen(false);
+                    }}
+                  >
+                    <FileText className="w-5 h-5 shrink-0" />
+                    <span>Contracts</span>
                   </Button>
                 </nav>
 
