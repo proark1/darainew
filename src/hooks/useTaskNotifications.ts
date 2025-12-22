@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Task } from '@/types/flux';
-import { differenceInMinutes, isPast, isToday } from 'date-fns';
+import { differenceInMinutes, isPast, isToday, addMinutes } from 'date-fns';
 import { usePushNotifications } from './usePushNotifications';
 
 interface UseTaskNotificationsOptions {
@@ -25,16 +25,23 @@ export function useTaskNotifications({
   // Track notifications per task per interval to avoid duplicates
   const notifiedTasks = useRef<Map<string, Set<number>>>(new Map());
   const overdueNagCount = useRef<Map<string, number>>(new Map());
+  const scheduledNotifications = useRef<Map<string, number[]>>(new Map());
   const permissionGranted = useRef(false);
   
   const isNative = Capacitor.isNativePlatform();
-  const { scheduleLocalNotification, requestPermission: requestNativePermission } = usePushNotifications();
+  const { 
+    scheduleLocalNotification, 
+    cancelLocalNotification,
+    requestPermission: requestNativePermission,
+    requestLocalNotificationPermission,
+  } = usePushNotifications();
 
   const requestPermission = useCallback(async () => {
     if (isNative) {
       const granted = await requestNativePermission();
-      permissionGranted.current = granted;
-      return granted;
+      const localGranted = await requestLocalNotificationPermission();
+      permissionGranted.current = granted || localGranted;
+      return permissionGranted.current;
     }
 
     if (!('Notification' in window)) {
@@ -54,7 +61,53 @@ export function useTaskNotifications({
     }
 
     return false;
-  }, [isNative, requestNativePermission]);
+  }, [isNative, requestNativePermission, requestLocalNotificationPermission]);
+
+  // Schedule notifications in advance for native platforms
+  const scheduleTaskNotifications = useCallback(async (task: Task) => {
+    if (!isNative || !task.dueDate || task.completed) return;
+
+    const dueDate = new Date(task.dueDate);
+    const now = new Date();
+    
+    // Cancel existing scheduled notifications for this task
+    const existingIds = scheduledNotifications.current.get(task.id) || [];
+    for (const id of existingIds) {
+      await cancelLocalNotification(id);
+    }
+    
+    const newIds: number[] = [];
+    const reminderMinutes = task.reminderBefore ?? defaultReminderMinutes;
+    
+    // Schedule reminder notification
+    if (reminderMinutes > 0) {
+      const reminderTime = addMinutes(dueDate, -reminderMinutes);
+      if (reminderTime > now) {
+        const id = await scheduleLocalNotification(
+          '📋 Task Reminder',
+          `"${task.title}" is due in ${reminderMinutes} minutes`,
+          reminderTime,
+          { taskId: task.id, type: 'reminder' }
+        );
+        if (id) newIds.push(id);
+      }
+    }
+    
+    // Schedule due now notification
+    if (dueDate > now) {
+      const id = await scheduleLocalNotification(
+        '🔔 Task Due Now!',
+        `"${task.title}" is due now`,
+        dueDate,
+        { taskId: task.id, type: 'due' }
+      );
+      if (id) newIds.push(id);
+    }
+    
+    if (newIds.length > 0) {
+      scheduledNotifications.current.set(task.id, newIds);
+    }
+  }, [isNative, defaultReminderMinutes, scheduleLocalNotification, cancelLocalNotification]);
 
   const playNotificationSound = useCallback(() => {
     try {
@@ -221,7 +274,7 @@ export function useTaskNotifications({
     return () => clearInterval(interval);
   }, [tasks, enabled, defaultReminderMinutes, adhdMode, showNotification]);
 
-  // Reset tracking when tasks change
+  // Reset tracking and schedule notifications when tasks change
   useEffect(() => {
     const currentTaskIds = new Set(tasks.map(t => t.id));
     
@@ -230,6 +283,11 @@ export function useTaskNotifications({
       if (!currentTaskIds.has(id)) {
         notifiedTasks.current.delete(id);
         overdueNagCount.current.delete(id);
+        
+        // Cancel scheduled notifications for removed tasks
+        const scheduledIds = scheduledNotifications.current.get(id) || [];
+        scheduledIds.forEach(notifId => cancelLocalNotification(notifId));
+        scheduledNotifications.current.delete(id);
       }
     });
 
@@ -238,9 +296,25 @@ export function useTaskNotifications({
       if (task.completed) {
         notifiedTasks.current.delete(task.id);
         overdueNagCount.current.delete(task.id);
+        
+        // Cancel scheduled notifications for completed tasks
+        const scheduledIds = scheduledNotifications.current.get(task.id) || [];
+        scheduledIds.forEach(notifId => cancelLocalNotification(notifId));
+        scheduledNotifications.current.delete(task.id);
       }
     });
-  }, [tasks]);
+  }, [tasks, cancelLocalNotification]);
 
-  return { requestPermission };
+  // Schedule notifications in advance for native platform (runs when tasks change)
+  useEffect(() => {
+    if (!isNative || !enabled) return;
+
+    tasks.forEach(task => {
+      if (!task.completed && task.dueDate) {
+        scheduleTaskNotifications(task);
+      }
+    });
+  }, [tasks, isNative, enabled, scheduleTaskNotifications]);
+
+  return { requestPermission, scheduleTaskNotifications };
 }
