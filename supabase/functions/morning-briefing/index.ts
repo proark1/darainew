@@ -15,7 +15,7 @@ serve(async (req) => {
   }
 
   try {
-    const { interests, skills, businesses } = await req.json();
+    const { interests, skills, businesses, location } = await req.json();
     
     // Build a personalized query based on user's profile
     const topicsToSearch = [
@@ -30,7 +30,17 @@ serve(async (req) => {
 
     const topicsString = topicsToSearch.join(', ');
     
-    console.log('Generating news for topics:', topicsString);
+    // Build location context
+    let locationContext = '';
+    if (location?.city && location?.country) {
+      locationContext = ` The user is located in ${location.city}, ${location.country}.`;
+    } else if (location?.country) {
+      locationContext = ` The user is located in ${location.country}.`;
+    } else if (location?.latitude && location?.longitude) {
+      locationContext = ` The user's coordinates are approximately ${location.latitude.toFixed(2)}, ${location.longitude.toFixed(2)}.`;
+    }
+    
+    console.log('Generating news for topics:', topicsString, 'Location:', locationContext || 'not provided');
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -43,7 +53,7 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are a helpful news curator. Provide a brief summary of 3-4 relevant news items or trends from the last 24 hours. Focus on topics that would be interesting to someone interested in: ${topicsString}. 
+            content: `You are a helpful news curator. Provide a brief summary of 3-4 relevant news items or trends from the last 24 hours. Focus on topics that would be interesting to someone interested in: ${topicsString}.${locationContext} If location is provided, include at least one local or regional news item relevant to that area.
             
             Format your response as a JSON array with objects containing:
             - "headline": A brief headline (max 80 chars)
@@ -55,7 +65,7 @@ serve(async (req) => {
           },
           {
             role: 'user',
-            content: `What are the most important news and trends in ${topicsString} from the last 24 hours? Today's date is ${new Date().toISOString().split('T')[0]}.`
+            content: `What are the most important news and trends in ${topicsString} from the last 24 hours?${locationContext} Today's date is ${new Date().toISOString().split('T')[0]}.`
           }
         ],
         temperature: 0.7,
