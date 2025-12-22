@@ -10,6 +10,8 @@ import { findRelevantContacts, ContactSuggestion } from '@/lib/contactSuggestion
 import { Send, Sparkles, User, Bot, Search, Mic, MicOff, Maximize2, Minimize2, Users, X } from 'lucide-react';
 import { format } from 'date-fns';
 
+const EMPTY_CONTACTS: Contact[] = [];
+
 interface ChatPanelProps {
   messages: ChatMessage[];
   onSendMessage: (content: string) => void;
@@ -19,7 +21,14 @@ interface ChatPanelProps {
   contacts?: Contact[];
 }
 
-export function ChatPanel({ messages, onSendMessage, isProcessing, isFullscreen = false, onToggleFullscreen, contacts = [] }: ChatPanelProps) {
+export function ChatPanel({
+  messages,
+  onSendMessage,
+  isProcessing,
+  isFullscreen = false,
+  onToggleFullscreen,
+  contacts = EMPTY_CONTACTS,
+}: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [contactSuggestions, setContactSuggestions] = useState<ContactSuggestion[]>([]);
   const [dismissedSuggestions, setDismissedSuggestions] = useState(false);
