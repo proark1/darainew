@@ -1,5 +1,12 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
+// IMPORTANT:
+// - For TestFlight / production builds, do NOT set `server.url`.
+//   Otherwise the app loads a remote website inside the native WebView, which can cause
+//   auth popups and (if cached/stale) a white screen.
+// - For local development hot-reload, set env var CAPACITOR_SERVER_URL.
+const devServerUrl = process.env.CAPACITOR_SERVER_URL;
+
 const config: CapacitorConfig = {
   appId: 'com.darai.app',
   appName: 'DarAI',
@@ -25,11 +32,14 @@ const config: CapacitorConfig = {
       sound: 'default',
     },
   },
-  server: {
-    // Enable hot-reload for development
-    url: 'https://d44ace30-8829-4d84-9769-44f09f4b4e36.lovableproject.com?forceHideBadge=true',
-    cleartext: true,
-  },
+  ...(devServerUrl
+    ? {
+        server: {
+          url: devServerUrl,
+          cleartext: true,
+        },
+      }
+    : {}),
 };
 
 export default config;
