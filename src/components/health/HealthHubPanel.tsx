@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
-import { useAppleHealth } from '@/hooks/useAppleHealth';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { useAppleHealth, DailyHealthSummary } from '@/hooks/useAppleHealth';
 import { useHealthTracking } from '@/hooks/useHealthTracking';
 import { useFamilyMembers } from '@/hooks/useFamilyMembers';
 import { AddHealthMetricDialog } from './AddHealthMetricDialog';
@@ -28,12 +30,17 @@ import {
   Clock,
   AlertCircle,
   Loader2,
+  ChevronLeft,
+  ChevronRight,
+  CalendarIcon,
 } from 'lucide-react';
-import { format, parseISO, subDays } from 'date-fns';
+import { format, parseISO, subDays, addDays, isSameDay, startOfDay } from 'date-fns';
 
 export function HealthHubPanel() {
   const [activeTab, setActiveTab] = useState('overview');
   const [showAddMetricDialog, setShowAddMetricDialog] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [calendarOpen, setCalendarOpen] = useState(false);
   
   const {
     isAvailable,
@@ -59,6 +66,36 @@ export function HealthHubPanel() {
   const activeMedications = getActiveMedications();
   const upcomingAppointments = getUpcomingAppointments();
   const refillNeeded = getMedicationsNeedingRefill();
+
+  // Calculate summary for selected date
+  const selectedDateSummary = useMemo((): DailyHealthSummary => {
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const dayMetrics = healthMetrics.filter(m => m.recorded_at.startsWith(dateStr));
+    
+    const sumMetric = (type: string) => 
+      dayMetrics.filter(m => m.metric_type === type).reduce((sum, m) => sum + m.value, 0);
+    const getLatest = (type: string) => 
+      dayMetrics.find(m => m.metric_type === type)?.value;
+    
+    return {
+      date: dateStr,
+      steps: sumMetric('steps'),
+      calories: sumMetric('calories'),
+      activeMinutes: sumMetric('active_minutes'),
+      sleepHours: getLatest('sleep_hours') || 0,
+      heartRateAvg: getLatest('heart_rate') || 0,
+      weight: getLatest('weight'),
+      waterIntake: sumMetric('water_intake'),
+    };
+  }, [healthMetrics, selectedDate]);
+
+  const isToday = isSameDay(selectedDate, new Date());
+
+  const goToPreviousDay = () => setSelectedDate(prev => subDays(prev, 1));
+  const goToNextDay = () => {
+    if (!isToday) setSelectedDate(prev => addDays(prev, 1));
+  };
+  const goToToday = () => setSelectedDate(new Date());
 
   const healthGoals = {
     steps: 10000,
@@ -155,7 +192,61 @@ export function HealthHubPanel() {
 
           {!isLoading && activeTab === 'overview' && (
             <>
-              {/* Today's Summary */}
+              {/* Date Navigation */}
+              <Card className="bg-muted/30">
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between">
+                    <Button variant="ghost" size="icon" onClick={goToPreviousDay}>
+                      <ChevronLeft className="w-5 h-5" />
+                    </Button>
+                    
+                    <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                      <PopoverTrigger asChild>
+                        <Button variant="ghost" className="font-medium">
+                          <CalendarIcon className="w-4 h-4 mr-2" />
+                          {isToday ? 'Today' : format(selectedDate, 'EEE, MMM d')}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="center">
+                        <CalendarComponent
+                          mode="single"
+                          selected={selectedDate}
+                          onSelect={(date) => {
+                            if (date) {
+                              setSelectedDate(date);
+                              setCalendarOpen(false);
+                            }
+                          }}
+                          disabled={(date) => date > new Date()}
+                          initialFocus
+                          className="pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={goToNextDay}
+                      disabled={isToday}
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </Button>
+                  </div>
+                  {!isToday && (
+                    <Button 
+                      variant="link" 
+                      size="sm" 
+                      className="w-full mt-1 text-xs"
+                      onClick={goToToday}
+                    >
+                      Go to Today
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Selected Day Summary */}
               <div className="grid grid-cols-2 gap-3">
                 <Card className="bg-gradient-to-br from-primary/10 to-primary/5">
                   <CardContent className="p-4">
@@ -164,10 +255,10 @@ export function HealthHubPanel() {
                       <span className="text-xs">Steps</span>
                     </div>
                     <p className="text-2xl font-bold">
-                      {todaySummary?.steps?.toLocaleString() || 0}
+                      {selectedDateSummary.steps.toLocaleString()}
                     </p>
                     <Progress 
-                      value={getProgress(todaySummary?.steps || 0, healthGoals.steps)} 
+                      value={getProgress(selectedDateSummary.steps, healthGoals.steps)} 
                       className="h-1 mt-2"
                     />
                     <p className="text-xs text-muted-foreground mt-1">
@@ -183,10 +274,10 @@ export function HealthHubPanel() {
                       <span className="text-xs">Calories</span>
                     </div>
                     <p className="text-2xl font-bold">
-                      {todaySummary?.calories || 0}
+                      {selectedDateSummary.calories}
                     </p>
                     <Progress 
-                      value={getProgress(todaySummary?.calories || 0, healthGoals.calories)} 
+                      value={getProgress(selectedDateSummary.calories, healthGoals.calories)} 
                       className="h-1 mt-2"
                     />
                     <p className="text-xs text-muted-foreground mt-1">
@@ -202,10 +293,10 @@ export function HealthHubPanel() {
                       <span className="text-xs">Water</span>
                     </div>
                     <p className="text-2xl font-bold">
-                      {todaySummary?.waterIntake || 0}
+                      {selectedDateSummary.waterIntake}
                     </p>
                     <Progress 
-                      value={getProgress(todaySummary?.waterIntake || 0, healthGoals.waterIntake)} 
+                      value={getProgress(selectedDateSummary.waterIntake, healthGoals.waterIntake)} 
                       className="h-1 mt-2"
                     />
                     <p className="text-xs text-muted-foreground mt-1">
@@ -221,10 +312,10 @@ export function HealthHubPanel() {
                       <span className="text-xs">Sleep</span>
                     </div>
                     <p className="text-2xl font-bold">
-                      {todaySummary?.sleepHours?.toFixed(1) || 0}h
+                      {selectedDateSummary.sleepHours.toFixed(1)}h
                     </p>
                     <Progress 
-                      value={getProgress(todaySummary?.sleepHours || 0, healthGoals.sleepHours)} 
+                      value={getProgress(selectedDateSummary.sleepHours, healthGoals.sleepHours)} 
                       className="h-1 mt-2"
                     />
                     <p className="text-xs text-muted-foreground mt-1">
@@ -240,7 +331,7 @@ export function HealthHubPanel() {
                   <CardContent className="p-3 text-center">
                     <Heart className="w-5 h-5 mx-auto text-red-500 mb-1" />
                     <p className="text-lg font-semibold">
-                      {todaySummary?.heartRateAvg || '--'}
+                      {selectedDateSummary.heartRateAvg || '--'}
                     </p>
                     <p className="text-xs text-muted-foreground">BPM</p>
                   </CardContent>
@@ -249,7 +340,7 @@ export function HealthHubPanel() {
                   <CardContent className="p-3 text-center">
                     <Activity className="w-5 h-5 mx-auto text-green-500 mb-1" />
                     <p className="text-lg font-semibold">
-                      {todaySummary?.activeMinutes || 0}
+                      {selectedDateSummary.activeMinutes}
                     </p>
                     <p className="text-xs text-muted-foreground">Active min</p>
                   </CardContent>
@@ -258,7 +349,7 @@ export function HealthHubPanel() {
                   <CardContent className="p-3 text-center">
                     <Scale className="w-5 h-5 mx-auto text-blue-500 mb-1" />
                     <p className="text-lg font-semibold">
-                      {todaySummary?.weight?.toFixed(1) || '--'}
+                      {selectedDateSummary.weight?.toFixed(1) || '--'}
                     </p>
                     <p className="text-xs text-muted-foreground">kg</p>
                   </CardContent>

@@ -118,11 +118,20 @@
   * {
     @apply border-border;
   }
-  body {
+  
+  html, body, #root {
     @apply bg-background text-foreground;
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  
+  body {
     font-family: 'Inter', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    position: fixed;
+    width: 100%;
   }
 
   /* Safe area for mobile devices */

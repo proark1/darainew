@@ -146,7 +146,7 @@ export function MobileLayout({
   };
 
   return (
-    <div className="flex flex-col h-screen w-full bg-background pt-[env(safe-area-inset-top)]">
+    <div className="flex flex-col h-screen w-full bg-background pt-[env(safe-area-inset-top)] overflow-hidden">
       {/* Header */}
       <header className="h-14 px-4 flex items-center justify-between border-b border-border bg-background shrink-0">
         <div className="flex items-center gap-3">
@@ -485,18 +485,18 @@ export function MobileLayout({
       </main>
 
       {/* Bottom Tab Bar */}
-      <nav className="border-t border-border bg-background shrink-0 pb-[env(safe-area-inset-bottom)]">
+      <nav className="border-t border-border bg-background shrink-0 pb-[env(safe-area-inset-bottom)] relative">
         <div className="h-16 flex items-center justify-around px-2">
           {bottomTabs.map((tab) => {
             if (tab.isCenter) {
-              // Center assistant button - larger and prominent
+              // Center assistant button - larger and prominent, positioned above the nav bar
               return (
                 <button
                   key={tab.id}
                   onClick={onVoiceMode}
-                  className="flex flex-col items-center justify-center -mt-6"
+                  className="flex flex-col items-center justify-center absolute left-1/2 -translate-x-1/2 -top-7"
                 >
-                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg">
+                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg border-4 border-background">
                     <Mic className="w-6 h-6 text-primary-foreground" />
                   </div>
                   <span className="text-[10px] font-medium text-primary mt-1">{tab.label}</span>

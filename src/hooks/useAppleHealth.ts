@@ -245,7 +245,7 @@ export function useAppleHealth() {
     }
   }, [isAvailable]);
 
-  const syncAppleHealthInternal = async (daysBack: number = 90) => {
+  const syncAppleHealthInternal = async (daysBack: number = 365) => {
     if (!Health || !user?.id) return;
 
     const now = new Date();
