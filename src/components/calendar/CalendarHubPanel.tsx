@@ -116,6 +116,7 @@ export function CalendarHubPanel({
             tasks={tasks}
             onToggleTaskComplete={onToggleTaskComplete}
             onUpdateTask={onUpdateTask}
+            onAddTask={onAddTask}
           />
         </div>
       </div>

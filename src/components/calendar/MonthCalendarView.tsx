@@ -8,7 +8,8 @@ import {
   ChevronRight, 
   CheckCircle2,
   Circle,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  Plus
 } from 'lucide-react';
 import { 
   format, 
@@ -27,12 +28,23 @@ import {
 } from 'date-fns';
 import { de, enUS } from 'date-fns/locale';
 import { EditTaskModal } from '../tasks/EditTaskModal';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 
 interface MonthCalendarViewProps {
   events: CalendarEvent[];
   tasks: Task[];
   onToggleTaskComplete?: (id: string) => void;
   onUpdateTask?: (id: string, updates: Partial<Task>) => void;
+  onAddTask?: (task: Omit<Task, 'id' | 'createdAt'>) => void;
   onItemClick?: (item: { id: string; type: 'event' | 'task' }) => void;
 }
 
@@ -43,6 +55,7 @@ export function MonthCalendarView({
   tasks,
   onToggleTaskComplete,
   onUpdateTask,
+  onAddTask,
   onItemClick,
 }: MonthCalendarViewProps) {
   const { t, language } = useLanguage();
@@ -50,6 +63,12 @@ export function MonthCalendarView({
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
+  const [selectedDateForTask, setSelectedDateForTask] = useState<Date | null>(null);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high'>('medium');
+  const [newTaskCategory, setNewTaskCategory] = useState<'personal' | 'business'>('personal');
+  const [newTaskDescription, setNewTaskDescription] = useState('');
 
   // Calculate days based on view mode
   const days = useMemo(() => {
@@ -108,6 +127,32 @@ export function MonthCalendarView({
 
   const goToToday = () => {
     setCurrentDate(new Date());
+  };
+
+  const handleDayClick = (day: Date) => {
+    setSelectedDateForTask(day);
+    setNewTaskTitle('');
+    setNewTaskPriority('medium');
+    setNewTaskCategory('personal');
+    setNewTaskDescription('');
+    setShowAddTaskDialog(true);
+  };
+
+  const handleCreateTask = () => {
+    if (!newTaskTitle.trim() || !selectedDateForTask || !onAddTask) return;
+    
+    onAddTask({
+      title: newTaskTitle.trim(),
+      description: newTaskDescription.trim() || undefined,
+      priority: newTaskPriority,
+      category: newTaskCategory,
+      dueDate: selectedDateForTask,
+      completed: false,
+      status: 'backlog',
+    } as Omit<Task, 'id' | 'createdAt'>);
+    
+    setShowAddTaskDialog(false);
+    setSelectedDateForTask(null);
   };
 
   const handleItemClick = (item: { id: string; type: 'event' | 'task' }) => {
@@ -227,8 +272,9 @@ export function MonthCalendarView({
             return (
               <div
                 key={day.toISOString()}
+                onClick={() => handleDayClick(day)}
                 className={cn(
-                  "border-r last:border-r-0 border-b border-border p-1",
+                  "border-r last:border-r-0 border-b border-border p-1 cursor-pointer hover:bg-muted/50 transition-colors",
                   viewMode === 'week' ? 'min-h-[120px]' : 'min-h-[80px]',
                   isCurrentDay && "bg-primary/5",
                   !isCurrentMonth && viewMode === 'month' && "bg-muted/30"
@@ -236,11 +282,12 @@ export function MonthCalendarView({
               >
                 {/* Day Number */}
                 <div className={cn(
-                  "text-xs font-medium mb-1 px-1",
+                  "text-xs font-medium mb-1 px-1 flex items-center justify-between",
                   isCurrentDay && "text-primary",
                   !isCurrentMonth && viewMode === 'month' && "text-muted-foreground/50"
                 )}>
-                  {format(day, 'd')}
+                  <span>{format(day, 'd')}</span>
+                  <Plus className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground" />
                 </div>
 
                 <div className="space-y-0.5 overflow-hidden">
@@ -318,6 +365,80 @@ export function MonthCalendarView({
           }}
         />
       )}
+
+      {/* Add Task Dialog */}
+      <Dialog open={showAddTaskDialog} onOpenChange={setShowAddTaskDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5" />
+              {t('tasks.addTask')} - {selectedDateForTask && format(selectedDateForTask, 'PP', { locale: dateLocale })}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="task-title">{t('tasks.title')}</Label>
+              <Input
+                id="task-title"
+                placeholder={t('tasks.titlePlaceholder') || 'Task title...'}
+                value={newTaskTitle}
+                onChange={(e) => setNewTaskTitle(e.target.value)}
+                autoFocus
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="task-description">{t('tasks.description')}</Label>
+              <Textarea
+                id="task-description"
+                placeholder={t('tasks.descriptionPlaceholder') || 'Description (optional)...'}
+                value={newTaskDescription}
+                onChange={(e) => setNewTaskDescription(e.target.value)}
+                rows={2}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>{t('tasks.priority')}</Label>
+                <Select value={newTaskPriority} onValueChange={(v) => setNewTaskPriority(v as 'low' | 'medium' | 'high')}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">{t('priority.low')}</SelectItem>
+                    <SelectItem value="medium">{t('priority.medium')}</SelectItem>
+                    <SelectItem value="high">{t('priority.high')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t('tasks.category')}</Label>
+                <Select value={newTaskCategory} onValueChange={(v) => setNewTaskCategory(v as 'personal' | 'business')}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="personal">{t('category.personal')}</SelectItem>
+                    <SelectItem value="business">{t('category.business')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setShowAddTaskDialog(false)}>
+                {t('common.cancel')}
+              </Button>
+              <Button onClick={handleCreateTask} disabled={!newTaskTitle.trim()}>
+                {t('tasks.addTask')}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
