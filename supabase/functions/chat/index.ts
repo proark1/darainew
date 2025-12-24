@@ -46,6 +46,7 @@ interface HealthData {
   medications?: { name: string; dosage?: string; frequency?: string; isActive: boolean; refillDate?: string }[];
   appointments?: { title: string; date: string; provider?: string; type?: string; isCompleted: boolean }[];
   vaccinations?: { name: string; date: string; nextDose?: string }[];
+  metrics?: { type: string; value: number; unit: string; date: string; source: string }[];
 }
 
 interface ChatRequest {
@@ -146,6 +147,14 @@ When the user asks about their health, medications, or appointments:
 - Note any vaccinations and when next doses are due
 - Be proactive about medication refill reminders
 - You can help track symptoms, remind about appointments, or discuss health-related tasks
+
+### 5. Fitness & Health Metrics Tracking
+When the user asks about their steps, fitness, weight, blood pressure, or other health metrics:
+- You have access to their recent health metrics including steps, weight, blood pressure, heart rate, sleep, etc.
+- Summarize their recent data trends (e.g., "Over the past week, you averaged 7,500 steps per day")
+- Provide insights on their progress and patterns
+- Help them set and track health goals
+- Note the source of data (Apple Health, manual entry, etc.)
 
 ### 4. Pattern Recognition & Suggestions
 When you notice patterns in the user's tasks or behavior, proactively suggest:
@@ -367,6 +376,31 @@ serve(async (req) => {
           }
         }
       }
+
+      if (healthData.metrics && healthData.metrics.length > 0) {
+        contextMessage += `\n\n### Health Metrics (last 30 days):`;
+        
+        // Group metrics by type
+        const metricsByType: Record<string, typeof healthData.metrics> = {};
+        for (const metric of healthData.metrics) {
+          if (!metricsByType[metric.type]) {
+            metricsByType[metric.type] = [];
+          }
+          metricsByType[metric.type].push(metric);
+        }
+        
+        for (const [type, metrics] of Object.entries(metricsByType)) {
+          const sortedMetrics = metrics.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          const latestValue = sortedMetrics[0];
+          const avgValue = metrics.reduce((sum, m) => sum + m.value, 0) / metrics.length;
+          
+          contextMessage += `\n- ${type}: Latest: ${latestValue.value} ${latestValue.unit} (${latestValue.date.split('T')[0]})`;
+          if (metrics.length > 1) {
+            contextMessage += `, Avg: ${avgValue.toFixed(1)} ${latestValue.unit} over ${metrics.length} readings`;
+          }
+          contextMessage += ` [Source: ${latestValue.source}]`;
+        }
+      }
     }
 
     const fullSystemPrompt = baseSystemPrompt + '\n\nPersonality: ' + personalityAddition + contextMessage;
@@ -381,6 +415,7 @@ serve(async (req) => {
         medications: healthData.medications?.length || 0,
         appointments: healthData.appointments?.length || 0,
         vaccinations: healthData.vaccinations?.length || 0,
+        metrics: healthData.metrics?.length || 0,
       } : null,
     });
 

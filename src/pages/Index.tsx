@@ -144,8 +144,10 @@ const Index = () => {
     medications, 
     appointments, 
     vaccinations,
+    healthMetrics,
     getActiveMedications,
     getUpcomingAppointments,
+    getRecentMetrics,
   } = useHealthTracking();
 
   // Contract reminders - creates tasks for contracts ending within 3 months
@@ -302,6 +304,7 @@ const Index = () => {
 
     try {
       // Build health data for AI context
+      const recentMetrics = getRecentMetrics(30);
       const healthData = {
         medications: getActiveMedications().map(m => ({
           name: m.name,
@@ -321,6 +324,13 @@ const Index = () => {
           name: v.vaccine_name,
           date: v.date_administered,
           nextDose: v.next_dose_date || undefined,
+        })),
+        metrics: recentMetrics.slice(0, 50).map(m => ({
+          type: m.metric_type,
+          value: m.value,
+          unit: m.unit,
+          date: m.recorded_at,
+          source: m.source,
         })),
       };
 
