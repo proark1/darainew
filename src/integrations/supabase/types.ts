@@ -550,6 +550,9 @@ export type Database = {
           attachments: Json | null
           content: string
           created_at: string
+          encrypted_content: string | null
+          encrypted_key: string | null
+          encryption_version: number | null
           id: string
           is_read: boolean
           reactions: Json | null
@@ -561,6 +564,9 @@ export type Database = {
           attachments?: Json | null
           content: string
           created_at?: string
+          encrypted_content?: string | null
+          encrypted_key?: string | null
+          encryption_version?: number | null
           id?: string
           is_read?: boolean
           reactions?: Json | null
@@ -572,6 +578,9 @@ export type Database = {
           attachments?: Json | null
           content?: string
           created_at?: string
+          encrypted_content?: string | null
+          encrypted_key?: string | null
+          encryption_version?: number | null
           id?: string
           is_read?: boolean
           reactions?: Json | null
@@ -1189,6 +1198,38 @@ export type Database = {
         }
         Relationships: []
       }
+      group_encryption_keys: {
+        Row: {
+          created_at: string | null
+          encrypted_group_key: string
+          group_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          encrypted_group_key: string
+          group_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          encrypted_group_key?: string
+          group_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_encryption_keys_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "chat_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group_message_reads: {
         Row: {
           id: string
@@ -1223,6 +1264,9 @@ export type Database = {
           attachments: Json | null
           content: string
           created_at: string
+          encrypted_content: string | null
+          encrypted_keys: Json | null
+          encryption_version: number | null
           group_id: string
           id: string
           reactions: Json | null
@@ -1232,6 +1276,9 @@ export type Database = {
           attachments?: Json | null
           content?: string
           created_at?: string
+          encrypted_content?: string | null
+          encrypted_keys?: Json | null
+          encryption_version?: number | null
           group_id: string
           id?: string
           reactions?: Json | null
@@ -1241,6 +1288,9 @@ export type Database = {
           attachments?: Json | null
           content?: string
           created_at?: string
+          encrypted_content?: string | null
+          encrypted_keys?: Json | null
+          encryption_version?: number | null
           group_id?: string
           id?: string
           reactions?: Json | null
@@ -1675,6 +1725,7 @@ export type Database = {
           location_city: string | null
           location_country: string | null
           preferred_work_hours: string | null
+          public_key: string | null
           role: string | null
           skills: string[] | null
           timezone: string | null
@@ -1694,6 +1745,7 @@ export type Database = {
           location_city?: string | null
           location_country?: string | null
           preferred_work_hours?: string | null
+          public_key?: string | null
           role?: string | null
           skills?: string[] | null
           timezone?: string | null
@@ -1713,6 +1765,7 @@ export type Database = {
           location_city?: string | null
           location_country?: string | null
           preferred_work_hours?: string | null
+          public_key?: string | null
           role?: string | null
           skills?: string[] | null
           timezone?: string | null

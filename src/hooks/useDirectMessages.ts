@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useEncryption } from './useEncryption';
 
 export interface ChatAttachment {
   name: string;
@@ -23,6 +24,9 @@ export interface DirectMessage {
   is_read: boolean;
   read_at: string | null;
   created_at: string;
+  encrypted_content?: string | null;
+  encrypted_key?: string | null;
+  encryption_version?: number;
   sender_profile?: {
     display_name: string | null;
     email: string | null;
@@ -42,13 +46,28 @@ export function useDirectMessages(userId: string | null) {
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const { isReady, encryptDirectMessage, decryptDirectMessage, getRecipientPublicKey } = useEncryption();
+
+  // Decrypt a single message
+  const decryptMessage = useCallback(async (msg: DirectMessage): Promise<DirectMessage> => {
+    if (msg.encrypted_content && msg.encrypted_key && isReady) {
+      try {
+        const decryptedContent = await decryptDirectMessage(msg.encrypted_content, msg.encrypted_key);
+        if (decryptedContent) {
+          return { ...msg, content: decryptedContent };
+        }
+      } catch (error) {
+        console.error('Failed to decrypt message:', error);
+      }
+    }
+    return msg;
+  }, [isReady, decryptDirectMessage]);
 
   // Fetch all conversations
   const fetchConversations = useCallback(async () => {
     if (!userId) return;
 
     try {
-      // Fetch all messages where user is sender or recipient
       const { data: allMessages, error } = await supabase
         .from('direct_messages')
         .select('*')
@@ -92,17 +111,31 @@ export function useDirectMessages(userId: string | null) {
 
       const profileMap = new Map(profiles?.map(p => [p.user_id, p]) || []);
 
-      // Build conversation list
+      // Build conversation list with decrypted last messages
       const convList: Conversation[] = [];
       for (const [partnerId, conv] of conversationMap) {
         const profile = profileMap.get(partnerId);
         const lastMsg = conv.messages[0];
         
+        let lastMessageContent = lastMsg?.content || '';
+        
+        // Decrypt last message if encrypted
+        if (lastMsg?.encrypted_content && lastMsg?.encrypted_key && isReady) {
+          try {
+            const decrypted = await decryptDirectMessage(lastMsg.encrypted_content, lastMsg.encrypted_key);
+            if (decrypted) {
+              lastMessageContent = decrypted;
+            }
+          } catch {
+            lastMessageContent = '🔒 Encrypted message';
+          }
+        }
+        
         convList.push({
           partnerId,
           partnerName: profile?.display_name || 'Unknown',
           partnerEmail: profile?.email || '',
-          lastMessage: lastMsg?.content || '',
+          lastMessage: lastMessageContent,
           lastMessageAt: lastMsg?.created_at || '',
           unreadCount: conv.unreadCount,
         });
@@ -116,7 +149,7 @@ export function useDirectMessages(userId: string | null) {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, isReady, decryptDirectMessage]);
 
   // Fetch messages for a specific conversation
   const fetchMessages = useCallback(async (partnerId: string) => {
@@ -148,15 +181,20 @@ export function useDirectMessages(userId: string | null) {
         sender_profile: profileMap.get(msg.sender_id) || undefined,
       }));
 
-      setMessages(messagesWithProfiles);
-      return messagesWithProfiles;
+      // Decrypt all messages
+      const decryptedMessages = await Promise.all(
+        messagesWithProfiles.map(msg => decryptMessage(msg))
+      );
+
+      setMessages(decryptedMessages);
+      return decryptedMessages;
     } catch (error) {
       console.error('Error fetching messages:', error);
       return [];
     }
-  }, [userId]);
+  }, [userId, decryptMessage]);
 
-  // Send a message
+  // Send a message (with encryption)
   const sendMessage = useCallback(async (
     recipientId: string, 
     content: string,
@@ -165,13 +203,35 @@ export function useDirectMessages(userId: string | null) {
     if (!userId || (!content.trim() && attachments.length === 0)) return null;
 
     try {
+      // Check if recipient has encryption keys
+      const recipientPublicKey = await getRecipientPublicKey(recipientId);
+      
+      let messageContent = content.trim();
+      let encryptedContent: string | undefined;
+      let encryptedKey: string | undefined;
+      let encryptionVersion: number | undefined;
+
+      // Encrypt if recipient has keys
+      if (recipientPublicKey && isReady) {
+        const encrypted = await encryptDirectMessage(messageContent, recipientId);
+        if (encrypted) {
+          messageContent = ''; // Clear plaintext
+          encryptedContent = encrypted.encryptedContent;
+          encryptedKey = encrypted.encryptedKey;
+          encryptionVersion = 1;
+        }
+      }
+
       const { data, error } = await supabase
         .from('direct_messages')
         .insert({
           sender_id: userId,
           recipient_id: recipientId,
-          content: content.trim(),
-          attachments: attachments as unknown as null,
+          content: messageContent,
+          attachments: attachments.length > 0 ? JSON.stringify(attachments) : null,
+          encrypted_content: encryptedContent,
+          encrypted_key: encryptedKey,
+          encryption_version: encryptionVersion,
         })
         .select()
         .single();
@@ -183,7 +243,7 @@ export function useDirectMessages(userId: string | null) {
       console.error('Error sending message:', error);
       return null;
     }
-  }, [userId]);
+  }, [userId, isReady, encryptDirectMessage, getRecipientPublicKey]);
 
   // Mark messages as read
   const markAsRead = useCallback(async (partnerId: string) => {
@@ -197,7 +257,6 @@ export function useDirectMessages(userId: string | null) {
         .eq('recipient_id', userId)
         .eq('is_read', false);
 
-      // Update local state
       setConversations(prev => prev.map(c => 
         c.partnerId === partnerId ? { ...c, unreadCount: 0 } : c
       ));
@@ -206,13 +265,12 @@ export function useDirectMessages(userId: string | null) {
     }
   }, [userId]);
 
-  // Set up realtime subscription for all messages involving the user
+  // Set up realtime subscription
   useEffect(() => {
     if (!userId) return;
 
     fetchConversations();
 
-    // Subscribe to messages where user is recipient (incoming)
     const incomingChannel = supabase
       .channel('direct-messages-incoming')
       .on(
@@ -223,24 +281,24 @@ export function useDirectMessages(userId: string | null) {
           table: 'direct_messages',
           filter: `recipient_id=eq.${userId}`,
         },
-        (payload) => {
+        async (payload) => {
           console.log('New incoming message received:', payload);
           fetchConversations();
-          // Also update messages if currently viewing this conversation
-          const newMsg = payload.new as { sender_id: string };
+          
+          const newMsg = payload.new as DirectMessage;
           if (newMsg?.sender_id) {
+            // Decrypt the new message
+            const decrypted = await decryptMessage(newMsg);
+            
             setMessages(prev => {
-              // Check if this message is from the partner we're currently chatting with
               const lastPartnerId = prev.length > 0 ? 
                 (prev[0].sender_id === userId ? prev[0].recipient_id : prev[0].sender_id) : null;
               if (lastPartnerId === newMsg.sender_id) {
-                // Add the new message to the list
-                const fullMsg = payload.new as DirectMessage & { sender_profile?: { display_name: string | null; email: string | null } };
                 return [...prev, {
-                  ...fullMsg,
-                  attachments: (Array.isArray(fullMsg.attachments) ? fullMsg.attachments : []) as ChatAttachment[],
-                  reactions: (Array.isArray(fullMsg.reactions) ? fullMsg.reactions : []) as MessageReaction[],
-                  read_at: fullMsg.read_at || null,
+                  ...decrypted,
+                  attachments: (Array.isArray(decrypted.attachments) ? decrypted.attachments : []) as ChatAttachment[],
+                  reactions: (Array.isArray(decrypted.reactions) ? decrypted.reactions : []) as MessageReaction[],
+                  read_at: decrypted.read_at || null,
                 }];
               }
               return prev;
@@ -250,7 +308,6 @@ export function useDirectMessages(userId: string | null) {
       )
       .subscribe();
 
-    // Subscribe to messages where user is sender (for delivery/read status)
     const outgoingChannel = supabase
       .channel('direct-messages-outgoing')
       .on(
@@ -262,9 +319,7 @@ export function useDirectMessages(userId: string | null) {
           filter: `sender_id=eq.${userId}`,
         },
         (payload) => {
-          console.log('Outgoing message update:', payload);
           if (payload.eventType === 'UPDATE') {
-            // Update read status in current messages
             setMessages(prev => prev.map(msg => 
               msg.id === (payload.new as DirectMessage).id 
                 ? { ...msg, is_read: (payload.new as DirectMessage).is_read, read_at: (payload.new as DirectMessage).read_at }
@@ -279,7 +334,7 @@ export function useDirectMessages(userId: string | null) {
       supabase.removeChannel(incomingChannel);
       supabase.removeChannel(outgoingChannel);
     };
-  }, [userId, fetchConversations]);
+  }, [userId, fetchConversations, decryptMessage]);
 
   return {
     messages,
@@ -289,5 +344,6 @@ export function useDirectMessages(userId: string | null) {
     sendMessage,
     markAsRead,
     refetch: fetchConversations,
+    encryptionReady: isReady,
   };
 }

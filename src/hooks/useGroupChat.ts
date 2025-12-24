@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { ChatAttachment } from './useDirectMessages';
+import { useEncryption } from './useEncryption';
 
 export interface ChatGroup {
   id: string;
@@ -35,6 +36,8 @@ export interface GroupMessage {
   attachments: ChatAttachment[];
   reactions: MessageReaction[];
   created_at: string;
+  encrypted_content?: string | null;
+  encryption_version?: number;
   sender_profile?: {
     display_name: string | null;
     email: string | null;
@@ -51,6 +54,28 @@ export function useGroupChat(userId: string | null) {
   const [groups, setGroups] = useState<ChatGroup[]>([]);
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const { 
+    isReady, 
+    initializeGroupKey, 
+    encryptGroupMessage, 
+    decryptGroupMessage,
+    addMemberToGroupEncryption 
+  } = useEncryption();
+
+  // Decrypt a single group message
+  const decryptMessage = useCallback(async (msg: GroupMessage): Promise<GroupMessage> => {
+    if (msg.encrypted_content && isReady) {
+      try {
+        const decryptedContent = await decryptGroupMessage(msg.encrypted_content, msg.group_id);
+        if (decryptedContent) {
+          return { ...msg, content: decryptedContent };
+        }
+      } catch (error) {
+        console.error('Failed to decrypt group message:', error);
+      }
+    }
+    return msg;
+  }, [isReady, decryptGroupMessage]);
 
   // Fetch all groups
   const fetchGroups = useCallback(async () => {
@@ -75,7 +100,12 @@ export function useGroupChat(userId: string | null) {
       // Fetch member profiles and last messages
       const enrichedGroups = await Promise.all(
         (groupsData || []).map(async (group) => {
-          const memberIds = group.chat_group_members?.map((m: any) => m.user_id) || [];
+          const memberIds = group.chat_group_members?.map((m: GroupMember) => m.user_id) || [];
+          
+          // Initialize group encryption key
+          if (isReady && memberIds.length > 0) {
+            await initializeGroupKey(group.id, memberIds);
+          }
           
           const { data: profiles } = await supabase
             .from('profiles')
@@ -84,13 +114,27 @@ export function useGroupChat(userId: string | null) {
           
           const { data: lastMsg } = await supabase
             .from('group_messages')
-            .select('content, created_at')
+            .select('content, encrypted_content, created_at')
             .eq('group_id', group.id)
             .order('created_at', { ascending: false })
             .limit(1)
             .single();
           
-          const members = group.chat_group_members?.map((m: any) => ({
+          let lastMessageContent = lastMsg?.content || '';
+          
+          // Decrypt last message if encrypted
+          if (lastMsg?.encrypted_content && isReady) {
+            try {
+              const decrypted = await decryptGroupMessage(lastMsg.encrypted_content, group.id);
+              if (decrypted) {
+                lastMessageContent = decrypted;
+              }
+            } catch {
+              lastMessageContent = '🔒 Encrypted message';
+            }
+          }
+          
+          const members = group.chat_group_members?.map((m: GroupMember) => ({
             ...m,
             profile: profiles?.find(p => p.user_id === m.user_id),
           }));
@@ -98,7 +142,7 @@ export function useGroupChat(userId: string | null) {
           return {
             ...group,
             members,
-            lastMessage: lastMsg?.content || '',
+            lastMessage: lastMessageContent,
             lastMessageAt: lastMsg?.created_at || group.created_at,
           };
         })
@@ -110,14 +154,13 @@ export function useGroupChat(userId: string | null) {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, isReady, initializeGroupKey, decryptGroupMessage]);
 
   // Create a new group
   const createGroup = useCallback(async (name: string, memberIds: string[], description?: string) => {
     if (!userId) return null;
 
     try {
-      // Create the group
       const { data: group, error: groupError } = await supabase
         .from('chat_groups')
         .insert({
@@ -154,19 +197,34 @@ export function useGroupChat(userId: string | null) {
           .insert(memberInserts);
       }
 
+      // Initialize encryption for all members including creator
+      if (isReady) {
+        await initializeGroupKey(group.id, [userId, ...memberIds]);
+      }
+
       await fetchGroups();
       return group;
     } catch (error) {
       console.error('Error creating group:', error);
       return null;
     }
-  }, [userId, fetchGroups]);
+  }, [userId, fetchGroups, isReady, initializeGroupKey]);
 
   // Fetch messages for a group
   const fetchMessages = useCallback(async (groupId: string) => {
     if (!userId) return [];
 
     try {
+      // Initialize group key before fetching messages
+      const { data: members } = await supabase
+        .from('chat_group_members')
+        .select('user_id')
+        .eq('group_id', groupId);
+      
+      if (isReady && members) {
+        await initializeGroupKey(groupId, members.map(m => m.user_id));
+      }
+
       const { data, error } = await supabase
         .from('group_messages')
         .select('*')
@@ -207,15 +265,20 @@ export function useGroupChat(userId: string | null) {
         read_by: readMap.get(msg.id) || [],
       }));
 
-      setMessages(messagesWithProfiles);
-      return messagesWithProfiles;
+      // Decrypt all messages
+      const decryptedMessages = await Promise.all(
+        messagesWithProfiles.map(msg => decryptMessage(msg))
+      );
+
+      setMessages(decryptedMessages);
+      return decryptedMessages;
     } catch (error) {
       console.error('Error fetching group messages:', error);
       return [];
     }
-  }, [userId]);
+  }, [userId, isReady, initializeGroupKey, decryptMessage]);
 
-  // Send a message
+  // Send a message (with encryption)
   const sendMessage = useCallback(async (
     groupId: string,
     content: string,
@@ -224,13 +287,29 @@ export function useGroupChat(userId: string | null) {
     if (!userId || (!content.trim() && attachments.length === 0)) return null;
 
     try {
+      let messageContent = content.trim();
+      let encryptedContent: string | undefined;
+      let encryptionVersion: number | undefined;
+
+      // Encrypt if ready
+      if (isReady) {
+        const encrypted = await encryptGroupMessage(messageContent, groupId);
+        if (encrypted) {
+          messageContent = ''; // Clear plaintext
+          encryptedContent = encrypted;
+          encryptionVersion = 1;
+        }
+      }
+
       const { data, error } = await supabase
         .from('group_messages')
         .insert({
           group_id: groupId,
           sender_id: userId,
-          content: content.trim(),
-          attachments: attachments as unknown as null,
+          content: messageContent,
+          attachments: attachments.length > 0 ? JSON.stringify(attachments) : null,
+          encrypted_content: encryptedContent,
+          encryption_version: encryptionVersion,
         })
         .select()
         .single();
@@ -248,14 +327,13 @@ export function useGroupChat(userId: string | null) {
       console.error('Error sending group message:', error);
       return null;
     }
-  }, [userId]);
+  }, [userId, isReady, encryptGroupMessage]);
 
   // Mark messages as read
   const markAsRead = useCallback(async (groupId: string) => {
     if (!userId) return;
 
     try {
-      // Get unread messages in this group
       const { data: unreadMessages } = await supabase
         .from('group_messages')
         .select('id')
@@ -264,7 +342,6 @@ export function useGroupChat(userId: string | null) {
 
       if (!unreadMessages || unreadMessages.length === 0) return;
 
-      // Insert read receipts
       const reads = unreadMessages.map(m => ({
         message_id: m.id,
         user_id: userId,
@@ -298,7 +375,6 @@ export function useGroupChat(userId: string | null) {
 
       if (existingReaction) {
         if (existingReaction.user_ids.includes(userId)) {
-          // Remove user from reaction
           existingReaction.user_ids = existingReaction.user_ids.filter(id => id !== userId);
           if (existingReaction.user_ids.length === 0) {
             const index = reactions.indexOf(existingReaction);
@@ -319,6 +395,32 @@ export function useGroupChat(userId: string | null) {
       console.error('Error adding reaction:', error);
     }
   }, [userId]);
+
+  // Add member to existing group (also share encryption key)
+  const addMember = useCallback(async (groupId: string, memberId: string) => {
+    if (!userId) return false;
+
+    try {
+      await supabase
+        .from('chat_group_members')
+        .insert({
+          group_id: groupId,
+          user_id: memberId,
+          role: 'member',
+        });
+
+      // Share encryption key with new member
+      if (isReady) {
+        await addMemberToGroupEncryption(groupId, memberId);
+      }
+
+      await fetchGroups();
+      return true;
+    } catch (error) {
+      console.error('Error adding member:', error);
+      return false;
+    }
+  }, [userId, isReady, addMemberToGroupEncryption, fetchGroups]);
 
   // Subscribe to realtime updates
   useEffect(() => {
@@ -355,6 +457,8 @@ export function useGroupChat(userId: string | null) {
     sendMessage,
     markAsRead,
     addReaction,
+    addMember,
     refetch: fetchGroups,
+    encryptionReady: isReady,
   };
 }
