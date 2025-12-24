@@ -25,14 +25,21 @@ export function expandRecurrence(
   const effectiveEnd = endDate && isBefore(endDate, rangeEnd) ? endDate : rangeEnd;
   
   let currentDate = startOfDay(new Date(startDate));
-  const maxIterations = 365; // Safety limit
+  const maxIterations = 500; // Increased safety limit for longer ranges
   let iterations = 0;
 
-  while (isBefore(currentDate, effectiveEnd) && iterations < maxIterations) {
+  // If the start date is after range end, no instances to return
+  if (isAfter(currentDate, effectiveEnd)) {
+    return [];
+  }
+
+  while (!isAfter(currentDate, effectiveEnd) && iterations < maxIterations) {
     iterations++;
 
-    // Check if this date is within our range
-    if (!isBefore(currentDate, rangeStart) && isBefore(currentDate, effectiveEnd)) {
+    // Check if this date is within our range (use >= and <= for inclusive)
+    const isInRange = !isBefore(currentDate, startOfDay(rangeStart)) && !isAfter(currentDate, effectiveEnd);
+    
+    if (isInRange) {
       // For weekly recurrence with specific days, check if the day matches
       if (rule.frequency === 'weekly' && rule.daysOfWeek?.length) {
         const dayOfWeek = getDay(currentDate);
