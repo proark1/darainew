@@ -62,7 +62,10 @@ export function useFamilyMembers() {
   };
 
   const fetchMembers = async () => {
-    if (!user) return;
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
     
     try {
       const { data, error } = await supabase
@@ -71,7 +74,11 @@ export function useFamilyMembers() {
         .eq('is_active', true)
         .order('name');
 
-      if (error) throw error;
+      if (error) {
+        // Only log the error, don't show toast for every fetch attempt
+        console.error('Error fetching family members:', error);
+        return;
+      }
       
       setMembers((data || []).map(m => ({
         ...m,
@@ -81,8 +88,8 @@ export function useFamilyMembers() {
         preferences: parseJsonObject(m.preferences, {}),
       })));
     } catch (error) {
+      // Network errors - just log, don't spam user with toasts
       console.error('Error fetching family members:', error);
-      toast.error('Failed to load family members');
     } finally {
       setIsLoading(false);
     }
