@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Task, TaskPriority, TaskCategory, Project, ChecklistItem } from '@/types/flux';
 import type { Contact } from '@/hooks/useContacts';
-import { recurrencePresets, toRRuleString, getRecurrenceDescription } from '@/lib/recurrence';
+import { recurrencePresets, toRRuleString, getRecurrenceDescription, parseRRuleString } from '@/lib/recurrence';
 import { X, Calendar as CalendarIcon, Trash2, Repeat, Bell, Clock, User, Users, FolderOpen, Plus, Check, Sparkles } from 'lucide-react';
 import { format } from 'date-fns';
 import { RecurrenceFrequency } from '@/types/flux';
@@ -64,11 +64,14 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, onAddSubtasks, 
   const [newChecklistItem, setNewChecklistItem] = useState('');
   const [showBreakdown, setShowBreakdown] = useState(false);
   
-  // Custom recurrence state
-  const [customFrequency, setCustomFrequency] = useState<RecurrenceFrequency>('weekly');
-  const [customInterval, setCustomInterval] = useState(1);
-  const [customDays, setCustomDays] = useState<number[]>([]);
-  const [customEndDate, setCustomEndDate] = useState<Date | undefined>();
+  // Parse existing recurrence rule for custom controls
+  const existingRule = task.recurrenceRule ? parseRRuleString(task.recurrenceRule) : null;
+  
+  // Custom recurrence state - initialize from existing rule if present
+  const [customFrequency, setCustomFrequency] = useState<RecurrenceFrequency>(existingRule?.frequency || 'weekly');
+  const [customInterval, setCustomInterval] = useState(existingRule?.interval || 1);
+  const [customDays, setCustomDays] = useState<number[]>(existingRule?.daysOfWeek || []);
+  const [customEndDate, setCustomEndDate] = useState<Date | undefined>(existingRule?.endDate);
 
   const handleSave = () => {
     if (!title.trim()) return;
