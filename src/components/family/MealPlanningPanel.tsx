@@ -114,7 +114,7 @@ function DroppableDay({ day, meals, isToday, isPast, onDelete, onAddMeal }: Drop
   return (
     <Card
       ref={setNodeRef}
-      className={`p-2 min-h-[280px] transition-all ${
+      className={`p-2 min-h-[200px] sm:min-h-[280px] transition-all ${
         isToday 
           ? 'ring-2 ring-primary bg-primary/5' 
           : isPast 
@@ -370,7 +370,7 @@ export function MealPlanningPanel() {
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
             >
-              <div className="grid grid-cols-7 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
                 {days.map((day) => {
                   const meals = getMealsForDay(day);
                   const isToday = isSameDay(day, new Date());

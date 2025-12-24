@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, ListTodo, Calendar, Baby, ShoppingCart, Utensils, Heart, FolderOpen, Wallet } from 'lucide-react';
+import { Users, ListTodo, Baby, ShoppingCart, Utensils, Heart, FolderOpen, Wallet } from 'lucide-react';
 import { FamilyMembersList } from './FamilyMembersList';
 import { HouseholdTasksList } from './HouseholdTasksList';
-import { FamilyCalendarView } from './FamilyCalendarView';
 import { ChildDashboard } from './ChildDashboard';
 import { ShoppingListsPanel } from './ShoppingListsPanel';
 import { MealPlanningPanel } from './MealPlanningPanel';
@@ -55,9 +54,6 @@ export function FamilyPanel() {
             <TabsTrigger value="docs" className="p-2">
               <FolderOpen className="h-5 w-5" />
             </TabsTrigger>
-            <TabsTrigger value="calendar" className="p-2">
-              <Calendar className="h-5 w-5" />
-            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -85,9 +81,6 @@ export function FamilyPanel() {
           </TabsContent>
           <TabsContent value="docs" className="mt-0 h-full">
             <DocumentStoragePanel />
-          </TabsContent>
-          <TabsContent value="calendar" className="mt-0 h-full">
-            <FamilyCalendarView />
           </TabsContent>
         </div>
       </Tabs>
