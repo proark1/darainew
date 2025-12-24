@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { CalendarEvent, Task } from '@/types/flux';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { usePublicHolidays } from '@/hooks/usePublicHolidays';
+import { expandRecurringItems } from '@/lib/recurrenceExpander';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -91,10 +92,27 @@ export function MonthCalendarView({
     }
   }, [currentDate, viewMode]);
 
-  // Group tasks by date
+  // Expand recurring tasks/events within the visible range
+  const { expandedTasks, expandedEvents } = useMemo(() => {
+    if (days.length === 0) return { expandedTasks: tasks, expandedEvents: events };
+
+    const rangeStart = days[0];
+    const rangeEnd = days[days.length - 1];
+
+    return {
+      expandedTasks: expandRecurringItems(
+        tasks.filter(t => t.dueDate && !t.parentId),
+        rangeStart,
+        rangeEnd
+      ),
+      expandedEvents: expandRecurringItems(events, rangeStart, rangeEnd),
+    };
+  }, [tasks, events, days]);
+
+  // Group tasks by date (including recurrence instances)
   const tasksByDate = useMemo(() => {
-    const map = new Map<string, Task[]>();
-    tasks.forEach(task => {
+    const map = new Map<string, (Task & { isRecurrenceInstance?: boolean })[]>();
+    expandedTasks.forEach(task => {
       if (task.dueDate && !task.parentId) {
         const dateKey = format(new Date(task.dueDate), 'yyyy-MM-dd');
         if (!map.has(dateKey)) {
@@ -104,12 +122,12 @@ export function MonthCalendarView({
       }
     });
     return map;
-  }, [tasks]);
+  }, [expandedTasks]);
 
-  // Group events by date
+  // Group events by date (including recurrence instances)
   const eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
-    events.forEach(event => {
+    expandedEvents.forEach(event => {
       const dateKey = format(new Date(event.startTime), 'yyyy-MM-dd');
       if (!map.has(dateKey)) {
         map.set(dateKey, []);
@@ -117,7 +135,7 @@ export function MonthCalendarView({
       map.get(dateKey)!.push(event);
     });
     return map;
-  }, [events]);
+  }, [expandedEvents]);
 
   // Group holidays by date
   const holidaysByDate = useMemo(() => {
@@ -176,7 +194,8 @@ export function MonthCalendarView({
 
   const handleItemClick = (item: { id: string; type: 'event' | 'task' }) => {
     if (item.type === 'task') {
-      const task = tasks.find(t => t.id === item.id);
+      const baseId = item.id.split('-instance-')[0];
+      const task = tasks.find(t => t.id === baseId);
       if (task) {
         setEditingTask(task);
       }
@@ -338,16 +357,18 @@ export function MonthCalendarView({
                   {/* Tasks */}
                   {dayTasks.slice(0, viewMode === 'week' ? 5 : 2).map((task) => {
                     const isOverdue = task.dueDate && !task.completed && isPast(new Date(task.dueDate)) && !isToday(new Date(task.dueDate));
+                    const baseId = task.id.split('-instance-')[0];
                     
                     return (
                       <div
-                        key={task.id}
+                        key={`${task.id}-${task.dueDate?.toString()}`}
                         className={cn(
                           "px-1 py-0.5 text-[9px] rounded border cursor-pointer transition-colors",
                           task.completed 
                             ? "bg-muted/50 text-muted-foreground line-through opacity-60"
                             : priorityColors[task.priority] || priorityColors.low,
-                          isOverdue && "border-destructive"
+                          isOverdue && "border-destructive",
+                          task.isRecurrenceInstance && "border-dashed"
                         )}
                         onClick={() => handleItemClick({ id: task.id, type: 'task' })}
                       >
@@ -355,7 +376,7 @@ export function MonthCalendarView({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              onToggleTaskComplete?.(task.id);
+                              onToggleTaskComplete?.(baseId);
                             }}
                             className="shrink-0"
                           >
