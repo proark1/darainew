@@ -42,6 +42,7 @@ interface HealthData {
   medications?: { name: string; dosage?: string; frequency?: string; isActive: boolean; refillDate?: string }[];
   appointments?: { title: string; date: string; provider?: string; type?: string; isCompleted: boolean }[];
   vaccinations?: { name: string; date: string; nextDose?: string }[];
+  metrics?: { type: string; value: number; unit: string; date: string; source: string }[];
 }
 
 export function useAIChat() {

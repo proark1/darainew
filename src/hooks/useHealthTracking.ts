@@ -51,17 +51,30 @@ export interface Vaccination {
   created_at: string;
 }
 
+export interface HealthMetric {
+  id: string;
+  user_id: string;
+  metric_type: string;
+  value: number;
+  unit: string;
+  recorded_at: string;
+  notes: string | null;
+  source: string;
+  created_at: string;
+}
+
 export function useHealthTracking() {
   const { user } = useAuth();
   const [medications, setMedications] = useState<Medication[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
+  const [healthMetrics, setHealthMetrics] = useState<HealthMetric[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchAll = async () => {
     if (!user?.id) return;
     setIsLoading(true);
-    await Promise.all([fetchMedications(), fetchAppointments(), fetchVaccinations()]);
+    await Promise.all([fetchMedications(), fetchAppointments(), fetchVaccinations(), fetchHealthMetrics()]);
     setIsLoading(false);
   };
 
@@ -107,6 +120,22 @@ export function useHealthTracking() {
       setVaccinations(data || []);
     } catch (error) {
       console.error('Error fetching vaccinations:', error);
+    }
+  };
+
+  const fetchHealthMetrics = async () => {
+    if (!user?.id) return;
+    try {
+      const { data, error } = await supabase
+        .from('health_metrics')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('recorded_at', { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      setHealthMetrics(data || []);
+    } catch (error) {
+      console.error('Error fetching health metrics:', error);
     }
   };
 
@@ -260,10 +289,19 @@ export function useHealthTracking() {
     m.is_active && m.refill_date && new Date(m.refill_date) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
   );
 
+  const getRecentMetrics = (days: number = 30) => {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    return healthMetrics.filter(m => new Date(m.recorded_at) >= cutoff);
+  };
+
+  const getMetricsByType = (type: string) => healthMetrics.filter(m => m.metric_type === type);
+
   return {
     medications,
     appointments,
     vaccinations,
+    healthMetrics,
     isLoading,
     addMedication,
     updateMedication,
@@ -276,6 +314,8 @@ export function useHealthTracking() {
     getUpcomingAppointments,
     getActiveMedications,
     getMedicationsNeedingRefill,
+    getRecentMetrics,
+    getMetricsByType,
     refetch: fetchAll,
   };
 }
