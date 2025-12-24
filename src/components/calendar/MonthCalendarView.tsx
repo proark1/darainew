@@ -3,13 +3,15 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { CalendarEvent, Task } from '@/types/flux';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { usePublicHolidays } from '@/hooks/usePublicHolidays';
 import { 
   ChevronLeft, 
   ChevronRight, 
   CheckCircle2,
   Circle,
   Calendar as CalendarIcon,
-  Plus
+  Plus,
+  Flag
 } from 'lucide-react';
 import { 
   format, 
@@ -24,7 +26,8 @@ import {
   subMonths,
   addWeeks,
   subWeeks,
-  isPast
+  isPast,
+  parseISO
 } from 'date-fns';
 import { de, enUS } from 'date-fns/locale';
 import { EditTaskModal } from '../tasks/EditTaskModal';
@@ -69,6 +72,9 @@ export function MonthCalendarView({
   const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [newTaskCategory, setNewTaskCategory] = useState<'personal' | 'business'>('personal');
   const [newTaskDescription, setNewTaskDescription] = useState('');
+  
+  // Fetch public holidays
+  const { holidays } = usePublicHolidays();
 
   // Calculate days based on view mode
   const days = useMemo(() => {
@@ -112,6 +118,19 @@ export function MonthCalendarView({
     });
     return map;
   }, [events]);
+
+  // Group holidays by date
+  const holidaysByDate = useMemo(() => {
+    const map = new Map<string, typeof holidays>();
+    holidays.forEach(holiday => {
+      const dateKey = holiday.date;
+      if (!map.has(dateKey)) {
+        map.set(dateKey, []);
+      }
+      map.get(dateKey)!.push(holiday);
+    });
+    return map;
+  }, [holidays]);
 
   const navigate = (direction: 'prev' | 'next') => {
     if (viewMode === 'week') {
@@ -265,9 +284,10 @@ export function MonthCalendarView({
             const dateKey = format(day, 'yyyy-MM-dd');
             const dayTasks = tasksByDate.get(dateKey) || [];
             const dayEvents = eventsByDate.get(dateKey) || [];
+            const dayHolidays = holidaysByDate.get(dateKey) || [];
             const isCurrentDay = isToday(day);
             const isCurrentMonth = isSameMonth(day, currentDate);
-            const hasItems = dayTasks.length > 0 || dayEvents.length > 0;
+            const hasItems = dayTasks.length > 0 || dayEvents.length > 0 || dayHolidays.length > 0;
 
             return (
               <div
@@ -291,6 +311,19 @@ export function MonthCalendarView({
                 </div>
 
                 <div className="space-y-0.5 overflow-hidden">
+                  {/* Public Holidays */}
+                  {dayHolidays.slice(0, viewMode === 'week' ? 2 : 1).map((holiday) => (
+                    <div
+                      key={holiday.id}
+                      onClick={(e) => e.stopPropagation()}
+                      className="px-1 py-0.5 text-[9px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 rounded truncate flex items-center gap-0.5"
+                      title={`${holiday.name} (${holiday.country_name})`}
+                    >
+                      <Flag className="w-2 h-2 shrink-0" />
+                      <span className="truncate">{holiday.name}</span>
+                    </div>
+                  ))}
+
                   {/* Events */}
                   {dayEvents.slice(0, viewMode === 'week' ? 5 : 2).map((event) => (
                     <div
@@ -339,9 +372,9 @@ export function MonthCalendarView({
                   })}
 
                   {/* More indicator */}
-                  {(dayTasks.length + dayEvents.length > (viewMode === 'week' ? 5 : 2)) && (
+                  {(dayTasks.length + dayEvents.length + dayHolidays.length > (viewMode === 'week' ? 5 : 2)) && (
                     <div className="text-[8px] text-muted-foreground px-1">
-                      +{(dayTasks.length + dayEvents.length) - (viewMode === 'week' ? 5 : 2)} more
+                      +{(dayTasks.length + dayEvents.length + dayHolidays.length) - (viewMode === 'week' ? 5 : 2)} more
                     </div>
                   )}
                 </div>

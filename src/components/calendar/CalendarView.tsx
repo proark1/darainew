@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { CalendarEvent, Task } from '@/types/flux';
 import { expandRecurringItems } from '@/lib/recurrenceExpander';
 import { EditTaskModal } from '@/components/tasks/EditTaskModal';
+import { usePublicHolidays, PublicHoliday } from '@/hooks/usePublicHolidays';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -12,7 +13,8 @@ import {
   Grid3X3,
   Maximize2,
   Minimize2,
-  Plus
+  Plus,
+  Flag
 } from 'lucide-react';
 import { 
   format, 
@@ -27,7 +29,8 @@ import {
   addMonths,
   addDays,
   subWeeks,
-  subMonths
+  subMonths,
+  parseISO
 } from 'date-fns';
 
 type ViewMode = 'week' | 'month';
@@ -46,7 +49,7 @@ interface CalendarViewProps {
 
 interface CalendarItem {
   id: string;
-  type: 'event' | 'task';
+  type: 'event' | 'task' | 'holiday';
   title: string;
   date: Date;
   endTime?: Date;
@@ -59,6 +62,8 @@ interface CalendarItem {
     display_name: string | null;
     email: string | null;
   };
+  countryCode?: string;
+  countryName?: string;
 }
 
 export function CalendarView({ 
@@ -77,6 +82,9 @@ export function CalendarView({
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskDate, setNewTaskDate] = useState<Date | null>(null);
+  
+  // Fetch public holidays
+  const { holidays } = usePublicHolidays();
 
   // Calculate date range based on view mode
   const { rangeStart, rangeEnd, days } = useMemo(() => {
@@ -119,6 +127,19 @@ export function CalendarView({
 
     const items: CalendarItem[] = [];
 
+    // Add public holidays
+    holidays.forEach(holiday => {
+      const holidayDate = parseISO(holiday.date);
+      items.push({
+        id: `holiday-${holiday.id}`,
+        type: 'holiday',
+        title: `${holiday.name} (${holiday.country_name})`,
+        date: holidayDate,
+        countryCode: holiday.country_code,
+        countryName: holiday.country_name,
+      });
+    });
+
     expandedTasks.forEach(task => {
       if (task.dueDate) {
         const originalTask = tasks.find(t => t.id === task.id.split('-instance-')[0]);
@@ -149,7 +170,7 @@ export function CalendarView({
     });
 
     return items;
-  }, [tasks, events, rangeStart, rangeEnd]);
+  }, [tasks, events, rangeStart, rangeEnd, holidays]);
 
   // Group items by date
   const itemsByDate = useMemo(() => {
@@ -192,6 +213,7 @@ export function CalendarView({
   };
 
   const handleItemClick = (item: CalendarItem) => {
+    if (item.type === 'holiday') return; // Holidays are not clickable
     if (item.type === 'task' && item.originalTask) {
       setEditingTask(item.originalTask);
     } else if (onItemClick) {
@@ -271,11 +293,13 @@ export function CalendarView({
           {dayItems.slice(0, viewMode === 'week' ? 10 : 3).map((item) => (
             <button
               key={`${item.type}-${item.id}-${item.date.getTime()}`}
-              onClick={() => handleItemClick(item)}
+              onClick={() => item.type !== 'holiday' && handleItemClick(item)}
               className={cn(
                 "w-full text-left text-[10px] px-1 py-0.5 rounded truncate border transition-colors flex items-center gap-1",
                 item.type === 'event' 
                   ? "bg-primary/20 text-primary border-primary/30 hover:bg-primary/30"
+                  : item.type === 'holiday'
+                  ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 cursor-default"
                   : priorityColors[item.priority || 'medium'],
                 item.completed && "opacity-50 line-through",
                 item.isRecurrenceInstance && "border-dashed",
@@ -283,6 +307,9 @@ export function CalendarView({
               )}
               title={`${item.title}${item.isRecurrenceInstance ? ' (recurring)' : ''}${item.sharedByOwner ? ` • Shared by ${item.sharedByOwner.display_name || item.sharedByOwner.email}` : ''}`}
             >
+              {item.type === 'holiday' && (
+                <Flag className="w-2.5 h-2.5 shrink-0" />
+              )}
               {item.sharedByOwner && (
                 <span className="w-3 h-3 rounded-full bg-primary/30 text-[6px] flex items-center justify-center font-medium shrink-0">
                   {(item.sharedByOwner.display_name || item.sharedByOwner.email || '?').charAt(0).toUpperCase()}

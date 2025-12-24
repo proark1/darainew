@@ -1807,6 +1807,39 @@ export type Database = {
         }
         Relationships: []
       }
+      public_holidays: {
+        Row: {
+          country_code: string
+          country_name: string
+          created_at: string
+          date: string
+          id: string
+          is_fixed: boolean | null
+          local_name: string | null
+          name: string
+        }
+        Insert: {
+          country_code: string
+          country_name: string
+          created_at?: string
+          date: string
+          id?: string
+          is_fixed?: boolean | null
+          local_name?: string | null
+          name: string
+        }
+        Update: {
+          country_code?: string
+          country_name?: string
+          created_at?: string
+          date?: string
+          id?: string
+          is_fixed?: boolean | null
+          local_name?: string | null
+          name?: string
+        }
+        Relationships: []
+      }
       push_tokens: {
         Row: {
           created_at: string
