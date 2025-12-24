@@ -74,6 +74,48 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_insights: {
+        Row: {
+          action_taken: boolean | null
+          content: string
+          created_at: string
+          data: Json | null
+          expires_at: string | null
+          id: string
+          insight_type: string
+          is_actionable: boolean
+          is_read: boolean
+          title: string
+          user_id: string
+        }
+        Insert: {
+          action_taken?: boolean | null
+          content: string
+          created_at?: string
+          data?: Json | null
+          expires_at?: string | null
+          id?: string
+          insight_type?: string
+          is_actionable?: boolean
+          is_read?: boolean
+          title: string
+          user_id: string
+        }
+        Update: {
+          action_taken?: boolean | null
+          content?: string
+          created_at?: string
+          data?: Json | null
+          expires_at?: string | null
+          id?: string
+          insight_type?: string
+          is_actionable?: boolean
+          is_read?: boolean
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       ai_usage: {
         Row: {
           completion_tokens: number | null
@@ -146,6 +188,54 @@ export type Database = {
           page_path?: string | null
           session_id?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      brain_dumps: {
+        Row: {
+          ai_summary: string | null
+          content: string
+          converted_to_id: string | null
+          converted_to_type: string | null
+          created_at: string
+          id: string
+          is_processed: boolean
+          processed_at: string | null
+          suggested_category: string | null
+          suggested_priority: string | null
+          suggested_type: string | null
+          user_id: string
+          voice_url: string | null
+        }
+        Insert: {
+          ai_summary?: string | null
+          content: string
+          converted_to_id?: string | null
+          converted_to_type?: string | null
+          created_at?: string
+          id?: string
+          is_processed?: boolean
+          processed_at?: string | null
+          suggested_category?: string | null
+          suggested_priority?: string | null
+          suggested_type?: string | null
+          user_id: string
+          voice_url?: string | null
+        }
+        Update: {
+          ai_summary?: string | null
+          content?: string
+          converted_to_id?: string | null
+          converted_to_type?: string | null
+          created_at?: string
+          id?: string
+          is_processed?: boolean
+          processed_at?: string | null
+          suggested_category?: string | null
+          suggested_priority?: string | null
+          suggested_type?: string | null
+          user_id?: string
+          voice_url?: string | null
         }
         Relationships: []
       }
@@ -394,6 +484,66 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      daily_checkins: {
+        Row: {
+          challenges: string | null
+          checkin_date: string
+          checkin_type: string
+          created_at: string
+          day_rating: number | null
+          energy_level: string | null
+          focus_completed: boolean | null
+          id: string
+          main_focus: string | null
+          mood: string | null
+          physical_symptoms: string[] | null
+          sleep_hours: number | null
+          sleep_quality: number | null
+          tomorrow_priority: string | null
+          updated_at: string
+          user_id: string
+          went_well: string | null
+        }
+        Insert: {
+          challenges?: string | null
+          checkin_date?: string
+          checkin_type?: string
+          created_at?: string
+          day_rating?: number | null
+          energy_level?: string | null
+          focus_completed?: boolean | null
+          id?: string
+          main_focus?: string | null
+          mood?: string | null
+          physical_symptoms?: string[] | null
+          sleep_hours?: number | null
+          sleep_quality?: number | null
+          tomorrow_priority?: string | null
+          updated_at?: string
+          user_id: string
+          went_well?: string | null
+        }
+        Update: {
+          challenges?: string | null
+          checkin_date?: string
+          checkin_type?: string
+          created_at?: string
+          day_rating?: number | null
+          energy_level?: string | null
+          focus_completed?: boolean | null
+          id?: string
+          main_focus?: string | null
+          mood?: string | null
+          physical_symptoms?: string[] | null
+          sleep_hours?: number | null
+          sleep_quality?: number | null
+          tomorrow_priority?: string | null
+          updated_at?: string
+          user_id?: string
+          went_well?: string | null
+        }
+        Relationships: []
       }
       direct_messages: {
         Row: {
@@ -1424,6 +1574,57 @@ export type Database = {
         }
         Relationships: []
       }
+      nudge_rules: {
+        Row: {
+          action_config: Json
+          action_type: string
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          last_triggered_at: string | null
+          name: string
+          priority: number
+          times_triggered: number
+          trigger_conditions: Json
+          trigger_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          action_config?: Json
+          action_type: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          last_triggered_at?: string | null
+          name: string
+          priority?: number
+          times_triggered?: number
+          trigger_conditions?: Json
+          trigger_type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          action_config?: Json
+          action_type?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          last_triggered_at?: string | null
+          name?: string
+          priority?: number
+          times_triggered?: number
+          trigger_conditions?: Json
+          trigger_type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       offline_sync_queue: {
         Row: {
           created_at: string
@@ -2283,6 +2484,60 @@ export type Database = {
           title?: string
           type?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      user_xp: {
+        Row: {
+          badges: Json
+          created_at: string
+          current_level: number
+          current_streak: number
+          id: string
+          last_activity_date: string | null
+          longest_streak: number
+          total_xp: number
+          updated_at: string
+          user_id: string
+          week_start_date: string | null
+          weekly_focus_minutes: number
+          weekly_habits_logged: number
+          weekly_tasks_completed: number
+          weekly_xp: number
+        }
+        Insert: {
+          badges?: Json
+          created_at?: string
+          current_level?: number
+          current_streak?: number
+          id?: string
+          last_activity_date?: string | null
+          longest_streak?: number
+          total_xp?: number
+          updated_at?: string
+          user_id: string
+          week_start_date?: string | null
+          weekly_focus_minutes?: number
+          weekly_habits_logged?: number
+          weekly_tasks_completed?: number
+          weekly_xp?: number
+        }
+        Update: {
+          badges?: Json
+          created_at?: string
+          current_level?: number
+          current_streak?: number
+          id?: string
+          last_activity_date?: string | null
+          longest_streak?: number
+          total_xp?: number
+          updated_at?: string
+          user_id?: string
+          week_start_date?: string | null
+          weekly_focus_minutes?: number
+          weekly_habits_logged?: number
+          weekly_tasks_completed?: number
+          weekly_xp?: number
         }
         Relationships: []
       }
