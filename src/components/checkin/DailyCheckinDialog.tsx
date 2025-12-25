@@ -7,7 +7,11 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { useDailyCheckins } from '@/hooks/useDailyCheckins';
 import { useGamification, XP_VALUES } from '@/hooks/useGamification';
-import { Sun, Moon, Battery, BatteryLow, BatteryMedium, BatteryFull, Check } from 'lucide-react';
+import { 
+  Sun, Moon, Battery, BatteryLow, BatteryMedium, BatteryFull, Check,
+  Activity, Brain, Users, Coffee, Wine, Droplets, Smartphone, Pill
+} from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 
 interface DailyCheckinDialogProps {
   open: boolean;
@@ -54,6 +58,18 @@ export function DailyCheckinDialog({ open, onOpenChange, type }: DailyCheckinDia
   const [wentWell, setWentWell] = useState('');
   const [challenges, setChallenges] = useState('');
   const [tomorrowPriority, setTomorrowPriority] = useState('');
+  const [gratitudeNote, setGratitudeNote] = useState('');
+  
+  // New wellness tracking states (evening)
+  const [stressLevel, setStressLevel] = useState(5);
+  const [focusQuality, setFocusQuality] = useState(5);
+  const [socialInteractions, setSocialInteractions] = useState(2);
+  const [exerciseMinutes, setExerciseMinutes] = useState(0);
+  const [caffeineIntake, setCaffeineIntake] = useState(2);
+  const [alcoholUnits, setAlcoholUnits] = useState(0);
+  const [waterGlasses, setWaterGlasses] = useState(4);
+  const [screenTimeMinutes, setScreenTimeMinutes] = useState(120);
+  const [medicationTaken, setMedicationTaken] = useState(false);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -72,7 +88,18 @@ export function DailyCheckinDialog({ open, onOpenChange, type }: DailyCheckinDia
           focus_completed: focusCompleted,
           went_well: wentWell,
           challenges,
-          tomorrow_priority: tomorrowPriority
+          tomorrow_priority: tomorrowPriority,
+          gratitude_note: gratitudeNote,
+          // New wellness fields
+          stress_level: stressLevel,
+          focus_quality: focusQuality,
+          social_interactions: socialInteractions,
+          exercise_minutes: exerciseMinutes,
+          caffeine_intake: caffeineIntake,
+          alcohol_units: alcoholUnits,
+          water_glasses: waterGlasses,
+          screen_time_minutes: screenTimeMinutes,
+          medication_taken: medicationTaken
         };
 
     const result = await saveCheckin(type, data);
@@ -104,7 +131,7 @@ export function DailyCheckinDialog({ open, onOpenChange, type }: DailyCheckinDia
     }
   };
 
-  const totalSteps = type === 'morning' ? 4 : 3;
+  const totalSteps = type === 'morning' ? 4 : 5;
 
   if (completed) {
     return (
@@ -126,7 +153,7 @@ export function DailyCheckinDialog({ open, onOpenChange, type }: DailyCheckinDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {type === 'morning' ? (
@@ -147,6 +174,7 @@ export function DailyCheckinDialog({ open, onOpenChange, type }: DailyCheckinDia
         </DialogHeader>
 
         <div className="py-4 space-y-6">
+          {/* Morning Steps */}
           {type === 'morning' && step === 1 && (
             <div className="space-y-4">
               <Label>How many hours did you sleep?</Label>
@@ -267,6 +295,7 @@ export function DailyCheckinDialog({ open, onOpenChange, type }: DailyCheckinDia
             </div>
           )}
 
+          {/* Evening Steps */}
           {type === 'evening' && step === 1 && (
             <div className="space-y-4">
               <Label>How would you rate your day?</Label>
@@ -334,10 +363,182 @@ export function DailyCheckinDialog({ open, onOpenChange, type }: DailyCheckinDia
                 className="resize-none"
                 rows={2}
               />
+              
+              <Label>What are you grateful for?</Label>
+              <Textarea
+                value={gratitudeNote}
+                onChange={(e) => setGratitudeNote(e.target.value)}
+                placeholder="One thing you appreciated today..."
+                className="resize-none"
+                rows={2}
+              />
             </div>
           )}
 
           {type === 'evening' && step === 3 && (
+            <div className="space-y-5">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Brain className="w-4 h-4 text-purple-500" />
+                  <Label>Stress Level (1-10)</Label>
+                </div>
+                <div className="flex items-center gap-4">
+                  <Slider
+                    value={[stressLevel]}
+                    onValueChange={([v]) => setStressLevel(v)}
+                    min={1}
+                    max={10}
+                    step={1}
+                    className="flex-1"
+                  />
+                  <span className="text-lg font-semibold w-8 text-right">{stressLevel}</span>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Brain className="w-4 h-4 text-blue-500" />
+                  <Label>Focus Quality (1-10)</Label>
+                </div>
+                <div className="flex items-center gap-4">
+                  <Slider
+                    value={[focusQuality]}
+                    onValueChange={([v]) => setFocusQuality(v)}
+                    min={1}
+                    max={10}
+                    step={1}
+                    className="flex-1"
+                  />
+                  <span className="text-lg font-semibold w-8 text-right">{focusQuality}</span>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-green-500" />
+                  <Label>Social Interactions (0-10+)</Label>
+                </div>
+                <div className="flex items-center gap-4">
+                  <Slider
+                    value={[socialInteractions]}
+                    onValueChange={([v]) => setSocialInteractions(v)}
+                    min={0}
+                    max={10}
+                    step={1}
+                    className="flex-1"
+                  />
+                  <span className="text-lg font-semibold w-8 text-right">{socialInteractions}</span>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-orange-500" />
+                  <Label>Exercise (minutes)</Label>
+                </div>
+                <div className="flex items-center gap-4">
+                  <Slider
+                    value={[exerciseMinutes]}
+                    onValueChange={([v]) => setExerciseMinutes(v)}
+                    min={0}
+                    max={120}
+                    step={5}
+                    className="flex-1"
+                  />
+                  <span className="text-lg font-semibold w-12 text-right">{exerciseMinutes}m</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {type === 'evening' && step === 4 && (
+            <div className="space-y-5">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Droplets className="w-4 h-4 text-blue-400" />
+                  <Label>Water (glasses)</Label>
+                </div>
+                <div className="flex items-center gap-4">
+                  <Slider
+                    value={[waterGlasses]}
+                    onValueChange={([v]) => setWaterGlasses(v)}
+                    min={0}
+                    max={12}
+                    step={1}
+                    className="flex-1"
+                  />
+                  <span className="text-lg font-semibold w-8 text-right">{waterGlasses}</span>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Coffee className="w-4 h-4 text-amber-600" />
+                  <Label>Caffeine (cups)</Label>
+                </div>
+                <div className="flex items-center gap-4">
+                  <Slider
+                    value={[caffeineIntake]}
+                    onValueChange={([v]) => setCaffeineIntake(v)}
+                    min={0}
+                    max={8}
+                    step={1}
+                    className="flex-1"
+                  />
+                  <span className="text-lg font-semibold w-8 text-right">{caffeineIntake}</span>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Wine className="w-4 h-4 text-red-400" />
+                  <Label>Alcohol (units)</Label>
+                </div>
+                <div className="flex items-center gap-4">
+                  <Slider
+                    value={[alcoholUnits]}
+                    onValueChange={([v]) => setAlcoholUnits(v)}
+                    min={0}
+                    max={10}
+                    step={1}
+                    className="flex-1"
+                  />
+                  <span className="text-lg font-semibold w-8 text-right">{alcoholUnits}</span>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Smartphone className="w-4 h-4 text-gray-500" />
+                  <Label>Screen Time (hours)</Label>
+                </div>
+                <div className="flex items-center gap-4">
+                  <Slider
+                    value={[screenTimeMinutes]}
+                    onValueChange={([v]) => setScreenTimeMinutes(v)}
+                    min={0}
+                    max={720}
+                    step={30}
+                    className="flex-1"
+                  />
+                  <span className="text-lg font-semibold w-12 text-right">{Math.round(screenTimeMinutes / 60)}h</span>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between py-2 px-3 rounded-lg border">
+                <div className="flex items-center gap-2">
+                  <Pill className="w-4 h-4 text-primary" />
+                  <Label className="cursor-pointer">Medication taken?</Label>
+                </div>
+                <Switch
+                  checked={medicationTaken}
+                  onCheckedChange={setMedicationTaken}
+                />
+              </div>
+            </div>
+          )}
+
+          {type === 'evening' && step === 5 && (
             <div className="space-y-4">
               <Label>What's your priority for tomorrow?</Label>
               <Textarea

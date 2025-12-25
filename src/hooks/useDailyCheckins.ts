@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/hooks/use-toast';
-import { format, isToday, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 
 export interface DailyCheckin {
   id: string;
@@ -24,6 +24,18 @@ export interface DailyCheckin {
   went_well?: string;
   challenges?: string;
   tomorrow_priority?: string;
+  gratitude_note?: string;
+  
+  // Wellness tracking fields
+  stress_level?: number;
+  focus_quality?: number;
+  social_interactions?: number;
+  medication_taken?: boolean;
+  exercise_minutes?: number;
+  caffeine_intake?: number;
+  alcohol_units?: number;
+  screen_time_minutes?: number;
+  water_glasses?: number;
   
   created_at: string;
   updated_at: string;
@@ -161,13 +173,38 @@ export function useDailyCheckins() {
     const energyMap = { low: 1, medium: 2, high: 3 };
     const energyData = recent.filter(c => c.energy_level).map(c => energyMap[c.energy_level!]);
     const ratingData = recent.filter(c => c.day_rating).map(c => c.day_rating!);
+    const stressData = recent.filter(c => c.stress_level).map(c => c.stress_level!);
+    const focusData = recent.filter(c => c.focus_quality).map(c => c.focus_quality!);
+    const exerciseData = recent.filter(c => c.exercise_minutes).map(c => c.exercise_minutes!);
+    const waterData = recent.filter(c => c.water_glasses).map(c => c.water_glasses!);
     
     return {
       avgSleep: sleepData.length ? sleepData.reduce((a, b) => a + b, 0) / sleepData.length : 0,
       avgEnergy: energyData.length ? energyData.reduce((a, b) => a + b, 0) / energyData.length : 0,
       avgDayRating: ratingData.length ? ratingData.reduce((a, b) => a + b, 0) / ratingData.length : 0,
+      avgStress: stressData.length ? stressData.reduce((a, b) => a + b, 0) / stressData.length : 0,
+      avgFocus: focusData.length ? focusData.reduce((a, b) => a + b, 0) / focusData.length : 0,
+      avgExercise: exerciseData.length ? exerciseData.reduce((a, b) => a + b, 0) / exerciseData.length : 0,
+      avgWater: waterData.length ? waterData.reduce((a, b) => a + b, 0) / waterData.length : 0,
       focusCompletionRate: recent.filter(c => c.focus_completed).length / Math.max(recent.filter(c => c.focus_completed !== undefined).length, 1)
     };
+  }, [checkins]);
+
+  // Get wellness trends for the last N days
+  const getWellnessTrends = useCallback((days = 14) => {
+    const recentCheckins = checkins
+      .filter(c => c.checkin_type === 'evening')
+      .slice(0, days);
+    
+    return recentCheckins.map(c => ({
+      date: c.checkin_date,
+      stress: c.stress_level,
+      focus: c.focus_quality,
+      exercise: c.exercise_minutes,
+      water: c.water_glasses,
+      social: c.social_interactions,
+      dayRating: c.day_rating
+    })).reverse();
   }, [checkins]);
 
   useEffect(() => {
@@ -184,6 +221,7 @@ export function useDailyCheckins() {
     needsMorningCheckin,
     needsEveningCheckin,
     getRecentMoods,
-    getAverageStats
+    getAverageStats,
+    getWellnessTrends
   };
 }
