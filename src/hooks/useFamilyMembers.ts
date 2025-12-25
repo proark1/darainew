@@ -15,6 +15,11 @@ export interface FamilyMember {
   phone: string | null;
   email: string | null;
   notes: string | null;
+  attends_kindergarten: boolean;
+  attends_school: boolean;
+  kindergarten_name: string | null;
+  kindergarten_teacher_name: string | null;
+  kindergarten_teacher_contact: string | null;
   school_name: string | null;
   school_grade: string | null;
   teacher_name: string | null;

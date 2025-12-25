@@ -45,6 +45,11 @@ export function EditFamilyMemberDialog({ member, open, onOpenChange }: EditFamil
     notes: member.notes || '',
     lives_with_user: member.lives_with_user,
     address: member.address || '',
+    attends_kindergarten: member.attends_kindergarten || false,
+    attends_school: member.attends_school || false,
+    kindergarten_name: member.kindergarten_name || '',
+    kindergarten_teacher_name: member.kindergarten_teacher_name || '',
+    kindergarten_teacher_contact: member.kindergarten_teacher_contact || '',
     school_name: member.school_name || '',
     school_grade: member.school_grade || '',
     teacher_name: member.teacher_name || '',
@@ -69,6 +74,11 @@ export function EditFamilyMemberDialog({ member, open, onOpenChange }: EditFamil
       notes: member.notes || '',
       lives_with_user: member.lives_with_user,
       address: member.address || '',
+      attends_kindergarten: member.attends_kindergarten || false,
+      attends_school: member.attends_school || false,
+      kindergarten_name: member.kindergarten_name || '',
+      kindergarten_teacher_name: member.kindergarten_teacher_name || '',
+      kindergarten_teacher_contact: member.kindergarten_teacher_contact || '',
       school_name: member.school_name || '',
       school_grade: member.school_grade || '',
       teacher_name: member.teacher_name || '',
@@ -91,6 +101,11 @@ export function EditFamilyMemberDialog({ member, open, onOpenChange }: EditFamil
       email: formData.email || null,
       notes: formData.notes || null,
       address: formData.address || null,
+      attends_kindergarten: formData.attends_kindergarten,
+      attends_school: formData.attends_school,
+      kindergarten_name: formData.kindergarten_name || null,
+      kindergarten_teacher_name: formData.kindergarten_teacher_name || null,
+      kindergarten_teacher_contact: formData.kindergarten_teacher_contact || null,
       school_name: formData.school_name || null,
       school_grade: formData.school_grade || null,
       teacher_name: formData.teacher_name || null,
@@ -265,38 +280,93 @@ export function EditFamilyMemberDialog({ member, open, onOpenChange }: EditFamil
             </TabsContent>
 
             <TabsContent value="school" className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>School Name</Label>
-                  <Input
-                    value={formData.school_name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, school_name: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Grade/Class</Label>
-                  <Input
-                    value={formData.school_grade}
-                    onChange={(e) => setFormData(prev => ({ ...prev, school_grade: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Teacher Name</Label>
-                  <Input
-                    value={formData.teacher_name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, teacher_name: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Teacher Contact</Label>
-                  <Input
-                    value={formData.teacher_contact}
-                    onChange={(e) => setFormData(prev => ({ ...prev, teacher_contact: e.target.value }))}
-                  />
-                </div>
+              {/* Kindergarten Section */}
+              <div className="flex items-center justify-between">
+                <Label htmlFor="edit_attends_kindergarten">Attends Kindergarten</Label>
+                <Switch
+                  id="edit_attends_kindergarten"
+                  checked={formData.attends_kindergarten}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, attends_kindergarten: checked }))}
+                />
               </div>
+              
+              {formData.attends_kindergarten && (
+                <div className="grid gap-4 sm:grid-cols-2 pl-4 border-l-2 border-primary/20">
+                  <div className="space-y-2">
+                    <Label>Kindergarten Name</Label>
+                    <Input
+                      value={formData.kindergarten_name}
+                      onChange={(e) => setFormData(prev => ({ ...prev, kindergarten_name: e.target.value }))}
+                      placeholder="Kindergarten name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Teacher Name</Label>
+                    <Input
+                      value={formData.kindergarten_teacher_name}
+                      onChange={(e) => setFormData(prev => ({ ...prev, kindergarten_teacher_name: e.target.value }))}
+                      placeholder="Teacher's name"
+                    />
+                  </div>
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label>Teacher Contact</Label>
+                    <Input
+                      value={formData.kindergarten_teacher_contact}
+                      onChange={(e) => setFormData(prev => ({ ...prev, kindergarten_teacher_contact: e.target.value }))}
+                      placeholder="Email or phone"
+                    />
+                  </div>
+                </div>
+              )}
 
-              <div className="space-y-3">
+              {/* School Section */}
+              <div className="flex items-center justify-between">
+                <Label htmlFor="edit_attends_school">Attends School</Label>
+                <Switch
+                  id="edit_attends_school"
+                  checked={formData.attends_school}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, attends_school: checked }))}
+                />
+              </div>
+              
+              {formData.attends_school && (
+                <div className="grid gap-4 sm:grid-cols-2 pl-4 border-l-2 border-primary/20">
+                  <div className="space-y-2">
+                    <Label>School Name</Label>
+                    <Input
+                      value={formData.school_name}
+                      onChange={(e) => setFormData(prev => ({ ...prev, school_name: e.target.value }))}
+                      placeholder="School name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Grade/Class</Label>
+                    <Input
+                      value={formData.school_grade}
+                      onChange={(e) => setFormData(prev => ({ ...prev, school_grade: e.target.value }))}
+                      placeholder="e.g., 3rd Grade"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Teacher Name</Label>
+                    <Input
+                      value={formData.teacher_name}
+                      onChange={(e) => setFormData(prev => ({ ...prev, teacher_name: e.target.value }))}
+                      placeholder="Teacher's name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Teacher Contact</Label>
+                    <Input
+                      value={formData.teacher_contact}
+                      onChange={(e) => setFormData(prev => ({ ...prev, teacher_contact: e.target.value }))}
+                      placeholder="Email or phone"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-3 border-t pt-4">
                 <Label>Milestones</Label>
                 {formData.milestones.map((milestone, index) => (
                   <div key={index} className="flex items-center gap-2 p-2 bg-muted rounded">
