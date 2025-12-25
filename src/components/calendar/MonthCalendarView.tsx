@@ -73,6 +73,13 @@ export function MonthCalendarView({
   const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [newTaskCategory, setNewTaskCategory] = useState<'personal' | 'business'>('personal');
   const [newTaskDescription, setNewTaskDescription] = useState('');
+  const [selectedHoliday, setSelectedHoliday] = useState<{
+    name: string;
+    local_name: string | null;
+    date: string;
+    country_name: string;
+    country_code: string;
+  } | null>(null);
   
   // Fetch public holidays
   const { holidays } = usePublicHolidays();
@@ -334,8 +341,17 @@ export function MonthCalendarView({
                   {dayHolidays.slice(0, viewMode === 'week' ? 2 : 1).map((holiday) => (
                     <div
                       key={holiday.id}
-                      onClick={(e) => e.stopPropagation()}
-                      className="px-1 py-0.5 text-[9px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 rounded truncate flex items-center gap-0.5"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedHoliday({
+                          name: holiday.name,
+                          local_name: holiday.local_name,
+                          date: holiday.date,
+                          country_name: holiday.country_name,
+                          country_code: holiday.country_code,
+                        });
+                      }}
+                      className="px-1 py-0.5 text-[9px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 rounded truncate flex items-center gap-0.5 cursor-pointer hover:bg-emerald-500/30 transition-colors"
                       title={`${holiday.name} (${holiday.country_name})`}
                     >
                       <Flag className="w-2 h-2 shrink-0" />
@@ -491,6 +507,48 @@ export function MonthCalendarView({
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Holiday Details Dialog */}
+      <Dialog open={!!selectedHoliday} onOpenChange={(open) => !open && setSelectedHoliday(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Flag className="w-5 h-5 text-emerald-500" />
+              Public Holiday
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedHoliday && (
+            <div className="space-y-4 py-2">
+              <div className="space-y-1">
+                <p className="text-lg font-semibold">{selectedHoliday.name}</p>
+                {selectedHoliday.local_name && selectedHoliday.local_name !== selectedHoliday.name && (
+                  <p className="text-sm text-muted-foreground italic">
+                    {selectedHoliday.local_name}
+                  </p>
+                )}
+              </div>
+
+              <div className="grid gap-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <CalendarIcon className="w-4 h-4 text-muted-foreground" />
+                  <span>{format(parseISO(selectedHoliday.date), 'EEEE, MMMM d, yyyy', { locale: dateLocale })}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Flag className="w-4 h-4 text-muted-foreground" />
+                  <span>{selectedHoliday.country_name} ({selectedHoliday.country_code})</span>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <Button variant="outline" onClick={() => setSelectedHoliday(null)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

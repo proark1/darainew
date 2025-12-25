@@ -13,16 +13,19 @@ import { parseTaskInput } from '@/lib/taskParser';
 import { detectProjectFromText } from '@/lib/projectDetection';
 import { Task, Project } from '@/types/flux';
 import { format } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
 
 interface QuickAddButtonProps {
-  onAddTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
+  onAddTask: (task: Omit<Task, 'id' | 'createdAt'>) => Promise<Task | null> | void;
   projects?: Project[];
 }
 
 export function QuickAddButton({ onAddTask, projects = [] }: QuickAddButtonProps) {
+  const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const parsedTask = input.trim() ? parseTaskInput(input) : null;
@@ -38,23 +41,43 @@ export function QuickAddButton({ onAddTask, projects = [] }: QuickAddButtonProps
     }
   }, [isOpen]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!parsedTask || !parsedTask.title) return;
+    if (!parsedTask || !parsedTask.title || isSubmitting) return;
 
-    onAddTask({
-      title: parsedTask.title,
-      priority: parsedTask.priority,
-      category: parsedTask.category,
-      completed: false,
-      dueDate: parsedTask.dueDate,
-      sortOrder: 0,
-      projectId: selectedProjectId || projectSuggestion?.project.id,
-    });
+    setIsSubmitting(true);
+    
+    try {
+      const result = await onAddTask({
+        title: parsedTask.title,
+        priority: parsedTask.priority,
+        category: parsedTask.category,
+        status: 'backlog',
+        completed: false,
+        dueDate: parsedTask.dueDate,
+        sortOrder: 0,
+        projectId: selectedProjectId || projectSuggestion?.project.id,
+      });
 
-    setInput('');
-    setSelectedProjectId(undefined);
-    setIsOpen(false);
+      // Show success toast
+      toast({
+        title: 'Task Added',
+        description: parsedTask.title,
+      });
+
+      setInput('');
+      setSelectedProjectId(undefined);
+      setIsOpen(false);
+    } catch (error) {
+      console.error('Failed to add task:', error);
+      toast({
+        title: 'Failed to add task',
+        description: 'Please try again',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleAcceptSuggestion = () => {
@@ -176,9 +199,9 @@ export function QuickAddButton({ onAddTask, projects = [] }: QuickAddButtonProps
             <Button 
               type="submit" 
               size="sm"
-              disabled={!parsedTask?.title}
+              disabled={!parsedTask?.title || isSubmitting}
             >
-              Add Task
+              {isSubmitting ? 'Adding...' : 'Add Task'}
             </Button>
           </div>
         </form>
