@@ -5,7 +5,7 @@ import { Task, CalendarEvent } from '@/types/flux';
 
 export interface Nudge {
   id: string;
-  type: 'time_blindness' | 'break_reminder' | 'transition' | 'hydration' | 'task_start' | 'stuck_detection';
+  type: 'time_blindness' | 'break_reminder' | 'transition' | 'hydration' | 'task_start' | 'stuck_detection' | 'pattern_insight' | 'wellness_alert';
   title: string;
   message: string;
   action?: {
@@ -23,8 +23,19 @@ interface NudgeSettings {
   transitionWarningsEnabled: boolean;
   hydrationRemindersEnabled: boolean;
   stuckDetectionEnabled: boolean;
+  patternNudgesEnabled: boolean;
   breakIntervalMinutes: number;
   hydrationIntervalMinutes: number;
+}
+
+interface UserPattern {
+  id: string;
+  pattern_type: string;
+  category: string;
+  title: string;
+  description: string;
+  confidence_score: number;
+  variables: string[];
 }
 
 const DEFAULT_SETTINGS: NudgeSettings = {
@@ -33,6 +44,7 @@ const DEFAULT_SETTINGS: NudgeSettings = {
   transitionWarningsEnabled: true,
   hydrationRemindersEnabled: true,
   stuckDetectionEnabled: true,
+  patternNudgesEnabled: true,
   breakIntervalMinutes: 45,
   hydrationIntervalMinutes: 60,
 };
@@ -46,12 +58,39 @@ export function useSmartNudges(
   const [activeNudge, setActiveNudge] = useState<Nudge | null>(null);
   const [settings, setSettings] = useState<NudgeSettings>(DEFAULT_SETTINGS);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [patterns, setPatterns] = useState<UserPattern[]>([]);
   
   // Timers
   const lastBreakRef = useRef<Date>(new Date());
   const lastHydrationRef = useRef<Date>(new Date());
   const taskStartTimeRef = useRef<Date | null>(null);
   const focusStartRef = useRef<Date | null>(null);
+  const lastPatternNudgeRef = useRef<Date>(new Date(0));
+
+  // Fetch user patterns for pattern-aware nudges
+  useEffect(() => {
+    if (!user || !settings.patternNudgesEnabled) return;
+    
+    const fetchPatterns = async () => {
+      const { data, error } = await supabase
+        .from('user_patterns')
+        .select('id, pattern_type, category, title, description, confidence_score, variables')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .gte('confidence_score', 0.6)
+        .order('confidence_score', { ascending: false })
+        .limit(10);
+      
+      if (!error && data) {
+        setPatterns(data as UserPattern[]);
+      }
+    };
+    
+    fetchPatterns();
+    // Refresh patterns every hour
+    const interval = setInterval(fetchPatterns, 60 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [user, settings.patternNudgesEnabled]);
 
   // Reset timers when starting a task
   useEffect(() => {
@@ -84,6 +123,76 @@ export function useSmartNudges(
     lastHydrationRef.current = new Date();
     dismissNudge('hydration_reminder');
   }, [dismissNudge]);
+
+  // Check for pattern-based nudges
+  const checkPatternNudges = useCallback(() => {
+    if (!settings.patternNudgesEnabled || patterns.length === 0) return null;
+    
+    const now = new Date();
+    const hour = now.getHours();
+    const dayOfWeek = now.getDay();
+    
+    // Only show pattern nudges once every 2 hours max
+    const timeSinceLastPatternNudge = (now.getTime() - lastPatternNudgeRef.current.getTime()) / 60000;
+    if (timeSinceLastPatternNudge < 120) return null;
+    
+    // Find relevant pattern based on time/context
+    for (const pattern of patterns) {
+      // Sleep-productivity pattern: nudge in morning if relevant
+      if (pattern.category === 'sleep' && hour >= 6 && hour <= 9) {
+        lastPatternNudgeRef.current = new Date();
+        return {
+          id: `pattern_${pattern.id}_${now.toDateString()}`,
+          type: 'pattern_insight' as const,
+          title: '💡 Pattern Insight',
+          message: pattern.description,
+          priority: 'medium' as const,
+          dismissable: true,
+        };
+      }
+      
+      // Productivity patterns: nudge during work hours
+      if (pattern.category === 'productivity' && hour >= 9 && hour <= 17) {
+        lastPatternNudgeRef.current = new Date();
+        return {
+          id: `pattern_${pattern.id}_${now.toDateString()}`,
+          type: 'pattern_insight' as const,
+          title: '📊 Productivity Insight',
+          message: pattern.description,
+          priority: 'low' as const,
+          dismissable: true,
+        };
+      }
+      
+      // Mood/energy patterns: nudge in afternoon
+      if ((pattern.category === 'mood' || pattern.category === 'health') && hour >= 14 && hour <= 16) {
+        lastPatternNudgeRef.current = new Date();
+        return {
+          id: `pattern_${pattern.id}_${now.toDateString()}`,
+          type: 'wellness_alert' as const,
+          title: '🌟 Wellness Tip',
+          message: pattern.description,
+          priority: 'low' as const,
+          dismissable: true,
+        };
+      }
+      
+      // Exercise patterns: nudge in late afternoon/evening
+      if (pattern.category === 'exercise' && hour >= 16 && hour <= 19) {
+        lastPatternNudgeRef.current = new Date();
+        return {
+          id: `pattern_${pattern.id}_${now.toDateString()}`,
+          type: 'wellness_alert' as const,
+          title: '🏃 Activity Reminder',
+          message: pattern.description,
+          priority: 'medium' as const,
+          dismissable: true,
+        };
+      }
+    }
+    
+    return null;
+  }, [settings.patternNudgesEnabled, patterns]);
 
   // Check for upcoming events (transition warnings)
   const checkTransitions = useCallback(() => {
@@ -229,7 +338,7 @@ export function useSmartNudges(
     if (!user) return;
 
     const checkNudges = () => {
-      // Priority order: transitions > time blindness > breaks > stuck > hydration
+      // Priority order: transitions > time blindness > pattern insights > breaks > stuck > hydration
       const transition = checkTransitions();
       if (transition) {
         showNudge(transition);
@@ -239,6 +348,13 @@ export function useSmartNudges(
       const timeBlindness = checkTimeBlindness();
       if (timeBlindness) {
         showNudge(timeBlindness);
+        return;
+      }
+
+      // Pattern-based nudges (new!)
+      const patternNudge = checkPatternNudges();
+      if (patternNudge) {
+        showNudge(patternNudge);
         return;
       }
 
@@ -275,6 +391,7 @@ export function useSmartNudges(
     user,
     checkTransitions,
     checkTimeBlindness,
+    checkPatternNudges,
     checkBreakNeeded,
     checkStuckDetection,
     checkHydration,
@@ -297,6 +414,7 @@ export function useSmartNudges(
     setSettings,
     takeBreak,
     drinkWater,
+    patterns,
     resetBreakTimer: () => { lastBreakRef.current = new Date(); },
     resetHydrationTimer: () => { lastHydrationRef.current = new Date(); },
   };
