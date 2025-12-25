@@ -969,6 +969,8 @@ export type Database = {
           activities: Json | null
           address: string | null
           allergies: string[] | null
+          attends_kindergarten: boolean | null
+          attends_school: boolean | null
           avatar_url: string | null
           birth_date: string | null
           clothing_sizes: Json | null
@@ -977,6 +979,9 @@ export type Database = {
           email: string | null
           id: string
           is_active: boolean | null
+          kindergarten_name: string | null
+          kindergarten_teacher_contact: string | null
+          kindergarten_teacher_name: string | null
           lives_with_user: boolean | null
           medical_notes: string | null
           milestones: Json | null
@@ -996,6 +1001,8 @@ export type Database = {
           activities?: Json | null
           address?: string | null
           allergies?: string[] | null
+          attends_kindergarten?: boolean | null
+          attends_school?: boolean | null
           avatar_url?: string | null
           birth_date?: string | null
           clothing_sizes?: Json | null
@@ -1004,6 +1011,9 @@ export type Database = {
           email?: string | null
           id?: string
           is_active?: boolean | null
+          kindergarten_name?: string | null
+          kindergarten_teacher_contact?: string | null
+          kindergarten_teacher_name?: string | null
           lives_with_user?: boolean | null
           medical_notes?: string | null
           milestones?: Json | null
@@ -1023,6 +1033,8 @@ export type Database = {
           activities?: Json | null
           address?: string | null
           allergies?: string[] | null
+          attends_kindergarten?: boolean | null
+          attends_school?: boolean | null
           avatar_url?: string | null
           birth_date?: string | null
           clothing_sizes?: Json | null
@@ -1031,6 +1043,9 @@ export type Database = {
           email?: string | null
           id?: string
           is_active?: boolean | null
+          kindergarten_name?: string | null
+          kindergarten_teacher_contact?: string | null
+          kindergarten_teacher_name?: string | null
           lives_with_user?: boolean | null
           medical_notes?: string | null
           milestones?: Json | null

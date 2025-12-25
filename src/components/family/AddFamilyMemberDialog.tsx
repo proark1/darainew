@@ -41,6 +41,11 @@ export function AddFamilyMemberDialog({ open, onOpenChange }: AddFamilyMemberDia
     lives_with_user: true,
     address: '',
     // Child-specific fields
+    attends_kindergarten: false,
+    attends_school: false,
+    kindergarten_name: '',
+    kindergarten_teacher_name: '',
+    kindergarten_teacher_contact: '',
     school_name: '',
     school_grade: '',
     teacher_name: '',
@@ -62,6 +67,11 @@ export function AddFamilyMemberDialog({ open, onOpenChange }: AddFamilyMemberDia
       notes: formData.notes || null,
       lives_with_user: formData.lives_with_user,
       address: formData.address || null,
+      attends_kindergarten: formData.attends_kindergarten,
+      attends_school: formData.attends_school,
+      kindergarten_name: formData.kindergarten_name || null,
+      kindergarten_teacher_name: formData.kindergarten_teacher_name || null,
+      kindergarten_teacher_contact: formData.kindergarten_teacher_contact || null,
       school_name: formData.school_name || null,
       school_grade: formData.school_grade || null,
       teacher_name: formData.teacher_name || null,
@@ -89,6 +99,11 @@ export function AddFamilyMemberDialog({ open, onOpenChange }: AddFamilyMemberDia
         notes: '',
         lives_with_user: true,
         address: '',
+        attends_kindergarten: false,
+        attends_school: false,
+        kindergarten_name: '',
+        kindergarten_teacher_name: '',
+        kindergarten_teacher_contact: '',
         school_name: '',
         school_grade: '',
         teacher_name: '',
@@ -198,45 +213,100 @@ export function AddFamilyMemberDialog({ open, onOpenChange }: AddFamilyMemberDia
           {isChild && (
             <>
               <div className="border-t pt-4">
-                <h4 className="font-medium mb-3">School Information</h4>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="school_name">School Name</Label>
-                    <Input
-                      id="school_name"
-                      value={formData.school_name}
-                      onChange={(e) => setFormData(prev => ({ ...prev, school_name: e.target.value }))}
-                      placeholder="School name"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="school_grade">Grade/Class</Label>
-                    <Input
-                      id="school_grade"
-                      value={formData.school_grade}
-                      onChange={(e) => setFormData(prev => ({ ...prev, school_grade: e.target.value }))}
-                      placeholder="e.g., 3rd Grade"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="teacher_name">Teacher Name</Label>
-                    <Input
-                      id="teacher_name"
-                      value={formData.teacher_name}
-                      onChange={(e) => setFormData(prev => ({ ...prev, teacher_name: e.target.value }))}
-                      placeholder="Teacher's name"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="teacher_contact">Teacher Contact</Label>
-                    <Input
-                      id="teacher_contact"
-                      value={formData.teacher_contact}
-                      onChange={(e) => setFormData(prev => ({ ...prev, teacher_contact: e.target.value }))}
-                      placeholder="Email or phone"
-                    />
-                  </div>
+                <h4 className="font-medium mb-3">Education</h4>
+                
+                {/* Kindergarten Section */}
+                <div className="flex items-center justify-between mb-3">
+                  <Label htmlFor="attends_kindergarten">Attends Kindergarten</Label>
+                  <Switch
+                    id="attends_kindergarten"
+                    checked={formData.attends_kindergarten}
+                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, attends_kindergarten: checked }))}
+                  />
                 </div>
+                
+                {formData.attends_kindergarten && (
+                  <div className="grid gap-4 sm:grid-cols-2 mb-4 pl-4 border-l-2 border-primary/20">
+                    <div className="space-y-2">
+                      <Label htmlFor="kindergarten_name">Kindergarten Name</Label>
+                      <Input
+                        id="kindergarten_name"
+                        value={formData.kindergarten_name}
+                        onChange={(e) => setFormData(prev => ({ ...prev, kindergarten_name: e.target.value }))}
+                        placeholder="Kindergarten name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="kindergarten_teacher_name">Teacher Name</Label>
+                      <Input
+                        id="kindergarten_teacher_name"
+                        value={formData.kindergarten_teacher_name}
+                        onChange={(e) => setFormData(prev => ({ ...prev, kindergarten_teacher_name: e.target.value }))}
+                        placeholder="Teacher's name"
+                      />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="kindergarten_teacher_contact">Teacher Contact</Label>
+                      <Input
+                        id="kindergarten_teacher_contact"
+                        value={formData.kindergarten_teacher_contact}
+                        onChange={(e) => setFormData(prev => ({ ...prev, kindergarten_teacher_contact: e.target.value }))}
+                        placeholder="Email or phone"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* School Section */}
+                <div className="flex items-center justify-between mb-3">
+                  <Label htmlFor="attends_school">Attends School</Label>
+                  <Switch
+                    id="attends_school"
+                    checked={formData.attends_school}
+                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, attends_school: checked }))}
+                  />
+                </div>
+                
+                {formData.attends_school && (
+                  <div className="grid gap-4 sm:grid-cols-2 pl-4 border-l-2 border-primary/20">
+                    <div className="space-y-2">
+                      <Label htmlFor="school_name">School Name</Label>
+                      <Input
+                        id="school_name"
+                        value={formData.school_name}
+                        onChange={(e) => setFormData(prev => ({ ...prev, school_name: e.target.value }))}
+                        placeholder="School name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="school_grade">Grade/Class</Label>
+                      <Input
+                        id="school_grade"
+                        value={formData.school_grade}
+                        onChange={(e) => setFormData(prev => ({ ...prev, school_grade: e.target.value }))}
+                        placeholder="e.g., 3rd Grade"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="teacher_name">Teacher Name</Label>
+                      <Input
+                        id="teacher_name"
+                        value={formData.teacher_name}
+                        onChange={(e) => setFormData(prev => ({ ...prev, teacher_name: e.target.value }))}
+                        placeholder="Teacher's name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="teacher_contact">Teacher Contact</Label>
+                      <Input
+                        id="teacher_contact"
+                        value={formData.teacher_contact}
+                        onChange={(e) => setFormData(prev => ({ ...prev, teacher_contact: e.target.value }))}
+                        placeholder="Email or phone"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}
