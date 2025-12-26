@@ -31,6 +31,7 @@ const NotesPanel = lazy(() => import('../notes/NotesPanel').then(m => ({ default
 const HabitsPanel = lazy(() => import('../habits/HabitsPanel').then(m => ({ default: m.HabitsPanel })));
 const AdminAnalyticsPanel = lazy(() => import('../admin/AdminAnalyticsPanel').then(m => ({ default: m.AdminAnalyticsPanel })));
 const FamilyPanel = lazy(() => import('../family/FamilyPanel').then(m => ({ default: m.FamilyPanel })));
+const IslamPanel = lazy(() => import('../islam/IslamPanel').then(m => ({ default: m.IslamPanel })));
 const CallHistory = lazy(() => import('../calling/CallHistory').then(m => ({ default: m.CallHistory })));
 const SocialPanel = lazy(() => import('../social/SocialPanel').then(m => ({ default: m.SocialPanel })));
 const DashboardPanel = lazy(() => import('../dashboard/DashboardPanel').then(m => ({ default: m.DashboardPanel })));
@@ -586,6 +587,13 @@ export function StandardMode({
               {activePanel === 'admin' && user?.id && (
                 <div className="flex-1 glass-panel-solid rounded-xl overflow-hidden">
                   <AdminAnalyticsPanel userId={user.id} />
+                </div>
+              )}
+
+              {/* Islam Panel */}
+              {activePanel === 'islam' && (
+                <div className="flex-1 glass-panel-solid rounded-xl overflow-hidden">
+                  <IslamPanel />
                 </div>
               )}
             </Suspense>
