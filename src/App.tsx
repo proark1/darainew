@@ -10,14 +10,14 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NetworkStatusBanner } from "@/components/NetworkStatusBanner";
 import { AssistantOutreachBubble } from "@/components/assistant/AssistantOutreachBubble";
 import { useMorningAutoPlay } from "@/hooks/useMorningAutoPlay";
-import { 
-  LazyIndex, 
-  LazyAuth, 
-  LazyDashboard, 
-  LazyContactsPage, 
-  LazyContractsPage, 
+import Index from "@/pages/Index";
+import {
+  LazyAuth,
+  LazyDashboard,
+  LazyContactsPage,
+  LazyContractsPage,
   LazyNotFound,
-  PageFallback 
+  PageFallback,
 } from "@/components/lazy";
 
 const queryClient = new QueryClient();
@@ -71,7 +71,7 @@ function AppContent() {
             path="/"
             element={
               <ProtectedRoute>
-                <LazyIndex />
+                <Index />
               </ProtectedRoute>
             }
           />
