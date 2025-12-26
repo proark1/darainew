@@ -1625,6 +1625,51 @@ export type Database = {
           },
         ]
       }
+      location_triggers: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          last_triggered_at: string | null
+          latitude: number
+          longitude: number
+          name: string
+          radius_meters: number
+          reminder_message: string
+          trigger_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_triggered_at?: string | null
+          latitude: number
+          longitude: number
+          name: string
+          radius_meters?: number
+          reminder_message: string
+          trigger_type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_triggered_at?: string | null
+          latitude?: number
+          longitude?: number
+          name?: string
+          radius_meters?: number
+          reminder_message?: string
+          trigger_type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       meal_plans: {
         Row: {
           created_at: string
@@ -1917,6 +1962,8 @@ export type Database = {
       }
       proactive_settings: {
         Row: {
+          calendar_overload_enabled: boolean | null
+          calendar_overload_threshold: number | null
           contact_checkin_days: number | null
           contact_checkins_enabled: boolean | null
           contract_reminder_days: number[] | null
@@ -1945,6 +1992,8 @@ export type Database = {
           weekly_planning_enabled: boolean | null
         }
         Insert: {
+          calendar_overload_enabled?: boolean | null
+          calendar_overload_threshold?: number | null
           contact_checkin_days?: number | null
           contact_checkins_enabled?: boolean | null
           contract_reminder_days?: number[] | null
@@ -1973,6 +2022,8 @@ export type Database = {
           weekly_planning_enabled?: boolean | null
         }
         Update: {
+          calendar_overload_enabled?: boolean | null
+          calendar_overload_threshold?: number | null
           contact_checkin_days?: number | null
           contact_checkins_enabled?: boolean | null
           contract_reminder_days?: number[] | null

@@ -16,6 +16,8 @@ interface ProactiveSettings {
   habit_streaks_enabled: boolean;
   weekly_planning_enabled: boolean;
   daily_review_enabled: boolean;
+  calendar_overload_enabled: boolean;
+  calendar_overload_threshold: number;
   forgotten_task_days: number;
   contact_checkin_days: number;
   contract_reminder_days: number[];
@@ -92,6 +94,8 @@ serve(async (req) => {
         habit_streaks_enabled: true,
         weekly_planning_enabled: true,
         daily_review_enabled: true,
+        calendar_overload_enabled: true,
+        calendar_overload_threshold: 6,
         forgotten_task_days: 3,
         contact_checkin_days: 14,
         contract_reminder_days: [30, 14, 7, 3, 1],
@@ -164,6 +168,14 @@ serve(async (req) => {
       if (!trigger_type || trigger_type === 'daily_review') {
         if (settings.daily_review_enabled) {
           const reminders = await checkDailyReview(supabase, userId);
+          remindersCreated.push(...reminders);
+        }
+      }
+
+      // Calendar Overload Detection
+      if (!trigger_type || trigger_type === 'calendar_overload') {
+        if (settings.calendar_overload_enabled) {
+          const reminders = await checkCalendarOverload(supabase, userId, settings.calendar_overload_threshold);
           remindersCreated.push(...reminders);
         }
       }
@@ -493,6 +505,96 @@ async function checkHabitStreaks(supabase: any, userId: string, warningHours: nu
   }
 
   return reminders;
+}
+
+// Check for calendar overload (too many meetings in a day)
+async function checkCalendarOverload(supabase: any, userId: string, threshold: number) {
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  
+  // Check tomorrow's events in evening, or today's events in morning
+  const currentHour = now.getHours();
+  let targetDate: Date;
+  let dayLabel: string;
+  
+  if (currentHour >= 18) {
+    // Evening: check tomorrow
+    targetDate = tomorrow;
+    dayLabel = 'Tomorrow';
+  } else if (currentHour >= 7 && currentHour <= 10) {
+    // Morning: check today
+    targetDate = now;
+    dayLabel = 'Today';
+  } else {
+    return []; // Only check in morning or evening
+  }
+  
+  const startOfDay = new Date(targetDate);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(targetDate);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  // Count events for the target day
+  const { data: events } = await supabase
+    .from('events')
+    .select('id, title, start_time, end_time')
+    .eq('user_id', userId)
+    .gte('start_time', startOfDay.toISOString())
+    .lte('start_time', endOfDay.toISOString());
+
+  const eventCount = events?.length || 0;
+  
+  if (eventCount < threshold) return [];
+
+  // Check if we already reminded today
+  const { data: existingReminder } = await supabase
+    .from('proactive_reminders')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('reminder_type', 'calendar_overload')
+    .gte('created_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString())
+    .single();
+
+  if (existingReminder) return [];
+
+  // Calculate total meeting time
+  let totalMinutes = 0;
+  for (const event of events || []) {
+    const start = new Date(event.start_time);
+    const end = new Date(event.end_time);
+    totalMinutes += (end.getTime() - start.getTime()) / (1000 * 60);
+  }
+  const totalHours = Math.round(totalMinutes / 60 * 10) / 10;
+
+  // Find potential events to reschedule (lowest priority, non-recurring)
+  const rescheduleHint = eventCount > threshold + 2 
+    ? ' Consider rescheduling some non-critical meetings.'
+    : '';
+
+  const reminder = {
+    user_id: userId,
+    reminder_type: 'calendar_overload',
+    trigger_entity_type: 'calendar',
+    title: `📅 ${dayLabel} Looks Busy!`,
+    message: `You have ${eventCount} meetings scheduled (${totalHours} hours total).${rescheduleHint} Take breaks between calls.`,
+    priority: eventCount >= threshold + 3 ? 'high' : 'medium',
+    scheduled_for: new Date().toISOString(),
+    metadata: { 
+      event_count: eventCount, 
+      total_hours: totalHours,
+      target_date: targetDate.toISOString().split('T')[0],
+      day_label: dayLabel
+    }
+  };
+
+  const { data: created } = await supabase
+    .from('proactive_reminders')
+    .insert(reminder)
+    .select()
+    .single();
+
+  return created ? [created] : [];
 }
 
 // Check if user needs a daily review prompt

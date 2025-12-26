@@ -15,6 +15,8 @@ export interface ProactiveSettings {
   weekly_planning_enabled: boolean;
   daily_review_enabled: boolean;
   voice_proactive_enabled: boolean;
+  calendar_overload_enabled: boolean;
+  calendar_overload_threshold: number;
   morning_briefing_time: string;
   evening_review_time: string;
   weekly_planning_day: number;
@@ -40,6 +42,8 @@ const DEFAULT_SETTINGS: Omit<ProactiveSettings, 'user_id'> = {
   weekly_planning_enabled: true,
   daily_review_enabled: true,
   voice_proactive_enabled: false,
+  calendar_overload_enabled: true,
+  calendar_overload_threshold: 6,
   morning_briefing_time: '08:00',
   evening_review_time: '20:00',
   weekly_planning_day: 0,
