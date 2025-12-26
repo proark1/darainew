@@ -11,6 +11,18 @@ type State = {
   error?: unknown;
 };
 
+function describeError(error: unknown) {
+  if (!error) return "Unknown error";
+  if (error instanceof Error) {
+    return `${error.name}: ${error.message}`;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
 export class ErrorBoundary extends React.Component<Props, State> {
   state: State = { hasError: false };
 
@@ -28,8 +40,32 @@ export class ErrorBoundary extends React.Component<Props, State> {
     window.location.reload();
   };
 
+  private handleHardReload = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("t", String(Date.now()));
+    window.location.replace(url.toString());
+  };
+
+  private handleResetCacheAndReload = async () => {
+    try {
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } finally {
+      this.handleHardReload();
+    }
+  };
+
   render() {
     if (!this.state.hasError) return this.props.children;
+
+    const errorText = describeError(this.state.error);
 
     return (
       <main className="min-h-screen bg-background text-foreground">
@@ -40,11 +76,25 @@ export class ErrorBoundary extends React.Component<Props, State> {
           <p className="mt-2 text-sm text-muted-foreground">
             The app hit an unexpected error and couldn’t render this screen.
           </p>
-          <div className="mt-6 flex items-center gap-3">
+
+          {import.meta.env.DEV && (
+            <pre className="mt-4 w-full overflow-auto rounded-lg border border-border bg-muted/30 p-3 text-left text-xs text-muted-foreground">
+              {errorText}
+            </pre>
+          )}
+
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <Button onClick={this.handleReload}>Reload</Button>
+            <Button variant="secondary" onClick={this.handleHardReload}>
+              Hard reload
+            </Button>
+            <Button variant="outline" onClick={this.handleResetCacheAndReload}>
+              Reset cache & reload
+            </Button>
           </div>
         </section>
       </main>
     );
   }
 }
+
