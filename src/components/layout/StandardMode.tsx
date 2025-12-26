@@ -8,7 +8,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useCelebration } from '@/hooks/useCelebration';
 import { Button } from '@/components/ui/button';
 import { List, Grid3X3, X, LayoutGrid, Activity } from 'lucide-react';
-import { PanelFallback } from '@/components/lazy';
+import { PanelFallback } from '@/components/lazy/LazyLoader';
 import type { ActivityItem } from '@/hooks/useActivityFeed';
 import type { SearchResult, SearchFilters } from '@/hooks/useGlobalSearch';
 import type { Contact } from '@/hooks/useContacts';
