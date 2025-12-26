@@ -11,6 +11,9 @@ import { ProactiveRemindersCard } from './ProactiveRemindersCard';
 import { FollowUpCard } from './FollowUpCard';
 import { DayPredictionCard } from './DayPredictionCard';
 import { SmartSchedulingCard } from './SmartSchedulingCard';
+import { AutoPilotCard } from './AutoPilotCard';
+import { CorrelationsDashboard } from '@/components/insights/CorrelationsDashboard';
+import { WeeklyCoachCard } from '@/components/insights/WeeklyCoachCard';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { 
   CheckCircle2, 
@@ -327,8 +330,20 @@ export function DashboardPanel({ userId }: DashboardPanelProps) {
       {/* Contract Costs Widget */}
       <ContractCostWidget contracts={contracts} />
 
-      {/* Day Prediction */}
-      <DayPredictionCard />
+      {/* AI Intelligence Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Day Prediction */}
+        <DayPredictionCard />
+        
+        {/* Weekly Coach */}
+        <WeeklyCoachCard />
+      </div>
+
+      {/* Auto-Pilot */}
+      <AutoPilotCard />
+
+      {/* Life Correlations */}
+      <CorrelationsDashboard />
 
       {/* Smart Scheduling */}
       <SmartSchedulingCard />
