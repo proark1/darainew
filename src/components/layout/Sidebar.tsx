@@ -22,7 +22,8 @@ import {
   StickyNote,
   BarChart3,
   Home,
-  Brain
+  Brain,
+  Moon
 } from 'lucide-react';
 import { TaskCategory } from '@/types/flux';
 import { supabase } from '@/integrations/supabase/client';
@@ -31,7 +32,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { BrainDumpFAB } from '@/components/capture/BrainDumpFAB';
 
 export type SidebarFilter = TaskCategory | 'all' | 'shared';
-export type ActivePanel = 'tasks' | 'social' | 'calendar' | 'assistant' | 'dashboard' | 'projects' | 'contacts' | 'contracts' | 'activity' | 'settings' | 'notes' | 'habits' | 'admin' | 'family' | null;
+export type ActivePanel = 'tasks' | 'social' | 'calendar' | 'assistant' | 'dashboard' | 'projects' | 'contacts' | 'contracts' | 'activity' | 'settings' | 'notes' | 'habits' | 'admin' | 'family' | 'islam' | null;
 
 interface SidebarProps {
   onEditProfile?: () => void;
@@ -240,6 +241,20 @@ export function Sidebar({
           >
             <Home className="w-4 h-4 shrink-0" />
             {!collapsed && <span className="text-sm">{t('nav.family')}</span>}
+          </Button>
+
+          {/* Islam */}
+          <Button
+            variant={activePanel === 'islam' ? 'secondary' : 'ghost'}
+            className={cn(
+              "w-full h-9 gap-3",
+              collapsed ? "justify-center px-0" : "justify-start",
+              activePanel === 'islam' && "bg-sidebar-accent text-sidebar-primary font-medium"
+            )}
+            onClick={() => handlePanelClick('islam')}
+          >
+            <Moon className="w-4 h-4 shrink-0" />
+            {!collapsed && <span className="text-sm">{t('nav.islam') || 'Islam'}</span>}
           </Button>
         </div>
 

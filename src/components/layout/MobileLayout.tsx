@@ -15,6 +15,7 @@ import { ContactsPanel } from '../contacts/ContactsPanel';
 import { ContractsPanel } from '../contracts/ContractsPanel';
 import { NotesPanel } from '../notes/NotesPanel';
 import { HabitsPanel } from '../habits/HabitsPanel';
+import { IslamPanel } from '../islam/IslamPanel';
 import { SmartNudgeProvider } from '../nudges/SmartNudgeProvider';
 
 import { useNotifications } from '@/hooks/useNotifications';
@@ -37,6 +38,7 @@ import {
   BookUser,
   FileText,
   Heart,
+  Moon,
 } from 'lucide-react';
 import { BrainDumpFAB } from '@/components/capture/BrainDumpFAB';
 
@@ -70,7 +72,7 @@ interface MobileLayoutProps {
   onUpdateNotifications?: (updates: Partial<UserSettings['notifications']>) => void;
 }
 
-type Tab = 'chat' | 'social' | 'calendar' | 'settings' | 'family' | 'dashboard' | 'health' | 'contacts' | 'contracts' | 'notes' | 'habits';
+type Tab = 'chat' | 'social' | 'calendar' | 'settings' | 'family' | 'dashboard' | 'health' | 'contacts' | 'contracts' | 'notes' | 'habits' | 'islam';
 
 export function MobileLayout({
   userId,
@@ -235,6 +237,19 @@ export function MobileLayout({
                   >
                     <Home className="w-5 h-5 shrink-0" />
                     <span>Family Hub</span>
+                  </Button>
+
+                  {/* Islam */}
+                  <Button
+                    variant={activeTab === 'islam' ? 'secondary' : 'ghost'}
+                    className="w-full justify-start gap-3"
+                    onClick={() => {
+                      setActiveTab('islam');
+                      setSidebarOpen(false);
+                    }}
+                  >
+                    <Moon className="w-5 h-5 shrink-0" />
+                    <span>Islam</span>
                   </Button>
 
                   {/* Productivity section */}
@@ -438,6 +453,12 @@ export function MobileLayout({
           activeTab === 'habits' ? 'block' : 'hidden'
         )}>
           <HabitsPanel userId={userId} />
+        </div>
+        <div className={cn(
+          "h-full overflow-y-auto",
+          activeTab === 'islam' ? 'block' : 'hidden'
+        )}>
+          <IslamPanel />
         </div>
 
       </main>
