@@ -10,7 +10,7 @@ import { Slider } from '@/components/ui/slider';
 import { 
   Calendar, Moon, Hand, RotateCcw, Check, Star, Compass, BookOpen,
   RefreshCw, MapPin, ChevronLeft, ChevronRight, Search, Loader2, 
-  Volume2, VolumeX, Pause, Play, ZoomIn, ZoomOut
+  Volume2, VolumeX, Pause, Play, ZoomIn, ZoomOut, Heart
 } from 'lucide-react';
 import { useIslamicFeatures } from '@/hooks/useIslamicFeatures';
 import { cn } from '@/lib/utils';
@@ -60,6 +60,170 @@ const isMobile = (): boolean => {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 };
 
+interface Dua {
+  id: string;
+  category: string;
+  title: string;
+  arabic: string;
+  transliteration: string;
+  translation: string;
+}
+
+const DUAS: Dua[] = [
+  {
+    id: 'morning',
+    category: 'Daily',
+    title: 'Morning Dua',
+    arabic: 'أَصْبَحْنَا وَأَصْبَحَ الْمُلْكُ لِلَّهِ، وَالْحَمْدُ لِلَّهِ، لَا إِلَٰهَ إِلَّا اللَّهُ وَحْدَهُ لَا شَرِيكَ لَهُ',
+    transliteration: "Asbahna wa asbahal mulku lillah, walhamdu lillah, la ilaha illallahu wahdahu la sharika lah",
+    translation: "We have reached the morning and at this very time all sovereignty belongs to Allah. All praise is for Allah. None has the right to be worshipped except Allah, alone, without partner."
+  },
+  {
+    id: 'evening',
+    category: 'Daily',
+    title: 'Evening Dua',
+    arabic: 'أَمْسَيْنَا وَأَمْسَى الْمُلْكُ لِلَّهِ، وَالْحَمْدُ لِلَّهِ، لَا إِلَٰهَ إِلَّا اللَّهُ وَحْدَهُ لَا شَرِيكَ لَهُ',
+    transliteration: "Amsayna wa amsal mulku lillah, walhamdu lillah, la ilaha illallahu wahdahu la sharika lah",
+    translation: "We have reached the evening and at this very time all sovereignty belongs to Allah. All praise is for Allah. None has the right to be worshipped except Allah, alone, without partner."
+  },
+  {
+    id: 'sleep',
+    category: 'Daily',
+    title: 'Before Sleeping',
+    arabic: 'بِاسْمِكَ اللَّهُمَّ أَمُوتُ وَأَحْيَا',
+    transliteration: "Bismika Allahumma amutu wa ahya",
+    translation: "In Your name O Allah, I die and I live."
+  },
+  {
+    id: 'waking',
+    category: 'Daily',
+    title: 'Upon Waking Up',
+    arabic: 'الْحَمْدُ لِلَّهِ الَّذِي أَحْيَانَا بَعْدَ مَا أَمَاتَنَا وَإِلَيْهِ النُّشُورُ',
+    transliteration: "Alhamdu lillahil-lathee ahyana ba'da ma amatana wa ilayhin-nushoor",
+    translation: "Praise is to Allah Who gives us life after He has caused us to die and to Him is the return."
+  },
+  {
+    id: 'food-before',
+    category: 'Food',
+    title: 'Before Eating',
+    arabic: 'بِسْمِ اللَّهِ وَعَلَى بَرَكَةِ اللَّهِ',
+    transliteration: "Bismillahi wa 'ala baraka-tillah",
+    translation: "In the name of Allah and with the blessings of Allah."
+  },
+  {
+    id: 'food-after',
+    category: 'Food',
+    title: 'After Eating',
+    arabic: 'الْحَمْدُ لِلَّهِ الَّذِي أَطْعَمَنَا وَسَقَانَا وَجَعَلَنَا مُسْلِمِينَ',
+    transliteration: "Alhamdu lillahil-lathee at'amana wa saqana wa ja'alana muslimeen",
+    translation: "Praise be to Allah Who has fed us and given us drink and made us Muslims."
+  },
+  {
+    id: 'travel',
+    category: 'Travel',
+    title: 'Starting a Journey',
+    arabic: 'سُبْحَانَ الَّذِي سَخَّرَ لَنَا هَٰذَا وَمَا كُنَّا لَهُ مُقْرِنِينَ وَإِنَّا إِلَىٰ رَبِّنَا لَمُنْقَلِبُونَ',
+    transliteration: "Subhanal-lathee sakh-khara lana hatha wa ma kunna lahu muqrineen. Wa inna ila Rabbina lamunqaliboon",
+    translation: "Glory be to Him Who has subjected this to us, and we could never have it. And to our Lord we shall return."
+  },
+  {
+    id: 'home-leave',
+    category: 'Home',
+    title: 'Leaving Home',
+    arabic: 'بِسْمِ اللَّهِ تَوَكَّلْتُ عَلَى اللَّهِ وَلَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ',
+    transliteration: "Bismillahi tawakkaltu 'alallahi wa la hawla wa la quwwata illa billah",
+    translation: "In the name of Allah, I place my trust in Allah, and there is no might nor power except with Allah."
+  },
+  {
+    id: 'home-enter',
+    category: 'Home',
+    title: 'Entering Home',
+    arabic: 'بِسْمِ اللَّهِ وَلَجْنَا، وَبِسْمِ اللَّهِ خَرَجْنَا، وَعَلَى اللَّهِ رَبِّنَا تَوَكَّلْنَا',
+    transliteration: "Bismillahi walajna, wa bismillahi kharajna, wa 'ala Allahi Rabbina tawakkalna",
+    translation: "In the name of Allah we enter, in the name of Allah we leave, and upon our Lord we place our trust."
+  },
+  {
+    id: 'mosque-enter',
+    category: 'Mosque',
+    title: 'Entering Mosque',
+    arabic: 'اللَّهُمَّ افْتَحْ لِي أَبْوَابَ رَحْمَتِكَ',
+    transliteration: "Allaahum-maf-tah lee abwaaba rahmatik",
+    translation: "O Allah, open for me the doors of Your mercy."
+  },
+  {
+    id: 'mosque-leave',
+    category: 'Mosque',
+    title: 'Leaving Mosque',
+    arabic: 'اللَّهُمَّ إِنِّي أَسْأَلُكَ مِنْ فَضْلِكَ',
+    transliteration: "Allaahumma innee as'aluka min fadlik",
+    translation: "O Allah, I ask You from Your favor."
+  },
+  {
+    id: 'anxiety',
+    category: 'Distress',
+    title: 'For Anxiety & Worry',
+    arabic: 'اللَّهُمَّ إِنِّي أَعُوذُ بِكَ مِنَ الْهَمِّ وَالْحَزَنِ',
+    transliteration: "Allahumma inni a'udhu bika minal-hammi wal-hazan",
+    translation: "O Allah, I seek refuge in You from anxiety and sorrow."
+  },
+  {
+    id: 'difficulty',
+    category: 'Distress',
+    title: 'In Times of Difficulty',
+    arabic: 'لَا إِلَٰهَ إِلَّا أَنْتَ سُبْحَانَكَ إِنِّي كُنْتُ مِنَ الظَّالِمِينَ',
+    transliteration: "La ilaha illa Anta, Subhanaka, inni kuntu minaz-zalimin",
+    translation: "There is no deity except You; exalted are You. Indeed, I have been of the wrongdoers."
+  },
+  {
+    id: 'forgiveness',
+    category: 'Forgiveness',
+    title: 'Seeking Forgiveness',
+    arabic: 'أَسْتَغْفِرُ اللَّهَ الَّذِي لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ وَأَتُوبُ إِلَيْهِ',
+    transliteration: "Astaghfirullaha-lathee la ilaha illa Huwal-Hayyul-Qayyoomu wa atoobu ilaih",
+    translation: "I seek the forgiveness of Allah, there is no deity except Him, the Living, the Sustainer, and I repent to Him."
+  },
+  {
+    id: 'parents',
+    category: 'Family',
+    title: 'For Parents',
+    arabic: 'رَبِّ ارْحَمْهُمَا كَمَا رَبَّيَانِي صَغِيرًا',
+    transliteration: "Rabbir-hamhuma kama rabbayani sagheera",
+    translation: "My Lord, have mercy upon them as they brought me up when I was small."
+  },
+  {
+    id: 'children',
+    category: 'Family',
+    title: 'For Children',
+    arabic: 'رَبَّنَا هَبْ لَنَا مِنْ أَزْوَاجِنَا وَذُرِّيَّاتِنَا قُرَّةَ أَعْيُنٍ وَاجْعَلْنَا لِلْمُتَّقِينَ إِمَامًا',
+    transliteration: "Rabbana hab lana min azwajina wa thurriyyatina qurrata a'yunin waj'alna lil-muttaqeena imama",
+    translation: "Our Lord, grant us from among our wives and offspring comfort to our eyes and make us an example for the righteous."
+  },
+  {
+    id: 'knowledge',
+    category: 'Knowledge',
+    title: 'For Knowledge',
+    arabic: 'رَبِّ زِدْنِي عِلْمًا',
+    transliteration: "Rabbi zidni 'ilma",
+    translation: "My Lord, increase me in knowledge."
+  },
+  {
+    id: 'rain',
+    category: 'Weather',
+    title: 'When It Rains',
+    arabic: 'اللَّهُمَّ صَيِّبًا نَافِعًا',
+    transliteration: "Allahumma sayyiban nafi'an",
+    translation: "O Allah, may it be a beneficial rain."
+  },
+  {
+    id: 'thunder',
+    category: 'Weather',
+    title: 'Hearing Thunder',
+    arabic: 'سُبْحَانَ الَّذِي يُسَبِّحُ الرَّعْدُ بِحَمْدِهِ وَالْمَلَائِكَةُ مِنْ خِيفَتِهِ',
+    transliteration: "Subhanal-lathee yusabbihur-ra'du bihamdihi, wal-malaa'ikatu min kheefatih",
+    translation: "Glory be to Him Whom the thunder glorifies with His praise, and the angels from fear of Him."
+  },
+];
+
 export function IslamEnhancedPanel() {
   const {
     ramadanDays,
@@ -75,6 +239,11 @@ export function IslamEnhancedPanel() {
   } = useIslamicFeatures();
 
   const [activeTab, setActiveTab] = useState('ramadan');
+  const [duaCategory, setDuaCategory] = useState<string>('all');
+  const [expandedDua, setExpandedDua] = useState<string | null>(null);
+
+  const duaCategories = ['all', ...Array.from(new Set(DUAS.map(d => d.category)))];
+  const filteredDuas = duaCategory === 'all' ? DUAS : DUAS.filter(d => d.category === duaCategory);
   
   // Qibla state
   const [qiblaData, setQiblaData] = useState<QiblaData | null>(null);
@@ -305,7 +474,7 @@ export function IslamEnhancedPanel() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className="mx-4 mt-3 grid grid-cols-5">
+        <TabsList className="mx-4 mt-3 grid grid-cols-6">
           <TabsTrigger value="ramadan" className="gap-1 text-xs px-1">
             <Star className="w-3 h-3" />
             <span className="hidden sm:inline">Ramadan</span>
@@ -313,6 +482,10 @@ export function IslamEnhancedPanel() {
           <TabsTrigger value="dhikr" className="gap-1 text-xs px-1">
             <Hand className="w-3 h-3" />
             <span className="hidden sm:inline">Dhikr</span>
+          </TabsTrigger>
+          <TabsTrigger value="duas" className="gap-1 text-xs px-1">
+            <Heart className="w-3 h-3" />
+            <span className="hidden sm:inline">Duas</span>
           </TabsTrigger>
           <TabsTrigger value="qibla" className="gap-1 text-xs px-1">
             <Compass className="w-3 h-3" />
@@ -434,6 +607,86 @@ export function IslamEnhancedPanel() {
               })}
             </div>
           </ScrollArea>
+        </TabsContent>
+
+        {/* Duas */}
+        <TabsContent value="duas" className="flex-1 mt-0">
+          <div className="flex flex-col h-full">
+            <div className="px-4 pt-3 pb-2">
+              <ScrollArea className="w-full">
+                <div className="flex gap-2 pb-2">
+                  {duaCategories.map((cat) => (
+                    <Button
+                      key={cat}
+                      variant={duaCategory === cat ? "default" : "outline"}
+                      size="sm"
+                      className="whitespace-nowrap"
+                      onClick={() => setDuaCategory(cat)}
+                    >
+                      {cat === 'all' ? 'All' : cat}
+                    </Button>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+            <ScrollArea className="flex-1">
+              <div className="p-4 pt-2 space-y-3">
+                {filteredDuas.map((dua) => (
+                  <Card
+                    key={dua.id}
+                    className={cn(
+                      "p-4 cursor-pointer transition-all",
+                      expandedDua === dua.id && "ring-2 ring-primary"
+                    )}
+                    onClick={() => setExpandedDua(expandedDua === dua.id ? null : dua.id)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <Badge variant="secondary" className="mb-2 text-xs">
+                          {dua.category}
+                        </Badge>
+                        <p className="font-medium">{dua.title}</p>
+                      </div>
+                      <ChevronRight className={cn(
+                        "w-4 h-4 text-muted-foreground transition-transform",
+                        expandedDua === dua.id && "rotate-90"
+                      )} />
+                    </div>
+                    
+                    {expandedDua === dua.id && (
+                      <div className="mt-4 space-y-3">
+                        <div className="p-3 bg-primary/5 rounded-lg">
+                          <p className="font-arabic text-xl text-right leading-loose" dir="rtl">
+                            {dua.arabic}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground mb-1">Transliteration</p>
+                          <p className="text-sm italic">{dua.transliteration}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground mb-1">Translation</p>
+                          <p className="text-sm">{dua.translation}</p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            speak(dua.arabic);
+                          }}
+                        >
+                          <Volume2 className="w-4 h-4 mr-2" />
+                          Listen
+                        </Button>
+                      </div>
+                    )}
+                  </Card>
+                ))}
+              </div>
+            </ScrollArea>
+          </div>
         </TabsContent>
 
         {/* Qibla Compass */}
