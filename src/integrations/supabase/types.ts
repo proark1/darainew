@@ -2716,6 +2716,57 @@ export type Database = {
         }
         Relationships: []
       }
+      quran_hifz_progress: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          id: string
+          last_revised_at: string | null
+          memorized_ayahs: number
+          notes: string | null
+          started_at: string | null
+          status: string
+          surah_name: string
+          surah_name_arabic: string
+          surah_number: number
+          total_ayahs: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          last_revised_at?: string | null
+          memorized_ayahs?: number
+          notes?: string | null
+          started_at?: string | null
+          status?: string
+          surah_name: string
+          surah_name_arabic: string
+          surah_number: number
+          total_ayahs: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          last_revised_at?: string | null
+          memorized_ayahs?: number
+          notes?: string | null
+          started_at?: string | null
+          status?: string
+          surah_name?: string
+          surah_name_arabic?: string
+          surah_number?: number
+          total_ayahs?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       ramadan_tracker: {
         Row: {
           created_at: string
