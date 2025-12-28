@@ -32,6 +32,9 @@ export interface SpaceShareSettings {
   share_personal_events: boolean;
   share_family_events: boolean;
   share_work_events: boolean;
+  sharing_confirmed: boolean;
+  confirmed_at: string | null;
+  consent_message: string | null;
 }
 
 export function useSpaceMembers(userId: string | undefined) {

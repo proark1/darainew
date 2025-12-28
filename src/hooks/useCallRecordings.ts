@@ -43,22 +43,29 @@ export function useCallRecordings(userId: string | undefined) {
 
       const profileMap = new Map(profiles?.map(p => [p.user_id, p.display_name || p.email || 'Unknown']));
 
-      const mapped: CallRecording[] = (data || []).map(r => ({
-        id: r.id,
-        userId: r.user_id,
-        sessionId: r.session_id,
-        callerId: r.caller_id,
-        calleeId: r.callee_id,
-        filePath: r.file_path,
-        fileUrl: r.file_url,
-        durationSeconds: r.duration_seconds,
-        fileSizeBytes: r.file_size_bytes,
-        createdAt: new Date(r.created_at),
-        callerName: profileMap.get(r.caller_id) || 'Unknown',
-        calleeName: profileMap.get(r.callee_id) || 'Unknown',
+      // Generate fresh signed URLs for each recording (15 min expiry for security)
+      const mappedWithUrls = await Promise.all((data || []).map(async (r) => {
+        const { data: signedData } = await supabase.storage
+          .from('call-recordings')
+          .createSignedUrl(r.file_path, 60 * 15); // 15 minutes
+
+        return {
+          id: r.id,
+          userId: r.user_id,
+          sessionId: r.session_id,
+          callerId: r.caller_id,
+          calleeId: r.callee_id,
+          filePath: r.file_path,
+          fileUrl: signedData?.signedUrl || r.file_url,
+          durationSeconds: r.duration_seconds,
+          fileSizeBytes: r.file_size_bytes,
+          createdAt: new Date(r.created_at),
+          callerName: profileMap.get(r.caller_id) || 'Unknown',
+          calleeName: profileMap.get(r.callee_id) || 'Unknown',
+        };
       }));
 
-      setRecordings(mapped);
+      setRecordings(mappedWithUrls);
     } catch (error) {
       console.error('[recordings] Fetch error:', error);
     } finally {
@@ -71,9 +78,9 @@ export function useCallRecordings(userId: string | undefined) {
       const recording = recordings.find(r => r.id === recordingId);
       if (!recording) return;
 
-      // Delete from storage
+      // Delete from secure storage bucket
       const { error: storageError } = await supabase.storage
-        .from('chat-attachments')
+        .from('call-recordings')
         .remove([recording.filePath]);
 
       if (storageError) {
