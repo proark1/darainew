@@ -17,8 +17,24 @@ import {
   Globe,
   Bot,
   Brain,
-  Sliders
+  Info,
+  CheckSquare,
+  Calendar,
+  UserCircle,
+  FileText,
+  Home,
+  Heart,
+  Target,
+  MessageSquare,
+  Phone,
+  Bell,
+  Search,
+  MapPin,
+  Sparkles,
+  TrendingUp,
+  Shield
 } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SpaceMembersPanel } from './SpaceMembersPanel';
 import { NotificationSettingsPanel } from './NotificationSettingsPanel';
 import { ProactiveSettingsPanel } from './ProactiveSettingsPanel';
@@ -37,6 +53,200 @@ const colorSchemes: { value: ColorScheme; label: string; color: string }[] = [
   { value: 'green', label: 'Emerald', color: 'bg-green-500' },
   { value: 'orange', label: 'Sunset', color: 'bg-orange-500' },
   { value: 'pink', label: 'Rose', color: 'bg-pink-500' },
+];
+
+// App features for Info tab
+const APP_FEATURES = [
+  {
+    category: 'Task Management',
+    icon: CheckSquare,
+    features: [
+      'Create, edit, and organize tasks with priorities and categories',
+      'Kanban board view for visual task management',
+      'Project organization with progress tracking',
+      'Task templates for recurring workflows',
+      'Tag system for flexible categorization',
+      'Smart task parsing from natural language',
+      'Recurrence support for repeating tasks',
+    ]
+  },
+  {
+    category: 'Calendar & Events',
+    icon: Calendar,
+    features: [
+      'Full calendar with day, week, and month views',
+      'Event creation with location and attendees',
+      'External calendar import (ICS files)',
+      'Recurrence rules for repeating events',
+      'Event reminders and notifications',
+      'Public holiday integration by country',
+    ]
+  },
+  {
+    category: 'Contacts & CRM',
+    icon: UserCircle,
+    features: [
+      'Contact management with detailed profiles',
+      'Company and relationship tracking',
+      'Follow-up reminders and last contact dates',
+      'Contact suggestions based on patterns',
+      'Tags and notes for each contact',
+    ]
+  },
+  {
+    category: 'Contracts & Subscriptions',
+    icon: FileText,
+    features: [
+      'Track all contracts and subscriptions',
+      'Cost tracking (monthly/yearly)',
+      'Renewal date alerts and cancellation notices',
+      'Document upload and storage',
+      'Auto-renewal tracking',
+    ]
+  },
+  {
+    category: 'Family Hub',
+    icon: Home,
+    features: [
+      'Family member profiles with health info',
+      'Household task management and assignments',
+      'Family calendar with shared events',
+      'Meal planning and recipe management',
+      'Shopping lists with smart suggestions',
+      'Budget tracking and expense categories',
+      'Document storage (IDs, medical records)',
+      'Medication and vaccination tracking',
+      'Child dashboard with school info',
+    ]
+  },
+  {
+    category: 'Health & Wellness',
+    icon: Heart,
+    features: [
+      'Apple Health integration (steps, sleep, heart rate)',
+      'Manual health metric tracking',
+      'Age-based health checkup reminders',
+      'Daily check-ins (mood, energy, sleep)',
+      'Life correlations (sleep vs productivity)',
+      'Weekly wellness insights',
+    ]
+  },
+  {
+    category: 'Habits & Goals',
+    icon: Target,
+    features: [
+      'Habit tracking with streaks',
+      'Goal setting with progress visualization',
+      'Daily/weekly habit reminders',
+      'Gamification with XP and celebrations',
+    ]
+  },
+  {
+    category: 'Communication',
+    icon: MessageSquare,
+    features: [
+      'Direct messaging with read receipts',
+      'Group chats with admin controls',
+      'Voice messages with playback',
+      'Message reactions and emoji picker',
+      'Typing indicators',
+      'End-to-end encryption support',
+    ]
+  },
+  {
+    category: 'Voice & Video Calls',
+    icon: Phone,
+    features: [
+      'WebRTC-based audio/video calls',
+      'Call recording with cloud storage',
+      'Call history and duration tracking',
+      'In-call chat messaging',
+      'Online presence indicators',
+    ]
+  },
+  {
+    category: 'AI Assistant (Dori)',
+    icon: Sparkles,
+    features: [
+      'Voice-activated commands via OpenAI Realtime',
+      'Gemini Live integration for conversations',
+      'Natural language task creation',
+      'Smart scheduling suggestions',
+      'Morning briefing with personalized news',
+      'Recipe assistant for meal planning',
+      'Text-to-speech for hands-free use',
+      'AI memory for personalized responses',
+    ]
+  },
+  {
+    category: 'Proactive Features',
+    icon: Bell,
+    features: [
+      'Forgotten task reminders',
+      'Contract renewal alerts',
+      'Contact check-in suggestions',
+      'Event preparation nudges',
+      'Habit streak protection',
+      'Daily review prompts',
+      'Smart nudges based on context',
+      'Quiet hours configuration',
+    ]
+  },
+  {
+    category: 'Smart Insights',
+    icon: TrendingUp,
+    features: [
+      'Day prediction scores',
+      'Weekly insights and patterns',
+      'Life correlations analysis',
+      'Weekly coach recommendations',
+      'Activity feed tracking',
+      'User pattern analysis',
+    ]
+  },
+  {
+    category: 'Search & Organization',
+    icon: Search,
+    features: [
+      'Global search across all data',
+      'Tag-based filtering',
+      'Project-based organization',
+      'Notes with markdown support',
+      'Brain dump inbox for quick capture',
+    ]
+  },
+  {
+    category: 'Location Features',
+    icon: MapPin,
+    features: [
+      'Location-based reminders',
+      'Geofence triggers (arrive/leave)',
+      'Weather integration for planning',
+      'Property management tracking',
+    ]
+  },
+  {
+    category: 'Team & Sharing',
+    icon: Users,
+    features: [
+      'Space members for data sharing',
+      'Granular sharing controls by category',
+      'Shared tasks, events, and contacts',
+      'Real-time collaboration updates',
+      'Consent-based sharing with confirmations',
+    ]
+  },
+  {
+    category: 'Security & Privacy',
+    icon: Shield,
+    features: [
+      'Row-level security on all data',
+      'Encrypted document storage',
+      'Secure call recordings',
+      'Time-limited signed URLs for files',
+      'Consent tracking for data sharing',
+    ]
+  },
 ];
 
 // AI System Prompt - displayed in settings for transparency
@@ -105,13 +315,14 @@ export function SettingsPanelContent({
 }: SettingsPanelContentProps) {
   const { user } = useAuth();
   const { language, setLanguage, t } = useLanguage();
-  const [activeTab, setActiveTab] = useState<'general' | 'proactive' | 'team' | 'ai'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'proactive' | 'team' | 'ai' | 'info'>('general');
 
   const tabs = [
     { id: 'general' as const, label: 'General', icon: Settings },
     { id: 'proactive' as const, label: 'Proactive & Advanced', icon: Brain },
     { id: 'team' as const, label: t('settings.team'), icon: Users },
     { id: 'ai' as const, label: 'AI', icon: Bot },
+    { id: 'info' as const, label: 'Info', icon: Info },
   ];
 
   return (
@@ -345,6 +556,66 @@ export function SettingsPanelContent({
                 {AI_SYSTEM_PROMPT}
               </pre>
             </ScrollArea>
+          </div>
+        )}
+
+        {activeTab === 'info' && (
+          <div className="space-y-6">
+            {/* App Introduction */}
+            <div className="space-y-2">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-primary" />
+                Welcome to Flux
+              </h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Flux is your all-in-one personal productivity platform designed to help you manage every aspect of your life. 
+                From tasks and calendar to family management, health tracking, and AI-powered assistance — everything you need 
+                in one secure, private space.
+              </p>
+            </div>
+
+            {/* Feature Categories */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                Features & Capabilities
+              </h4>
+              
+              <div className="grid gap-4">
+                {APP_FEATURES.map((category) => (
+                  <Card key={category.category} className="bg-muted/30">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <category.icon className="w-4 h-4 text-primary" />
+                        {category.category}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <ul className="text-xs text-muted-foreground space-y-1">
+                        {category.features.map((feature, idx) => (
+                          <li key={idx} className="flex items-start gap-2">
+                            <span className="text-primary mt-1">•</span>
+                            <span>{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+
+            {/* Version & Credits */}
+            <div className="pt-4 border-t border-border space-y-2">
+              <p className="text-xs text-muted-foreground">
+                <strong>Version:</strong> 1.0.0
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Built with React, Supabase, and AI-powered by OpenAI & Google Gemini.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Your data is encrypted and stored securely. We never share your personal information.
+              </p>
+            </div>
           </div>
         )}
         </div>
