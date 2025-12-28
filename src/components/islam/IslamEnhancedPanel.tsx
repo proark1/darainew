@@ -10,7 +10,7 @@ import { Slider } from '@/components/ui/slider';
 import { 
   Calendar, Moon, Hand, RotateCcw, Check, Star, Compass, BookOpen,
   RefreshCw, MapPin, ChevronLeft, ChevronRight, Search, Loader2, 
-  Volume2, VolumeX, Pause, Play, ZoomIn, ZoomOut, Heart, Clock
+  Volume2, VolumeX, Pause, Play, ZoomIn, ZoomOut, Heart, Clock, GraduationCap
 } from 'lucide-react';
 import { useIslamicFeatures } from '@/hooks/useIslamicFeatures';
 import { cn } from '@/lib/utils';
@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { PrayerTimesTab } from './PrayerTimesTab';
 import { HadithTab } from './HadithTab';
+import { HifzTrackerTab } from './HifzTrackerTab';
 
 interface QiblaData {
   direction: number;
@@ -812,7 +813,7 @@ export function IslamEnhancedPanel() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className="mx-4 mt-3 grid grid-cols-8">
+        <TabsList className="mx-4 mt-3 grid grid-cols-9">
           <TabsTrigger value="prayer" className="gap-1 text-xs px-1">
             <Clock className="w-3 h-3" />
             <span className="hidden sm:inline">Prayer</span>
@@ -841,6 +842,10 @@ export function IslamEnhancedPanel() {
             <BookOpen className="w-3 h-3" />
             <span className="hidden sm:inline">Quran</span>
           </TabsTrigger>
+          <TabsTrigger value="hifz" className="gap-1 text-xs px-1">
+            <GraduationCap className="w-3 h-3" />
+            <span className="hidden sm:inline">Hifz</span>
+          </TabsTrigger>
           <TabsTrigger value="calendar" className="gap-1 text-xs px-1">
             <Calendar className="w-3 h-3" />
             <span className="hidden sm:inline">Calendar</span>
@@ -855,6 +860,11 @@ export function IslamEnhancedPanel() {
         {/* Hadith Collection */}
         <TabsContent value="hadith" className="flex-1 mt-0">
           <HadithTab />
+        </TabsContent>
+
+        {/* Hifz Tracker */}
+        <TabsContent value="hifz" className="flex-1 mt-0">
+          <HifzTrackerTab />
         </TabsContent>
 
         {/* Ramadan Tracker */}
