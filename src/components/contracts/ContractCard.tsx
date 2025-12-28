@@ -2,18 +2,57 @@ import { Contract, CONTRACT_CATEGORIES } from '@/hooks/useContracts';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Pencil, Trash2, Calendar, DollarSign, AlertTriangle, FileText } from 'lucide-react';
-import { format, differenceInDays, isPast } from 'date-fns';
+import { Checkbox } from '@/components/ui/checkbox';
+import { 
+  Pencil, 
+  Trash2, 
+  Calendar, 
+  DollarSign, 
+  AlertTriangle, 
+  FileText,
+  Mail,
+  Eye,
+  MoreVertical,
+  CalendarPlus,
+  Sparkles
+} from 'lucide-react';
+import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { ContractHealthBadge } from './ContractHealthScore';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface ContractCardProps {
   contract: Contract;
   onEdit: (contract: Contract) => void;
   onDelete: (contract: Contract) => void;
+  onGenerateEmail?: (contract: Contract) => void;
+  onPreviewDocument?: (contract: Contract) => void;
+  onSyncToCalendar?: (contract: Contract) => void;
+  onScanDocument?: (contract: Contract) => void;
+  isSelected?: boolean;
+  onSelectChange?: (selected: boolean) => void;
+  showBulkSelect?: boolean;
 }
 
-export function ContractCard({ contract, onEdit, onDelete }: ContractCardProps) {
+export function ContractCard({ 
+  contract, 
+  onEdit, 
+  onDelete,
+  onGenerateEmail,
+  onPreviewDocument,
+  onSyncToCalendar,
+  onScanDocument,
+  isSelected,
+  onSelectChange,
+  showBulkSelect
+}: ContractCardProps) {
   const categoryInfo = CONTRACT_CATEGORIES.find(c => c.value === contract.category);
   
   const daysUntilRenewal = contract.renewalDate 
@@ -43,14 +82,46 @@ export function ContractCard({ contract, onEdit, onDelete }: ContractCardProps) 
     return `€${amount}${freq}`;
   };
 
+  const handleViewDocument = async () => {
+    if (!contract.documentUrl) return;
+
+    // Use preview dialog if available
+    if (onPreviewDocument) {
+      onPreviewDocument(contract);
+      return;
+    }
+
+    // Fallback to opening in new tab
+    if (contract.documentUrl.startsWith('http')) {
+      window.open(contract.documentUrl, '_blank');
+    } else {
+      const { data } = await supabase.storage
+        .from('contract-documents')
+        .createSignedUrl(contract.documentUrl, 60 * 60);
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank');
+      }
+    }
+  };
+
   return (
     <Card className={cn(
       "group relative transition-all hover:shadow-md",
       !contract.isActive && "opacity-60",
-      isCancellationSoon && "border-destructive/50 bg-destructive/5"
+      isCancellationSoon && "border-destructive/50 bg-destructive/5",
+      isSelected && "ring-2 ring-primary"
     )}>
       <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          {/* Bulk select checkbox */}
+          {showBulkSelect && (
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={onSelectChange}
+              className="mt-1"
+            />
+          )}
+
           {/* Left: Info */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
@@ -59,6 +130,7 @@ export function ContractCard({ contract, onEdit, onDelete }: ContractCardProps) 
               {!contract.isActive && (
                 <Badge variant="secondary" className="text-xs">Inactive</Badge>
               )}
+              <ContractHealthBadge contract={contract} />
             </div>
             
             {contract.provider && (
@@ -104,44 +176,77 @@ export function ContractCard({ contract, onEdit, onDelete }: ContractCardProps) 
           </div>
 
           {/* Right: Actions */}
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            {contract.documentUrl && (
+          <div className="flex items-center gap-1">
+            {/* Quick actions visible on hover */}
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {contract.documentUrl && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={handleViewDocument}
+                  title="View document"
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
-                onClick={async () => {
-                  if (contract.documentUrl?.startsWith('http')) {
-                    window.open(contract.documentUrl, '_blank');
-                  } else {
-                    const { data } = await supabase.storage
-                      .from('contract-documents')
-                      .createSignedUrl(contract.documentUrl!, 60 * 60);
-                    if (data?.signedUrl) {
-                      window.open(data.signedUrl, '_blank');
-                    }
-                  }
-                }}
+                onClick={() => onEdit(contract)}
+                title="Edit"
               >
-                <FileText className="h-4 w-4" />
+                <Pencil className="h-4 w-4" />
               </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => onEdit(contract)}
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-destructive hover:text-destructive"
-              onClick={() => onDelete(contract)}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            </div>
+            
+            {/* More actions dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => onEdit(contract)}>
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit
+                </DropdownMenuItem>
+                {contract.documentUrl && (
+                  <DropdownMenuItem onClick={handleViewDocument}>
+                    <Eye className="h-4 w-4 mr-2" />
+                    View Document
+                  </DropdownMenuItem>
+                )}
+                {contract.documentUrl && onScanDocument && (
+                  <DropdownMenuItem onClick={() => onScanDocument(contract)}>
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    AI Scan Document
+                  </DropdownMenuItem>
+                )}
+                {onGenerateEmail && (
+                  <DropdownMenuItem onClick={() => onGenerateEmail(contract)}>
+                    <Mail className="h-4 w-4 mr-2" />
+                    Generate Cancellation Email
+                  </DropdownMenuItem>
+                )}
+                {onSyncToCalendar && contract.renewalDate && (
+                  <DropdownMenuItem onClick={() => onSyncToCalendar(contract)}>
+                    <CalendarPlus className="h-4 w-4 mr-2" />
+                    Add to Calendar
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={() => onDelete(contract)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </CardContent>

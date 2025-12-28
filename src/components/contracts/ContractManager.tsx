@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { Contract, ContractCategory, CONTRACT_CATEGORIES, ContractInput } from '@/hooks/useContracts';
 import { ContractCard } from './ContractCard';
 import { AddEditContractDialog } from './AddEditContractDialog';
+import { CancellationEmailDialog } from './CancellationEmailDialog';
+import { DocumentPreviewDialog } from './DocumentPreviewDialog';
+import { ContractTimeline } from './ContractTimeline';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,11 +23,31 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, DollarSign, Calendar, AlertTriangle, LayoutGrid, List, Pencil, Trash2, FileText } from 'lucide-react';
+import { 
+  Plus, 
+  Search, 
+  DollarSign, 
+  Calendar, 
+  AlertTriangle, 
+  LayoutGrid, 
+  List, 
+  Pencil, 
+  Trash2, 
+  FileText,
+  CalendarPlus,
+  Clock,
+  Sparkles,
+  Loader2
+} from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { de, enUS } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useSmartContractReminders } from '@/hooks/useSmartContractReminders';
+import { useContractAI } from '@/hooks/useContractAI';
+import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
+import { ContractHealthBadge } from './ContractHealthScore';
 
 interface ContractManagerProps {
   contracts: Contract[];
@@ -51,13 +75,30 @@ export function ContractManager({
   getCancellationDeadlines,
 }: ContractManagerProps) {
   const { t, language } = useLanguage();
+  const { user } = useAuth();
+  const { toast } = useToast();
   const dateLocale = language === 'de' ? de : enUS;
+  
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingContract, setEditingContract] = useState<Contract | null>(null);
   const [deleteContract, setDeleteContract] = useState<Contract | null>(null);
   const [activeCategory, setActiveCategory] = useState<'all' | ContractCategory>('all');
-  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
+  const [viewMode, setViewMode] = useState<'cards' | 'table' | 'timeline'>('cards');
+  
+  // New states for enhanced features
+  const [emailDialogContract, setEmailDialogContract] = useState<Contract | null>(null);
+  const [previewDocument, setPreviewDocument] = useState<{ path: string; name: string } | null>(null);
+  const [selectedContracts, setSelectedContracts] = useState<Set<string>>(new Set());
+  const [showBulkSelect, setShowBulkSelect] = useState(false);
+  const [syncingToCalendar, setSyncingToCalendar] = useState(false);
+
+  // Hooks
+  const { syncToCalendar, syncAllToCalendar } = useSmartContractReminders({
+    contracts,
+    userId: user?.id
+  });
+  const { scanDocument, isScanning } = useContractAI();
 
   const expiringContracts = getExpiringContracts(30);
   const cancellationDeadlines = getCancellationDeadlines(14);
@@ -91,6 +132,89 @@ export function ContractManager({
     }
   };
 
+  const handleSyncToCalendar = async (contract: Contract) => {
+    const success = await syncToCalendar(contract);
+    if (success) {
+      toast({
+        title: 'Added to calendar',
+        description: `${contract.name} events added to your calendar`
+      });
+    } else {
+      toast({
+        variant: 'destructive',
+        title: 'Sync failed',
+        description: 'Could not add events to calendar'
+      });
+    }
+  };
+
+  const handleSyncAllToCalendar = async () => {
+    setSyncingToCalendar(true);
+    try {
+      const count = await syncAllToCalendar();
+      toast({
+        title: 'Calendar synced',
+        description: `${count} contract events added to calendar`
+      });
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Sync failed',
+        description: 'Could not sync contracts to calendar'
+      });
+    } finally {
+      setSyncingToCalendar(false);
+    }
+  };
+
+  const handleScanDocument = async (contract: Contract) => {
+    if (!contract.documentUrl) return;
+    
+    const documentPath = contract.documentUrl.split(',')[0]; // Take first document
+    const result = await scanDocument(documentPath);
+    
+    if (result) {
+      // Pre-fill the edit dialog with scanned data
+      setEditingContract({
+        ...contract,
+        ...result,
+        // Convert string dates to Date objects
+        startDate: result.startDate ? new Date(result.startDate) : contract.startDate,
+        endDate: result.endDate ? new Date(result.endDate) : contract.endDate,
+        renewalDate: result.renewalDate ? new Date(result.renewalDate) : contract.renewalDate,
+      });
+      setDialogOpen(true);
+    }
+  };
+
+  const handlePreviewDocument = (contract: Contract) => {
+    if (!contract.documentUrl) return;
+    const firstDoc = contract.documentUrl.split(',')[0];
+    setPreviewDocument({ path: firstDoc, name: contract.name });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedContracts.size === 0) return;
+    
+    for (const id of selectedContracts) {
+      await onDelete(id);
+    }
+    setSelectedContracts(new Set());
+    setShowBulkSelect(false);
+    toast({
+      title: 'Contracts deleted',
+      description: `${selectedContracts.size} contracts deleted`
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedContracts.size === filteredContracts.length) {
+      setSelectedContracts(new Set());
+    } else {
+      setSelectedContracts(new Set(filteredContracts.map(c => c.id)));
+    }
+  };
+
   const formatCost = (contract: Contract) => {
     if (!contract.costAmount) return null;
     const amount = contract.costAmount.toFixed(2);
@@ -119,11 +243,20 @@ export function ContractManager({
         <Table className="min-w-[700px]">
           <TableHeader>
             <TableRow>
+              {showBulkSelect && (
+                <TableHead className="w-[40px]">
+                  <Checkbox 
+                    checked={selectedContracts.size === filteredContracts.length}
+                    onCheckedChange={toggleSelectAll}
+                  />
+                </TableHead>
+              )}
               <TableHead>{t('contracts.contract')}</TableHead>
               <TableHead>{t('contracts.provider')}</TableHead>
               <TableHead>{t('contracts.category')}</TableHead>
               <TableHead>{t('contracts.cost')}</TableHead>
               <TableHead>{t('contracts.renewal')}</TableHead>
+              <TableHead>Health</TableHead>
               <TableHead>{t('contracts.status')}</TableHead>
               <TableHead className="w-[100px]">{t('contracts.actions')}</TableHead>
             </TableRow>
@@ -138,6 +271,22 @@ export function ContractManager({
               
               return (
                 <TableRow key={contract.id}>
+                  {showBulkSelect && (
+                    <TableCell>
+                      <Checkbox 
+                        checked={selectedContracts.has(contract.id)}
+                        onCheckedChange={(checked) => {
+                          const newSet = new Set(selectedContracts);
+                          if (checked) {
+                            newSet.add(contract.id);
+                          } else {
+                            newSet.delete(contract.id);
+                          }
+                          setSelectedContracts(newSet);
+                        }}
+                      />
+                    </TableCell>
+                  )}
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <span className="text-lg">{categoryInfo?.icon || '📄'}</span>
@@ -155,6 +304,9 @@ export function ContractManager({
                         {format(contract.renewalDate, 'PPP', { locale: dateLocale })}
                       </span>
                     ) : '-'}
+                  </TableCell>
+                  <TableCell>
+                    <ContractHealthBadge contract={contract} />
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
@@ -175,18 +327,7 @@ export function ContractManager({
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          onClick={async () => {
-                            if (contract.documentUrl?.startsWith('http')) {
-                              window.open(contract.documentUrl, '_blank');
-                            } else {
-                              const { data } = await supabase.storage
-                                .from('contract-documents')
-                                .createSignedUrl(contract.documentUrl!, 60 * 60);
-                              if (data?.signedUrl) {
-                                window.open(data.signedUrl, '_blank');
-                              }
-                            }
-                          }}
+                          onClick={() => handlePreviewDocument(contract)}
                         >
                           <FileText className="h-4 w-4" />
                         </Button>
@@ -221,17 +362,32 @@ export function ContractManager({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-2xl font-bold">{t('contracts.title')}</h2>
           <p className="text-muted-foreground">
             {t('contracts.subtitle')}
           </p>
         </div>
-        <Button onClick={() => { setEditingContract(null); setDialogOpen(true); }}>
-          <Plus className="h-4 w-4 mr-2" />
-          {t('contracts.addContract')}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={handleSyncAllToCalendar}
+            disabled={syncingToCalendar}
+          >
+            {syncingToCalendar ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <CalendarPlus className="h-4 w-4 mr-2" />
+            )}
+            Sync to Calendar
+          </Button>
+          <Button onClick={() => { setEditingContract(null); setDialogOpen(true); }}>
+            <Plus className="h-4 w-4 mr-2" />
+            {t('contracts.addContract')}
+          </Button>
+        </div>
       </div>
 
       {/* Alerts */}
@@ -248,9 +404,19 @@ export function ContractManager({
               {cancellationDeadlines.map(c => (
                 <div key={c.id} className="flex items-center justify-between text-sm">
                   <span>{c.name}</span>
-                  <Badge variant="destructive">
-                    {t('contracts.cancelBy')} {format(c.cancellationDeadline, 'MMM d', { locale: dateLocale })}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => setEmailDialogContract(c)}
+                    >
+                      Generate Cancellation
+                    </Button>
+                    <Badge variant="destructive">
+                      {t('contracts.cancelBy')} {format(c.cancellationDeadline, 'MMM d', { locale: dateLocale })}
+                    </Badge>
+                  </div>
                 </div>
               ))}
             </div>
@@ -298,8 +464,8 @@ export function ContractManager({
       </div>
 
       {/* Search & Filter */}
-      <div className="flex gap-3 items-center">
-        <div className="relative flex-1">
+      <div className="flex gap-3 items-center flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder={t('contracts.searchContracts')}
@@ -308,60 +474,109 @@ export function ContractManager({
             className="pl-9"
           />
         </div>
-        <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as 'cards' | 'table')}>
+        <ToggleGroup 
+          type="single" 
+          value={viewMode} 
+          onValueChange={(v) => v && setViewMode(v as 'cards' | 'table' | 'timeline')}
+        >
           <ToggleGroupItem value="cards" aria-label="Card view">
             <LayoutGrid className="w-4 h-4" />
           </ToggleGroupItem>
           <ToggleGroupItem value="table" aria-label="Table view">
             <List className="w-4 h-4" />
           </ToggleGroupItem>
+          <ToggleGroupItem value="timeline" aria-label="Timeline view">
+            <Clock className="w-4 h-4" />
+          </ToggleGroupItem>
         </ToggleGroup>
+        <Button
+          variant={showBulkSelect ? "default" : "outline"}
+          size="sm"
+          onClick={() => {
+            setShowBulkSelect(!showBulkSelect);
+            if (showBulkSelect) setSelectedContracts(new Set());
+          }}
+        >
+          {showBulkSelect ? 'Cancel Selection' : 'Bulk Select'}
+        </Button>
+        {showBulkSelect && selectedContracts.size > 0 && (
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleBulkDelete}
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Delete ({selectedContracts.size})
+          </Button>
+        )}
       </div>
 
-      {/* Category Tabs */}
-      <Tabs value={activeCategory} onValueChange={(v) => setActiveCategory(v as any)}>
-        <div className="overflow-x-auto scrollbar-hide -mx-1 px-1">
-          <TabsList className="inline-flex min-w-max h-auto gap-1">
-            <TabsTrigger value="all" className="whitespace-nowrap">
-              {t('contracts.all')} ({contracts.length})
-            </TabsTrigger>
-            {CONTRACT_CATEGORIES.map(cat => {
-              const count = contractsByCategory[cat.value].length;
-              if (count === 0) return null;
-              return (
-                <TabsTrigger key={cat.value} value={cat.value} className="whitespace-nowrap">
-                  {cat.icon} {cat.label} ({count})
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
-        </div>
+      {/* Timeline View */}
+      {viewMode === 'timeline' && (
+        <ContractTimeline contracts={contracts} />
+      )}
 
-        <TabsContent value={activeCategory} className="mt-4">
-          {viewMode === 'cards' ? (
-            filteredContracts.length === 0 ? (
-              <Card>
-                <CardContent className="py-8 text-center text-muted-foreground">
-                  {search ? t('contracts.noContractsSearch') : t('contracts.noContracts')}
-                </CardContent>
-              </Card>
+      {/* Category Tabs */}
+      {viewMode !== 'timeline' && (
+        <Tabs value={activeCategory} onValueChange={(v) => setActiveCategory(v as any)}>
+          <div className="overflow-x-auto scrollbar-hide -mx-1 px-1">
+            <TabsList className="inline-flex min-w-max h-auto gap-1">
+              <TabsTrigger value="all" className="whitespace-nowrap">
+                {t('contracts.all')} ({contracts.length})
+              </TabsTrigger>
+              {CONTRACT_CATEGORIES.map(cat => {
+                const count = contractsByCategory[cat.value].length;
+                if (count === 0) return null;
+                return (
+                  <TabsTrigger key={cat.value} value={cat.value} className="whitespace-nowrap">
+                    {cat.icon} {cat.label} ({count})
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+          </div>
+
+          <TabsContent value={activeCategory} className="mt-4">
+            {viewMode === 'cards' ? (
+              filteredContracts.length === 0 ? (
+                <Card>
+                  <CardContent className="py-8 text-center text-muted-foreground">
+                    {search ? t('contracts.noContractsSearch') : t('contracts.noContracts')}
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {filteredContracts.map(contract => (
+                    <ContractCard
+                      key={contract.id}
+                      contract={contract}
+                      onEdit={handleEdit}
+                      onDelete={setDeleteContract}
+                      onGenerateEmail={setEmailDialogContract}
+                      onPreviewDocument={handlePreviewDocument}
+                      onSyncToCalendar={handleSyncToCalendar}
+                      onScanDocument={handleScanDocument}
+                      isSelected={selectedContracts.has(contract.id)}
+                      onSelectChange={(selected) => {
+                        const newSet = new Set(selectedContracts);
+                        if (selected) {
+                          newSet.add(contract.id);
+                        } else {
+                          newSet.delete(contract.id);
+                        }
+                        setSelectedContracts(newSet);
+                      }}
+                      showBulkSelect={showBulkSelect}
+                    />
+                  ))}
+                </div>
+              )
             ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                {filteredContracts.map(contract => (
-                  <ContractCard
-                    key={contract.id}
-                    contract={contract}
-                    onEdit={handleEdit}
-                    onDelete={setDeleteContract}
-                  />
-                ))}
-              </div>
-            )
-          ) : (
-            <ContractTable />
-          )}
-        </TabsContent>
-      </Tabs>
+              <ContractTable />
+            )}
+          </TabsContent>
+        </Tabs>
+      )}
 
       {/* Add/Edit Dialog */}
       <AddEditContractDialog
@@ -369,6 +584,21 @@ export function ContractManager({
         onOpenChange={setDialogOpen}
         contract={editingContract}
         onSave={handleSave}
+      />
+
+      {/* Cancellation Email Dialog */}
+      <CancellationEmailDialog
+        open={!!emailDialogContract}
+        onOpenChange={(open) => !open && setEmailDialogContract(null)}
+        contract={emailDialogContract}
+      />
+
+      {/* Document Preview Dialog */}
+      <DocumentPreviewDialog
+        open={!!previewDocument}
+        onOpenChange={(open) => !open && setPreviewDocument(null)}
+        documentPath={previewDocument?.path || null}
+        contractName={previewDocument?.name}
       />
 
       {/* Delete Confirmation */}

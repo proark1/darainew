@@ -47,3 +47,9 @@ verify_jwt = false
 
 [functions.auto-pilot]
 verify_jwt = false
+
+[functions.scan-contract]
+verify_jwt = false
+
+[functions.generate-cancellation-email]
+verify_jwt = false
