@@ -3230,6 +3230,8 @@ export type Database = {
       }
       space_share_settings: {
         Row: {
+          confirmed_at: string | null
+          consent_message: string | null
           created_at: string
           id: string
           share_business_events: boolean
@@ -3242,10 +3244,13 @@ export type Database = {
           share_personal_tasks: boolean
           share_work_events: boolean
           share_work_tasks: boolean
+          sharing_confirmed: boolean | null
           space_member_id: string
           updated_at: string
         }
         Insert: {
+          confirmed_at?: string | null
+          consent_message?: string | null
           created_at?: string
           id?: string
           share_business_events?: boolean
@@ -3258,10 +3263,13 @@ export type Database = {
           share_personal_tasks?: boolean
           share_work_events?: boolean
           share_work_tasks?: boolean
+          sharing_confirmed?: boolean | null
           space_member_id: string
           updated_at?: string
         }
         Update: {
+          confirmed_at?: string | null
+          consent_message?: string | null
           created_at?: string
           id?: string
           share_business_events?: boolean
@@ -3274,6 +3282,7 @@ export type Database = {
           share_personal_tasks?: boolean
           share_work_events?: boolean
           share_work_tasks?: boolean
+          sharing_confirmed?: boolean | null
           space_member_id?: string
           updated_at?: string
         }

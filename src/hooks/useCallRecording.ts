@@ -151,10 +151,11 @@ export function useCallRecording(
     if (!sessionId || !userId) return;
 
     try {
-      const fileName = `recordings/${userId}/${sessionId}_${Date.now()}.webm`;
+      // Store in user's folder for RLS policy: auth.uid()::text = (storage.foldername(name))[1]
+      const fileName = `${userId}/${sessionId}_${Date.now()}.webm`;
       
       const { data, error } = await supabase.storage
-        .from('chat-attachments')
+        .from('call-recordings')
         .upload(fileName, blob, {
           contentType: 'audio/webm',
           cacheControl: '3600',
@@ -164,14 +165,19 @@ export function useCallRecording(
         throw error;
       }
 
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('chat-attachments')
-        .getPublicUrl(fileName);
+      // Get time-limited signed URL (1 hour) for secure access
+      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+        .from('call-recordings')
+        .createSignedUrl(fileName, 60 * 60); // 1 hour expiry
 
-      setRecordingUrl(urlData.publicUrl);
+      if (signedUrlError) {
+        console.error('[recording] Signed URL error:', signedUrlError);
+        throw signedUrlError;
+      }
 
-      // Save metadata to database
+      setRecordingUrl(signedUrlData.signedUrl);
+
+      // Save metadata to database - store file_path, not the signed URL (URLs expire)
       const { error: dbError } = await supabase
         .from('call_recordings')
         .insert({
@@ -180,7 +186,7 @@ export function useCallRecording(
           caller_id: callerId || userId,
           callee_id: calleeId || userId,
           file_path: fileName,
-          file_url: urlData.publicUrl,
+          file_url: signedUrlData.signedUrl, // Will be regenerated on access
           duration_seconds: duration,
           file_size_bytes: blob.size,
         });
@@ -195,7 +201,7 @@ export function useCallRecording(
         description: `Call recording saved (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`,
       });
 
-      console.log('[recording] Uploaded:', urlData.publicUrl);
+      console.log('[recording] Uploaded securely with signed URL');
     } catch (error) {
       console.error('[recording] Upload failed:', error);
       toast({

@@ -31,7 +31,9 @@ import {
   Contact,
   Calendar,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ShieldAlert,
+  ShieldCheck
 } from 'lucide-react';
 import { useSpaceMembers, SpaceMember, SpaceShareSettings } from '@/hooks/useSpaceMembers';
 import { CallButton } from '@/components/calling/CallButton';
@@ -262,6 +264,43 @@ export function SpaceMembersPanel({ userId }: SpaceMembersPanelProps) {
                       
                       {isExpanded && memberSettings && (
                         <div className="border-t bg-muted/30 p-4 space-y-4">
+                          {/* Security Warning Banner */}
+                          {!memberSettings.sharing_confirmed && (
+                            <div className="flex items-start gap-3 p-3 rounded-lg bg-warning/10 border border-warning/30">
+                              <ShieldAlert className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-warning">Data Sharing Not Confirmed</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Enabling sharing will allow this person to view your selected data. 
+                                  Personal documents, family health records, and sensitive files are <strong>never</strong> shared.
+                                </p>
+                                <Button 
+                                  size="sm" 
+                                  variant="outline" 
+                                  className="mt-2 border-warning/50 text-warning hover:bg-warning/10"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateShareSettings(member.id, { 
+                                      sharing_confirmed: true, 
+                                      confirmed_at: new Date().toISOString(),
+                                      consent_message: 'User confirmed data sharing consent'
+                                    });
+                                  }}
+                                >
+                                  <ShieldCheck className="w-4 h-4 mr-2" />
+                                  I understand, enable sharing
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+
+                          {memberSettings.sharing_confirmed && (
+                            <div className="flex items-center gap-2 text-xs text-success">
+                              <ShieldCheck className="w-4 h-4" />
+                              <span>Sharing confirmed on {new Date(memberSettings.confirmed_at || '').toLocaleDateString()}</span>
+                            </div>
+                          )}
+
                           <div>
                             <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
                               <Briefcase className="w-4 h-4" /> 
