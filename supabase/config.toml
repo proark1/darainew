@@ -3,6 +3,9 @@ project_id = "femilfmcmqmdbncmgcxh"
 [functions.contact-insights]
 verify_jwt = true
 
+[functions.chat-ai]
+verify_jwt = false
+
 [functions.chat]
 verify_jwt = false
 
