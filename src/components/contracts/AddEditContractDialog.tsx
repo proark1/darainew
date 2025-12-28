@@ -53,10 +53,10 @@ export function AddEditContractDialog({
   const [autoRenews, setAutoRenews] = useState(true);
   const [contractNumber, setContractNumber] = useState('');
   const [notes, setNotes] = useState('');
-  const [documentUrl, setDocumentUrl] = useState('');
+  const [documentUrls, setDocumentUrls] = useState<string[]>([]);
+  const [fileNames, setFileNames] = useState<string[]>([]);
   const [isActive, setIsActive] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [fileName, setFileName] = useState<string | null>(null);
 
   useEffect(() => {
     if (contract) {
@@ -72,14 +72,18 @@ export function AddEditContractDialog({
       setAutoRenews(contract.autoRenews);
       setContractNumber(contract.contractNumber || '');
       setNotes(contract.notes || '');
-      setDocumentUrl(contract.documentUrl || '');
       setIsActive(contract.isActive);
-      // Extract filename from URL
+      // Parse existing documents - support both single URL and comma-separated URLs
       if (contract.documentUrl) {
-        const parts = contract.documentUrl.split('/');
-        setFileName(parts[parts.length - 1]);
+        const urls = contract.documentUrl.split(',').map(u => u.trim()).filter(Boolean);
+        setDocumentUrls(urls);
+        setFileNames(urls.map(url => {
+          const parts = url.split('/');
+          return parts[parts.length - 1];
+        }));
       } else {
-        setFileName(null);
+        setDocumentUrls([]);
+        setFileNames([]);
       }
     } else {
       // Reset form
@@ -95,73 +99,85 @@ export function AddEditContractDialog({
       setAutoRenews(true);
       setContractNumber('');
       setNotes('');
-      setDocumentUrl('');
+      setDocumentUrls([]);
+      setFileNames([]);
       setIsActive(true);
-      setFileName(null);
     }
   }, [contract, open]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
+    const files = e.target.files;
+    if (!files || files.length === 0 || !user) return;
 
-    // Validate file type
     const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
-    if (!validTypes.includes(file.type)) {
-      toast({
-        variant: 'destructive',
-        title: 'Invalid file type',
-        description: 'Please upload a PDF or image file (JPG, PNG, WebP)',
-      });
-      return;
+    const filesToUpload: File[] = [];
+
+    // Validate all files
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (!validTypes.includes(file.type)) {
+        toast({
+          variant: 'destructive',
+          title: 'Invalid file type',
+          description: `${file.name}: Please upload PDF or image files (JPG, PNG, WebP)`,
+        });
+        continue;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          variant: 'destructive',
+          title: 'File too large',
+          description: `${file.name}: Maximum file size is 10MB`,
+        });
+        continue;
+      }
+      filesToUpload.push(file);
     }
 
-    // Validate file size (max 10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      toast({
-        variant: 'destructive',
-        title: 'File too large',
-        description: 'Maximum file size is 10MB',
-      });
-      return;
-    }
+    if (filesToUpload.length === 0) return;
 
     setUploading(true);
+    const newUrls: string[] = [];
+    const newNames: string[] = [];
+
     try {
-      const fileExt = file.name.split('.').pop();
-      const timestamp = Date.now();
-      const filePath = `${user.id}/${timestamp}-${file.name}`;
+      for (const file of filesToUpload) {
+        const timestamp = Date.now();
+        const filePath = `${user.id}/${timestamp}-${file.name}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('contract-documents')
-        .upload(filePath, file);
+        const { error: uploadError } = await supabase.storage
+          .from('contract-documents')
+          .upload(filePath, file);
 
-      if (uploadError) throw uploadError;
+        if (uploadError) {
+          console.error('Upload error for', file.name, uploadError);
+          toast({
+            variant: 'destructive',
+            title: 'Upload failed',
+            description: `Could not upload ${file.name}`,
+          });
+          continue;
+        }
 
-      const { data: urlData } = supabase.storage
-        .from('contract-documents')
-        .getPublicUrl(filePath);
+        newUrls.push(filePath);
+        newNames.push(file.name);
+      }
 
-      // For private buckets, we need to use createSignedUrl
-      const { data: signedUrlData } = await supabase.storage
-        .from('contract-documents')
-        .createSignedUrl(filePath, 60 * 60 * 24 * 365); // 1 year
-
-      const url = signedUrlData?.signedUrl || urlData.publicUrl;
-      
-      setDocumentUrl(filePath); // Store path, not URL
-      setFileName(file.name);
-      
-      toast({
-        title: 'Document uploaded',
-        description: file.name,
-      });
+      if (newUrls.length > 0) {
+        setDocumentUrls(prev => [...prev, ...newUrls]);
+        setFileNames(prev => [...prev, ...newNames]);
+        
+        toast({
+          title: 'Documents uploaded',
+          description: `${newUrls.length} file(s) uploaded successfully`,
+        });
+      }
     } catch (error) {
       console.error('Upload error:', error);
       toast({
         variant: 'destructive',
         title: 'Upload failed',
-        description: 'Could not upload document. Please try again.',
+        description: 'Could not upload documents. Please try again.',
       });
     } finally {
       setUploading(false);
@@ -171,19 +187,20 @@ export function AddEditContractDialog({
     }
   };
 
-  const handleRemoveDocument = async () => {
-    if (!documentUrl || !user) return;
+  const handleRemoveDocument = async (index: number) => {
+    const urlToRemove = documentUrls[index];
+    if (!urlToRemove || !user) return;
 
     try {
       // Only delete from storage if it's a storage path (not external URL)
-      if (!documentUrl.startsWith('http')) {
+      if (!urlToRemove.startsWith('http')) {
         await supabase.storage
           .from('contract-documents')
-          .remove([documentUrl]);
+          .remove([urlToRemove]);
       }
       
-      setDocumentUrl('');
-      setFileName(null);
+      setDocumentUrls(prev => prev.filter((_, i) => i !== index));
+      setFileNames(prev => prev.filter((_, i) => i !== index));
       
       toast({
         title: 'Document removed',
@@ -193,19 +210,19 @@ export function AddEditContractDialog({
     }
   };
 
-  const handleViewDocument = async () => {
-    if (!documentUrl) return;
+  const handleViewDocument = async (url: string) => {
+    if (!url) return;
 
     // If it's an external URL, open directly
-    if (documentUrl.startsWith('http')) {
-      window.open(documentUrl, '_blank');
+    if (url.startsWith('http')) {
+      window.open(url, '_blank');
       return;
     }
 
     // Get signed URL for private bucket
     const { data } = await supabase.storage
       .from('contract-documents')
-      .createSignedUrl(documentUrl, 60 * 60); // 1 hour
+      .createSignedUrl(url, 60 * 60); // 1 hour
 
     if (data?.signedUrl) {
       window.open(data.signedUrl, '_blank');
@@ -228,7 +245,7 @@ export function AddEditContractDialog({
       autoRenews,
       contractNumber: contractNumber || undefined,
       notes: notes || undefined,
-      documentUrl: documentUrl || undefined,
+      documentUrl: documentUrls.length > 0 ? documentUrls.join(',') : undefined,
       isActive,
     };
 
@@ -371,61 +388,68 @@ export function AddEditContractDialog({
 
           {/* Document Upload */}
           <div className="space-y-2">
-            <Label>Contract Document</Label>
+            <Label>Contract Documents</Label>
             <input
               ref={fileInputRef}
               type="file"
               accept=".pdf,.jpg,.jpeg,.png,.webp"
               onChange={handleFileUpload}
+              multiple
               className="hidden"
             />
             
-            {fileName ? (
-              <div className="flex items-center gap-2 p-3 rounded-lg border bg-muted/50">
-                <FileText className="w-5 h-5 text-primary shrink-0" />
-                <span className="text-sm truncate flex-1">{fileName}</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  onClick={handleViewDocument}
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
-                  onClick={handleRemoveDocument}
-                >
-                  <X className="w-4 h-4" />
-                </Button>
+            {/* List of uploaded files */}
+            {fileNames.length > 0 && (
+              <div className="space-y-2">
+                {fileNames.map((name, index) => (
+                  <div key={index} className="flex items-center gap-2 p-3 rounded-lg border bg-muted/50">
+                    <FileText className="w-5 h-5 text-primary shrink-0" />
+                    <span className="text-sm truncate flex-1">{name}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      onClick={() => handleViewDocument(documentUrls[index])}
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
+                      onClick={() => handleRemoveDocument(index)}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
               </div>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-              >
-                {uploading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-4 h-4 mr-2" />
-                    Upload PDF or Image
-                  </>
-                )}
-              </Button>
             )}
+            
+            {/* Upload button */}
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+            >
+              {uploading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4 mr-2" />
+                  {fileNames.length > 0 ? 'Add More Documents' : 'Upload PDF or Image'}
+                </>
+              )}
+            </Button>
             <p className="text-xs text-muted-foreground">
-              PDF, JPG, PNG, or WebP. Max 10MB.
+              PDF, JPG, PNG, or WebP. Max 10MB per file. Select multiple files at once.
             </p>
           </div>
 
