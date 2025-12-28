@@ -287,6 +287,30 @@ export type Database = {
         }
         Relationships: []
       }
+      blocked_users: {
+        Row: {
+          blocked_id: string
+          blocker_id: string
+          created_at: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          blocked_id: string
+          blocker_id: string
+          created_at?: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          blocked_id?: string
+          blocker_id?: string
+          created_at?: string
+          id?: string
+          reason?: string | null
+        }
+        Relationships: []
+      }
       brain_dumps: {
         Row: {
           ai_summary: string | null
@@ -334,6 +358,41 @@ export type Database = {
           voice_url?: string | null
         }
         Relationships: []
+      }
+      call_notes: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          session_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          session_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          session_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_notes_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "call_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       call_recordings: {
         Row: {
@@ -503,6 +562,45 @@ export type Database = {
           id?: string
           is_pinned?: boolean
           role?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      communication_stats: {
+        Row: {
+          avg_response_time_seconds: number | null
+          contact_id: string
+          id: string
+          last_interaction_at: string | null
+          total_call_duration_seconds: number | null
+          total_calls: number | null
+          total_messages_received: number | null
+          total_messages_sent: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avg_response_time_seconds?: number | null
+          contact_id: string
+          id?: string
+          last_interaction_at?: string | null
+          total_call_duration_seconds?: number | null
+          total_calls?: number | null
+          total_messages_received?: number | null
+          total_messages_sent?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avg_response_time_seconds?: number | null
+          contact_id?: string
+          id?: string
+          last_interaction_at?: string | null
+          total_call_duration_seconds?: number | null
+          total_calls?: number | null
+          total_messages_received?: number | null
+          total_messages_sent?: number | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -2019,6 +2117,30 @@ export type Database = {
           },
         ]
       }
+      message_read_receipts: {
+        Row: {
+          id: string
+          message_id: string
+          message_type: string
+          read_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          message_id: string
+          message_type: string
+          read_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          message_id?: string
+          message_type?: string
+          read_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       news_preferences: {
         Row: {
           created_at: string
@@ -2232,6 +2354,33 @@ export type Database = {
           synced_at?: string | null
           table_name?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      pinned_messages: {
+        Row: {
+          chat_id: string
+          created_at: string
+          id: string
+          message_id: string
+          message_type: string
+          pinned_by: string
+        }
+        Insert: {
+          chat_id: string
+          created_at?: string
+          id?: string
+          message_id: string
+          message_type: string
+          pinned_by: string
+        }
+        Update: {
+          chat_id?: string
+          created_at?: string
+          id?: string
+          message_id?: string
+          message_type?: string
+          pinned_by?: string
         }
         Relationships: []
       }
@@ -3040,6 +3189,87 @@ export type Database = {
         }
         Relationships: []
       }
+      scheduled_calls: {
+        Row: {
+          call_type: string
+          created_at: string
+          description: string | null
+          duration_minutes: number | null
+          id: string
+          organizer_id: string
+          participant_ids: string[]
+          reminder_sent: boolean | null
+          scheduled_for: string
+          status: string
+          title: string | null
+        }
+        Insert: {
+          call_type?: string
+          created_at?: string
+          description?: string | null
+          duration_minutes?: number | null
+          id?: string
+          organizer_id: string
+          participant_ids: string[]
+          reminder_sent?: boolean | null
+          scheduled_for: string
+          status?: string
+          title?: string | null
+        }
+        Update: {
+          call_type?: string
+          created_at?: string
+          description?: string | null
+          duration_minutes?: number | null
+          id?: string
+          organizer_id?: string
+          participant_ids?: string[]
+          reminder_sent?: boolean | null
+          scheduled_for?: string
+          status?: string
+          title?: string | null
+        }
+        Relationships: []
+      }
+      scheduled_messages: {
+        Row: {
+          attachments: Json | null
+          content: string
+          created_at: string
+          group_id: string | null
+          id: string
+          recipient_id: string | null
+          scheduled_for: string
+          sender_id: string
+          sent_at: string | null
+          status: string
+        }
+        Insert: {
+          attachments?: Json | null
+          content: string
+          created_at?: string
+          group_id?: string | null
+          id?: string
+          recipient_id?: string | null
+          scheduled_for: string
+          sender_id: string
+          sent_at?: string | null
+          status?: string
+        }
+        Update: {
+          attachments?: Json | null
+          content?: string
+          created_at?: string
+          group_id?: string | null
+          id?: string
+          recipient_id?: string | null
+          scheduled_for?: string
+          sender_id?: string
+          sent_at?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       search_history: {
         Row: {
           created_at: string
@@ -3337,6 +3567,30 @@ export type Database = {
           },
         ]
       }
+      starred_messages: {
+        Row: {
+          created_at: string
+          id: string
+          message_id: string
+          message_type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message_id: string
+          message_type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message_id?: string
+          message_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       startup_metrics: {
         Row: {
           created_at: string
@@ -3629,6 +3883,45 @@ export type Database = {
           },
         ]
       }
+      user_chat_settings: {
+        Row: {
+          created_at: string
+          disappearing_messages_default: number | null
+          dnd_days: number[] | null
+          dnd_enabled: boolean | null
+          dnd_end: string | null
+          dnd_start: string | null
+          id: string
+          priority_contacts: string[] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          disappearing_messages_default?: number | null
+          dnd_days?: number[] | null
+          dnd_enabled?: boolean | null
+          dnd_end?: string | null
+          dnd_start?: string | null
+          id?: string
+          priority_contacts?: string[] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          disappearing_messages_default?: number | null
+          dnd_days?: number[] | null
+          dnd_enabled?: boolean | null
+          dnd_end?: string | null
+          dnd_start?: string | null
+          id?: string
+          priority_contacts?: string[] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_contacts: {
         Row: {
           avatar_url: string | null
@@ -3872,6 +4165,42 @@ export type Database = {
           weekly_habits_logged?: number
           weekly_tasks_completed?: number
           weekly_xp?: number
+        }
+        Relationships: []
+      }
+      voicemails: {
+        Row: {
+          audio_url: string
+          caller_id: string
+          created_at: string
+          duration_seconds: number
+          id: string
+          is_read: boolean | null
+          read_at: string | null
+          recipient_id: string
+          transcription: string | null
+        }
+        Insert: {
+          audio_url: string
+          caller_id: string
+          created_at?: string
+          duration_seconds?: number
+          id?: string
+          is_read?: boolean | null
+          read_at?: string | null
+          recipient_id: string
+          transcription?: string | null
+        }
+        Update: {
+          audio_url?: string
+          caller_id?: string
+          created_at?: string
+          duration_seconds?: number
+          id?: string
+          is_read?: boolean | null
+          read_at?: string | null
+          recipient_id?: string
+          transcription?: string | null
         }
         Relationships: []
       }
