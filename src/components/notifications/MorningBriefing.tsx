@@ -1,10 +1,9 @@
 import { useState, useEffect, useMemo, ReactNode } from 'react';
-import { X, Sun, Calendar, CheckCircle2, Flame, Clock, Users, FileText, Zap, FolderKanban, Battery, BatteryLow, BatteryFull, AlertTriangle, Moon, CloudSun, Newspaper, MapPin, Loader2, ChevronDown } from 'lucide-react';
+import { X, Sun, Calendar, CheckCircle2, Flame, Clock, Users, FileText, Zap, FolderKanban, Battery, BatteryLow, BatteryFull, AlertTriangle, Moon, CloudSun, Newspaper, MapPin, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Task, CalendarEvent, Project } from '@/types/flux';
 import { Contact } from '@/hooks/useContacts';
 import { Contract } from '@/hooks/useContracts';
@@ -16,31 +15,21 @@ import { cn } from '@/lib/utils';
 
 type EnergyLevel = 'low' | 'medium' | 'high' | null;
 
-interface CollapsibleSectionProps {
+interface SectionProps {
   icon: ReactNode;
-  title: string;
-  badge?: ReactNode;
   children: ReactNode;
-  defaultOpen?: boolean;
 }
 
-function CollapsibleSection({ icon, title, badge, children, defaultOpen = true }: CollapsibleSectionProps) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  
+function Section({ icon, children }: SectionProps) {
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="space-y-2">
-      <CollapsibleTrigger asChild>
-        <button className="flex items-center gap-2 w-full text-left hover:bg-muted/50 rounded p-1 -ml-1 transition-colors">
-          {icon}
-          <span className="text-sm font-medium flex-1">{title}</span>
-          {badge}
-          <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", isOpen && "rotate-180")} />
-        </button>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-1">
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-muted-foreground mb-1">
+        {icon}
+      </div>
+      <div className="space-y-1">
         {children}
-      </CollapsibleContent>
-    </Collapsible>
+      </div>
+    </div>
   );
 }
 
@@ -413,11 +402,7 @@ export function MorningBriefing({
             {/* Column 1: Tasks */}
             <div className="space-y-4">
               {/* Top 3 Tasks */}
-              <CollapsibleSection
-                icon={<CheckCircle2 className="h-4 w-4 text-primary" />}
-                title="Today's Top 3"
-                defaultOpen={true}
-              >
+              <Section icon={<CheckCircle2 className="h-4 w-4 text-primary" />}>
                 {top3Tasks.map((task, i) => (
                   <div key={task.id} className="flex items-center justify-between text-sm p-2 rounded bg-muted/50">
                     <span className="truncate flex items-center gap-2">
@@ -435,15 +420,11 @@ export function MorningBriefing({
                 {top3Tasks.length === 0 && (
                   <p className="text-sm text-muted-foreground p-2">No tasks scheduled</p>
                 )}
-              </CollapsibleSection>
+              </Section>
 
               {/* Next Week Tasks */}
               {nextWeekTasks.length > 0 && (
-                <CollapsibleSection
-                  icon={<Calendar className="h-4 w-4 text-blue-500" />}
-                  title="Next Week"
-                  defaultOpen={false}
-                >
+                <Section icon={<Calendar className="h-4 w-4 text-blue-500" />}>
                   {nextWeekTasks.map((task) => (
                     <div key={task.id} className="flex items-center justify-between text-sm p-2 rounded bg-muted/50">
                       <span className="truncate">{task.title}</span>
@@ -452,16 +433,12 @@ export function MorningBriefing({
                       </span>
                     </div>
                   ))}
-                </CollapsibleSection>
+                </Section>
               )}
 
               {/* Projects Needing Attention */}
               {projectsNeedingAttention.length > 0 && (
-                <CollapsibleSection
-                  icon={<FolderKanban className="h-4 w-4 text-muted-foreground" />}
-                  title="Needs Attention"
-                  defaultOpen={false}
-                >
+                <Section icon={<FolderKanban className="h-4 w-4 text-muted-foreground" />}>
                   {projectsNeedingAttention.map(({ project, overdueCount, dueTodayCount }) => (
                     <div key={project.id} className="flex items-center justify-between text-sm p-2 rounded bg-muted/50">
                       <span className="flex items-center gap-2 truncate">
@@ -475,7 +452,7 @@ export function MorningBriefing({
                       </span>
                     </div>
                   ))}
-                </CollapsibleSection>
+                </Section>
               )}
             </div>
 
@@ -483,11 +460,7 @@ export function MorningBriefing({
             <div className="space-y-4">
               {/* Contacts Due */}
               {contactsDue.length > 0 && (
-                <CollapsibleSection
-                  icon={<Users className="h-4 w-4 text-muted-foreground" />}
-                  title="Reach Out Today"
-                  defaultOpen={true}
-                >
+                <Section icon={<Users className="h-4 w-4 text-muted-foreground" />}>
                   {contactsDue.map(contact => {
                     const daysOverdue = differenceInDays(new Date(), contact.nextContactDue!);
                     return (
@@ -518,16 +491,12 @@ export function MorningBriefing({
                       </div>
                     );
                   })}
-                </CollapsibleSection>
+                </Section>
               )}
 
               {/* Contract Alerts */}
               {contractAlerts.length > 0 && (
-                <CollapsibleSection
-                  icon={<FileText className="h-4 w-4 text-muted-foreground" />}
-                  title="Contract Alerts"
-                  defaultOpen={true}
-                >
+                <Section icon={<FileText className="h-4 w-4 text-muted-foreground" />}>
                   {contractAlerts.map((alert) => (
                     <div key={`${alert.contract.id}-${alert.type}`} className="flex items-center justify-between text-sm p-2 rounded bg-muted/50">
                       <span className="truncate">{alert.contract.name}</span>
@@ -539,17 +508,17 @@ export function MorningBriefing({
                       </Badge>
                     </div>
                   ))}
-                </CollapsibleSection>
+                </Section>
               )}
 
               {/* Personalized News */}
-              <CollapsibleSection
-                icon={<Newspaper className="h-4 w-4 text-primary" />}
-                title="Headlines"
-                badge={newsLoading ? <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" /> : undefined}
-                defaultOpen={false}
-              >
-                {!newsLoading && news.length > 0 ? (
+              <Section icon={<Newspaper className="h-4 w-4 text-primary" />}>
+                {newsLoading ? (
+                  <div className="flex items-center gap-2 p-2">
+                    <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">Loading news...</span>
+                  </div>
+                ) : news.length > 0 ? (
                   news.slice(0, 3).map((item, i) => (
                     <div key={i} className="p-2 rounded bg-muted/50">
                       {item.url ? (
@@ -567,23 +536,19 @@ export function MorningBriefing({
                       <Badge variant="outline" className="text-[10px] mt-1">{item.category}</Badge>
                     </div>
                   ))
-                ) : !newsLoading && (
+                ) : (
                   <p className="text-xs text-muted-foreground p-2">
                     Add interests to your profile for personalized news
                   </p>
                 )}
-              </CollapsibleSection>
+              </Section>
             </div>
 
             {/* Column 3: Schedule */}
             <div className="space-y-4">
               {/* Today's Schedule */}
               {timeBlocks.length > 0 && (
-                <CollapsibleSection
-                  icon={<Calendar className="h-4 w-4 text-muted-foreground" />}
-                  title="Today's Schedule"
-                  defaultOpen={true}
-                >
+                <Section icon={<Calendar className="h-4 w-4 text-muted-foreground" />}>
                   {timeBlocks.map((block, i) => (
                     <div 
                       key={i} 
@@ -598,24 +563,12 @@ export function MorningBriefing({
                       </span>
                     </div>
                   ))}
-                </CollapsibleSection>
+                </Section>
               )}
 
               {/* Week Ahead */}
               {weekAhead.some(d => d.hasEveningCommitment || d.events.length > 0) && (
-                <CollapsibleSection
-                  icon={<Moon className="h-4 w-4 text-muted-foreground" />}
-                  title="Week Ahead"
-                  badge={
-                    weekAhead.filter(d => d.hasEveningCommitment).length > 0 ? (
-                      <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">
-                        <AlertTriangle className="h-2 w-2 mr-1" />
-                        {weekAhead.filter(d => d.hasEveningCommitment).length} eve
-                      </Badge>
-                    ) : undefined
-                  }
-                  defaultOpen={false}
-                >
+                <Section icon={<Moon className="h-4 w-4 text-muted-foreground" />}>
                   {weekAhead.slice(0, 5).map((day) => (
                     <div 
                       key={day.date.toISOString()} 
@@ -638,7 +591,7 @@ export function MorningBriefing({
                       </span>
                     </div>
                   ))}
-                </CollapsibleSection>
+                </Section>
               )}
             </div>
           </div>
