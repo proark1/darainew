@@ -1,27 +1,64 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, X, Bell } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { Sparkles, X, Bell, Check, Clock, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
+import { CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { useProactiveReminders } from '@/hooks/useProactiveReminders';
+import { useProactiveReminders, ProactiveReminder } from '@/hooks/useProactiveReminders';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
+
+// Map entity types to routes
+const getEntityRoute = (reminder: ProactiveReminder): string | null => {
+  const entityType = reminder.trigger_entity_type;
+  const entityId = reminder.trigger_entity_id;
+  
+  if (!entityType) return null;
+  
+  switch (entityType) {
+    case 'task':
+      return '/?tab=tasks';
+    case 'event':
+      return '/?tab=calendar';
+    case 'habit':
+      return '/?tab=habits';
+    case 'contact':
+      return '/?tab=contacts';
+    case 'health':
+      return '/?tab=health';
+    case 'contract':
+      return '/contracts';
+    default:
+      return null;
+  }
+};
+
+const getActionLabel = (reminder: ProactiveReminder): string => {
+  const type = reminder.reminder_type?.toLowerCase() || '';
+  if (type.includes('habit')) return 'Track';
+  if (type.includes('task')) return 'View Task';
+  if (type.includes('checkin')) return 'Fill In';
+  if (type.includes('health')) return 'Log';
+  if (type.includes('contact')) return 'Reach Out';
+  return 'View';
+};
 
 export function DoriNotificationIcon() {
-  const { reminders, unreadCount, markAsRead, dismissReminder } = useProactiveReminders();
+  const navigate = useNavigate();
+  const { reminders, unreadCount, markAsRead, dismissReminder, snoozeReminder, completeReminder } = useProactiveReminders();
   const [open, setOpen] = useState(false);
 
   const handleOpen = (isOpen: boolean) => {
     setOpen(isOpen);
     if (isOpen && reminders.length > 0) {
-      // Mark first few as read when opening
       reminders.slice(0, 3).forEach(r => {
         if (!r.read_at) markAsRead(r.id);
       });
@@ -31,6 +68,33 @@ export function DoriNotificationIcon() {
   const handleDismiss = (e: React.MouseEvent, reminderId: string) => {
     e.stopPropagation();
     dismissReminder(reminderId);
+    toast.success('Reminder dismissed');
+  };
+
+  const handleComplete = (e: React.MouseEvent, reminder: ProactiveReminder) => {
+    e.stopPropagation();
+    completeReminder(reminder.id);
+    toast.success('Marked as done!');
+  };
+
+  const handleSnooze = (e: React.MouseEvent, reminder: ProactiveReminder) => {
+    e.stopPropagation();
+    snoozeReminder(reminder.id, 1); // Snooze for 1 hour
+    toast.success('Snoozed for 1 hour');
+  };
+
+  const handleAction = (e: React.MouseEvent, reminder: ProactiveReminder) => {
+    e.stopPropagation();
+    const route = getEntityRoute(reminder);
+    if (route) {
+      setOpen(false);
+      navigate(route);
+      markAsRead(reminder.id);
+    } else {
+      // If no specific route, mark as complete
+      completeReminder(reminder.id);
+      toast.success('Marked as done!');
+    }
   };
 
   return (
@@ -57,7 +121,6 @@ export function DoriNotificationIcon() {
             )} />
           </motion.div>
           
-          {/* Unread badge */}
           {unreadCount > 0 && (
             <motion.div
               initial={{ scale: 0 }}
@@ -82,7 +145,7 @@ export function DoriNotificationIcon() {
           </div>
         </div>
         
-        <ScrollArea className="max-h-72">
+        <ScrollArea className="max-h-80">
           <CardContent className="p-2 space-y-2">
             {reminders.slice(0, 5).map((reminder) => (
               <motion.div
@@ -110,6 +173,45 @@ export function DoriNotificationIcon() {
                     <p className="text-xs text-muted-foreground/60 mt-1">
                       {format(new Date(reminder.scheduled_for), 'h:mm a')}
                     </p>
+                    
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-1.5 mt-2">
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        onClick={(e) => handleAction(e, reminder)}
+                      >
+                        {getEntityRoute(reminder) ? (
+                          <>
+                            <ExternalLink className="w-3 h-3" />
+                            {getActionLabel(reminder)}
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-3 h-3" />
+                            Done
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        onClick={(e) => handleSnooze(e, reminder)}
+                      >
+                        <Clock className="w-3 h-3" />
+                        Later
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={(e) => handleComplete(e, reminder)}
+                      >
+                        <Check className="w-3 h-3" />
+                      </Button>
+                    </div>
                   </div>
                   <Button
                     variant="ghost"

@@ -7,6 +7,7 @@ import { ChatMessage } from '@/types/flux';
 import { Contact } from '@/hooks/useContacts';
 import { useVoiceRecognition } from '@/hooks/useVoiceRecognition';
 import { findRelevantContacts, ContactSuggestion } from '@/lib/contactSuggestions';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Send, User, Bot, Mic, MicOff, MessageSquare, Users, X } from 'lucide-react';
 import { format } from 'date-fns';
 import doriFish from '@/assets/dori-fish.png';
@@ -30,6 +31,7 @@ export function DoriPanel({
   onVoiceMode,
   contacts = EMPTY_CONTACTS,
 }: DoriPanelProps) {
+  const isMobile = useIsMobile();
   const [mode, setMode] = useState<Mode>('text');
   const [input, setInput] = useState('');
   const [contactSuggestions, setContactSuggestions] = useState<ContactSuggestion[]>([]);
@@ -111,25 +113,27 @@ export function DoriPanel({
             variant={mode === 'text' ? 'secondary' : 'ghost'}
             size="sm"
             className={cn(
-              "gap-1.5 h-7 px-2",
+              "gap-1.5 h-7",
+              isMobile ? "px-2" : "px-2",
               mode === 'text' && "bg-background shadow-sm"
             )}
             onClick={() => setMode('text')}
           >
             <MessageSquare className="w-3.5 h-3.5" />
-            <span className="text-xs">Text</span>
+            {!isMobile && <span className="text-xs">Text</span>}
           </Button>
           <Button
             variant={mode === 'voice' ? 'secondary' : 'ghost'}
             size="sm"
             className={cn(
-              "gap-1.5 h-7 px-2",
+              "gap-1.5 h-7",
+              isMobile ? "px-2" : "px-2",
               mode === 'voice' && "bg-background shadow-sm"
             )}
             onClick={() => handleModeSwitch('voice')}
           >
             <Mic className="w-3.5 h-3.5" />
-            <span className="text-xs">Voice</span>
+            {!isMobile && <span className="text-xs">Voice</span>}
           </Button>
         </div>
       </div>
