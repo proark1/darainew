@@ -47,6 +47,7 @@ import {
   Newspaper
 } from 'lucide-react';
 import { BrainDumpFAB } from '@/components/capture/BrainDumpFAB';
+import { DoriNotificationIcon } from '@/components/assistant/DoriNotificationIcon';
 
 interface MobileLayoutProps {
   userId: string;
@@ -394,6 +395,7 @@ export function MobileLayout({
         </div>
         <div className="flex items-center gap-2">
           <BrainDumpFAB className="static bottom-auto right-auto" collapsed={true} />
+          <DoriNotificationIcon />
           <NotificationCenter
             notifications={notifications}
             onMarkRead={markRead}
