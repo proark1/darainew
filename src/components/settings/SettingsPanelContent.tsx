@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { UserSettings, ThemeMode, ColorScheme, TaskCategory, TaskPriority } from '@/types/flux';
 import { 
   Settings, 
@@ -32,7 +34,8 @@ import {
   MapPin,
   Sparkles,
   TrendingUp,
-  Shield
+  Shield,
+  Loader2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SpaceMembersPanel } from './SpaceMembersPanel';
@@ -40,6 +43,8 @@ import { NotificationSettingsPanel } from './NotificationSettingsPanel';
 import { ProactiveSettingsPanel } from './ProactiveSettingsPanel';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useUserProfile } from '@/hooks/useUserProfile';
+import { useToast } from '@/hooks/use-toast';
 
 interface SettingsPanelContentProps {
   settings: UserSettings;
@@ -315,7 +320,37 @@ export function SettingsPanelContent({
 }: SettingsPanelContentProps) {
   const { user } = useAuth();
   const { language, setLanguage, t } = useLanguage();
+  const { profile, isLoading: profileLoading, updateProfile } = useUserProfile();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'general' | 'proactive' | 'team' | 'ai' | 'info'>('general');
+  
+  // Profile form state
+  const [displayName, setDisplayName] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  // Sync profile data to form
+  useEffect(() => {
+    if (profile) {
+      setDisplayName(profile.displayName || '');
+      setBirthDate(profile.birthDate || '');
+    }
+  }, [profile]);
+
+  const handleSaveProfile = async () => {
+    setIsSavingProfile(true);
+    const result = await updateProfile({
+      displayName: displayName.trim() || undefined,
+      birthDate: birthDate || undefined,
+    });
+    setIsSavingProfile(false);
+    
+    if (result.success) {
+      toast({ title: 'Profile saved', description: 'Your profile has been updated.' });
+    } else {
+      toast({ variant: 'destructive', title: 'Error', description: result.error || 'Failed to save profile' });
+    }
+  };
 
   const tabs = [
     { id: 'general' as const, label: 'General', icon: Settings },
@@ -357,8 +392,78 @@ export function SettingsPanelContent({
         <div className="p-6 space-y-6">
         {activeTab === 'general' && (
           <>
-            {/* Appearance Section */}
+            {/* Profile Section */}
             <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                Profile
+              </h3>
+              
+              {profileLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Display Name */}
+                  <div className="space-y-2">
+                    <Label htmlFor="displayName">Display Name</Label>
+                    <Input
+                      id="displayName"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      placeholder="Enter your name"
+                    />
+                  </div>
+
+                  {/* Email (read-only) */}
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      value={profile?.email || user?.email || ''}
+                      disabled
+                      className="bg-muted"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Email cannot be changed here
+                    </p>
+                  </div>
+
+                  {/* Birth Date */}
+                  <div className="space-y-2">
+                    <Label htmlFor="birthDate">Birth Date</Label>
+                    <Input
+                      id="birthDate"
+                      type="date"
+                      value={birthDate}
+                      onChange={(e) => setBirthDate(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Used for age-based health recommendations
+                    </p>
+                  </div>
+
+                  {/* Save Button */}
+                  <Button 
+                    onClick={handleSaveProfile} 
+                    disabled={isSavingProfile}
+                    size="sm"
+                  >
+                    {isSavingProfile ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      'Save Profile'
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Appearance Section */}
+            <div className="space-y-4 pt-4 border-t border-border">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                 {t('settings.appearance')}
               </h3>
