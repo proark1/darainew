@@ -33,6 +33,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { BrainDumpFAB } from '@/components/capture/BrainDumpFAB';
+import { DoriNotificationIcon } from '@/components/assistant/DoriNotificationIcon';
 
 export type SidebarFilter = TaskCategory | 'all' | 'shared';
 export type ActivePanel = 'tasks' | 'social' | 'calendar' | 'assistant' | 'dashboard' | 'projects' | 'contacts' | 'contracts' | 'activity' | 'settings' | 'notes' | 'habits' | 'admin' | 'family' | 'islam' | 'properties' | 'startups' | 'news' | null;
@@ -101,6 +102,7 @@ export function Sidebar({
           </div>
         )}
         <div className="flex items-center gap-1">
+          {!collapsed && <DoriNotificationIcon />}
           {!collapsed && notificationButton}
           <Button 
             variant="ghost" 
