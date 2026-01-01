@@ -4,13 +4,24 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Ensure body background matches theme for safe area fill */
+/* Ensure body background matches theme for safe area fill on iOS */
 html, body {
-  background-color: hsl(var(--background));
+  background-color: hsl(var(--background)) !important;
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
-.dark html, .dark body, html.dark, body.dark {
-  background-color: hsl(222 47% 6%);
+/* Dark mode - use the actual background color value to ensure iOS safe area is filled */
+@media (prefers-color-scheme: dark) {
+  html, body {
+    background-color: hsl(222 47% 6%) !important;
+  }
+}
+
+/* For class-based dark mode */
+html.dark, html.dark body,
+.dark, .dark body {
+  background-color: hsl(222 47% 6%) !important;
 }
 
 @layer base {
