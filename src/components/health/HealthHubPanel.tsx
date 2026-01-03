@@ -13,6 +13,7 @@ import { useFamilyMembers } from '@/hooks/useFamilyMembers';
 import { AddHealthMetricDialog } from './AddHealthMetricDialog';
 import { HealthTrackingPanel } from '@/components/family/HealthTrackingPanel';
 import { AgeBasedCheckupsPanel } from './AgeBasedCheckupsPanel';
+import { HealthInsightsCard } from './HealthInsightsCard';
 import {
   Activity,
   Heart,
@@ -193,7 +194,11 @@ export function HealthHubPanel() {
 
           {!isLoading && activeTab === 'overview' && (
             <>
-              {/* Date Navigation */}
+              {/* AI Health Insights */}
+              <HealthInsightsCard 
+                metrics={healthMetrics} 
+                goals={healthGoals} 
+              />
               <Card className="bg-muted/30">
                 <CardContent className="p-3">
                   <div className="flex items-center justify-between">
