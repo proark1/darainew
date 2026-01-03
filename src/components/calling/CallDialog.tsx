@@ -3,6 +3,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 import {
   Phone,
   PhoneOff,
@@ -14,6 +15,7 @@ import {
   MonitorOff,
   Circle,
   CircleStop,
+  AlertTriangle,
 } from 'lucide-react';
 import type { CallStatus, CallType } from '@/hooks/useWebRTCCall';
 import { useCallQuality } from '@/hooks/useCallQuality';
@@ -53,6 +55,7 @@ interface CallDialogProps {
   onToggleAudio: () => void;
   onToggleVideo: () => void;
   onToggleScreenShare: () => void;
+  onSwitchToAudioOnly?: () => void;
 }
 
 export function CallDialog({
@@ -76,6 +79,7 @@ export function CallDialog({
   onToggleAudio,
   onToggleVideo,
   onToggleScreenShare,
+  onSwitchToAudioOnly,
 }: CallDialogProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -84,6 +88,31 @@ export function CallDialog({
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [showRecordingConsent, setShowRecordingConsent] = useState(false);
+  const [showFallbackSuggestion, setShowFallbackSuggestion] = useState(false);
+  const [fallbackDismissed, setFallbackDismissed] = useState(false);
+
+  // Show fallback suggestion when quality is poor
+  useEffect(() => {
+    if (
+      qualityStats.shouldFallbackToAudio && 
+      callType === 'video' && 
+      !fallbackDismissed &&
+      isConnected
+    ) {
+      setShowFallbackSuggestion(true);
+    }
+  }, [qualityStats.shouldFallbackToAudio, callType, fallbackDismissed]);
+
+  const handleAcceptFallback = () => {
+    setShowFallbackSuggestion(false);
+    setFallbackDismissed(true);
+    onSwitchToAudioOnly?.();
+  };
+
+  const handleDismissFallback = () => {
+    setShowFallbackSuggestion(false);
+    setFallbackDismissed(true);
+  };
 
   // Call recording
   const {
@@ -158,8 +187,14 @@ export function CallDialog({
 
             {/* Call quality indicator - shown when connected */}
             {isConnected && (
-              <div className="absolute top-4 left-4 z-10">
+              <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
                 <CallQualityIndicator stats={qualityStats} />
+                {qualityStats.signalStrength === 'poor' && callType === 'video' && (
+                  <Badge variant="destructive" className="gap-1 animate-pulse">
+                    <AlertTriangle className="w-3 h-3" />
+                    Poor connection
+                  </Badge>
+                )}
               </div>
             )}
 
@@ -348,6 +383,30 @@ export function CallDialog({
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction onClick={handleConsentConfirm}>
             Start Recording
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    {/* Poor Quality Fallback Suggestion Dialog */}
+    <AlertDialog open={showFallbackSuggestion} onOpenChange={setShowFallbackSuggestion}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-warning" />
+            Poor Video Quality Detected
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            Your video connection quality is poor. This may be due to network conditions.
+            Would you like to switch to audio-only mode for a better experience?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={handleDismissFallback}>
+            Keep Video
+          </AlertDialogCancel>
+          <AlertDialogAction onClick={handleAcceptFallback}>
+            Switch to Audio Only
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

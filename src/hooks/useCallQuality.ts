@@ -10,6 +10,9 @@ export interface CallQualityStats {
   jitter: number | null; // in ms
   resolution: { width: number; height: number } | null;
   frameRate: number | null;
+  // Auto-fallback info
+  shouldFallbackToAudio: boolean;
+  poorQualityStreak: number;
 
   // Debug details
   selectedCandidatePair: {
@@ -32,8 +35,16 @@ const initialStats: CallQualityStats = {
   jitter: null,
   resolution: null,
   frameRate: null,
+  shouldFallbackToAudio: false,
+  poorQualityStreak: 0,
   selectedCandidatePair: null,
 };
+
+// Thresholds for auto-fallback
+const POOR_QUALITY_STREAK_THRESHOLD = 3; // 3 consecutive poor readings (6 seconds)
+const PACKET_LOSS_THRESHOLD = 15; // 15% packet loss
+const LATENCY_THRESHOLD = 500; // 500ms
+const BITRATE_LOW_THRESHOLD = 100; // 100 kbps is too low for video
 
 export function useCallQuality(peerConnection: RTCPeerConnection | null) {
   const [stats, setStats] = useState<CallQualityStats>(initialStats);
@@ -177,6 +188,20 @@ export function useCallQuality(peerConnection: RTCPeerConnection | null) {
           newStats.latency ?? stats.latency,
           newStats.jitter ?? stats.jitter
         );
+
+        // Check if we should suggest fallback to audio
+        const isVideoQualityPoor = (
+          (newStats.packetLoss !== undefined && newStats.packetLoss !== null && newStats.packetLoss > PACKET_LOSS_THRESHOLD) ||
+          (newStats.latency !== undefined && newStats.latency !== null && newStats.latency > LATENCY_THRESHOLD) ||
+          (newStats.bitrate !== undefined && newStats.bitrate !== null && newStats.bitrate < BITRATE_LOW_THRESHOLD && newStats.bitrate > 0)
+        );
+
+        const newPoorStreak = isVideoQualityPoor 
+          ? (stats.poorQualityStreak + 1) 
+          : 0;
+
+        newStats.poorQualityStreak = newPoorStreak;
+        newStats.shouldFallbackToAudio = newPoorStreak >= POOR_QUALITY_STREAK_THRESHOLD;
 
         setStats((prev) => ({ ...prev, ...newStats }));
       } catch (error) {

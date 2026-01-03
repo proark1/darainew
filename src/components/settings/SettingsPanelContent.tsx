@@ -44,6 +44,7 @@ import { ProactiveSettingsPanel } from './ProactiveSettingsPanel';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useUserProfile } from '@/hooks/useUserProfile';
+import { useStatusBar } from '@/hooks/useStatusBar';
 import { useToast } from '@/hooks/use-toast';
 
 interface SettingsPanelContentProps {
@@ -323,6 +324,9 @@ export function SettingsPanelContent({
   const { profile, isLoading: profileLoading, updateProfile } = useUserProfile();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'general' | 'proactive' | 'team' | 'ai' | 'info'>('general');
+  
+  // Sync status bar color with theme
+  useStatusBar(settings.theme);
   
   // Profile form state
   const [displayName, setDisplayName] = useState('');
