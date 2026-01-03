@@ -126,35 +126,16 @@ export function DoriPanel({
             <History className="w-4 h-4" />
           </Button>
 
-          {/* Mode Toggle */}
-          <div className="flex gap-1 bg-muted/50 p-1 rounded-lg">
-            <Button
-              variant={mode === 'text' ? 'secondary' : 'ghost'}
-              size="sm"
-              className={cn(
-                "gap-1.5 h-7",
-                isMobile ? "px-2" : "px-2",
-                mode === 'text' && "bg-background shadow-sm"
-              )}
-              onClick={() => setMode('text')}
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-              {!isMobile && <span className="text-xs">Text</span>}
-            </Button>
-            <Button
-              variant={mode === 'voice' ? 'secondary' : 'ghost'}
-              size="sm"
-              className={cn(
-                "gap-1.5 h-7",
-                isMobile ? "px-2" : "px-2",
-                mode === 'voice' && "bg-background shadow-sm"
-              )}
-              onClick={() => handleModeSwitch('voice')}
-            >
-              <Mic className="w-3.5 h-3.5" />
-              {!isMobile && <span className="text-xs">Voice</span>}
-            </Button>
-          </div>
+          {/* Voice Mode Button - Only show when in text mode */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 h-7"
+            onClick={() => handleModeSwitch('voice')}
+          >
+            <Mic className="w-3.5 h-3.5" />
+            {!isMobile && <span className="text-xs">Voice Mode</span>}
+          </Button>
         </div>
       </div>
 
