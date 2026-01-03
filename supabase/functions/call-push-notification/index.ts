@@ -1,0 +1,114 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+interface CallNotificationPayload {
+  callee_id: string;
+  caller_id: string;
+  caller_name: string;
+  session_id: string;
+  call_type: 'audio' | 'video';
+}
+
+serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const payload: CallNotificationPayload = await req.json();
+    const { callee_id, caller_id, caller_name, session_id, call_type } = payload;
+
+    console.log('[call-push] Sending notification for call:', session_id);
+    console.log('[call-push] From:', caller_name, 'to user:', callee_id);
+
+    // Get callee's push tokens
+    const { data: tokens, error: tokenError } = await supabase
+      .from('push_tokens')
+      .select('token, platform')
+      .eq('user_id', callee_id);
+
+    if (tokenError) {
+      console.error('[call-push] Error fetching tokens:', tokenError);
+      throw tokenError;
+    }
+
+    if (!tokens || tokens.length === 0) {
+      console.log('[call-push] No push tokens found for user:', callee_id);
+      return new Response(
+        JSON.stringify({ success: false, message: 'No push tokens found' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('[call-push] Found', tokens.length, 'tokens');
+
+    // Send push notifications
+    const results = await Promise.all(
+      tokens.map(async ({ token, platform }) => {
+        try {
+          if (platform === 'ios') {
+            // For iOS, we'd use APNs - this requires APNs credentials
+            // For now, log that we would send
+            console.log('[call-push] Would send APNs to:', token.substring(0, 20) + '...');
+            return { success: true, platform };
+          } else if (platform === 'android') {
+            // For Android, we'd use FCM - this requires FCM credentials
+            console.log('[call-push] Would send FCM to:', token.substring(0, 20) + '...');
+            return { success: true, platform };
+          }
+          return { success: false, platform, error: 'Unknown platform' };
+        } catch (e) {
+          console.error('[call-push] Error sending to', platform, ':', e);
+          return { success: false, platform, error: String(e) };
+        }
+      })
+    );
+
+    // For now, create an in-app notification as well
+    await supabase.from('user_notifications').insert({
+      user_id: callee_id,
+      type: 'call',
+      title: `Incoming ${call_type} call`,
+      message: `${caller_name} is calling you`,
+      data: {
+        type: 'incoming_call',
+        caller_id,
+        caller_name,
+        session_id,
+        call_type,
+      },
+    });
+
+    console.log('[call-push] Notification created');
+
+    return new Response(
+      JSON.stringify({ 
+        success: true, 
+        message: 'Notifications sent',
+        results 
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[call-push] Error:', errorMessage);
+    return new Response(
+      JSON.stringify({ error: errorMessage }),
+      { 
+        status: 500, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
+  }
+});

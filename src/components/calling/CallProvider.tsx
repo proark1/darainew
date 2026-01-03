@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { useWebRTCCall, CallType } from '@/hooks/useWebRTCCall';
 import { useOnlinePresence } from '@/hooks/useOnlinePresence';
+import { useCallPushNotifications } from '@/hooks/useCallPushNotifications';
 import { CallDialog } from './CallDialog';
 import { useToast } from '@/hooks/use-toast';
 import { 
@@ -9,6 +10,7 @@ import {
   requestNotificationPermission,
   setupServiceWorkerListener
 } from '@/lib/notificationSounds';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CallSession {
   id: string;
@@ -69,6 +71,20 @@ export function CallProvider({ userId, userName, children }: CallProviderProps) 
     });
   }, [toast]);
 
+  // Handle push notification incoming calls
+  const handlePushIncomingCall = useCallback((callerId: string, callerName: string, sessionId: string) => {
+    console.log('[CallProvider] Push notification incoming call:', { callerId, callerName, sessionId });
+    // The session will be fetched and handled by the WebRTC hook
+    // This is just to bring the app to foreground
+    setIsDialogOpen(true);
+  }, []);
+
+  // Initialize push notifications for calls
+  useCallPushNotifications({
+    userId,
+    onIncomingCall: handlePushIncomingCall,
+  });
+
   const {
     callStatus,
     callType,
@@ -98,6 +114,18 @@ export function CallProvider({ userId, userName, children }: CallProviderProps) 
     try {
       await startCall(calleeId, 'video');
       setIsDialogOpen(true);
+      
+      // Send push notification to callee
+      const callerDisplayName = userName || 'Someone';
+      supabase.functions.invoke('call-push-notification', {
+        body: {
+          callee_id: calleeId,
+          caller_id: userId,
+          caller_name: callerDisplayName,
+          session_id: currentSession?.id,
+          call_type: 'video',
+        },
+      }).catch(err => console.log('[CallProvider] Push notification error:', err));
     } catch (error) {
       console.error('Failed to start video call:', error);
       toast({
@@ -106,12 +134,24 @@ export function CallProvider({ userId, userName, children }: CallProviderProps) 
         variant: 'destructive',
       });
     }
-  }, [startCall, toast]);
+  }, [startCall, toast, userName, userId, currentSession]);
 
   const startAudioCall = useCallback(async (calleeId: string) => {
     try {
       await startCall(calleeId, 'audio');
       setIsDialogOpen(true);
+      
+      // Send push notification to callee
+      const callerDisplayName = userName || 'Someone';
+      supabase.functions.invoke('call-push-notification', {
+        body: {
+          callee_id: calleeId,
+          caller_id: userId,
+          caller_name: callerDisplayName,
+          session_id: currentSession?.id,
+          call_type: 'audio',
+        },
+      }).catch(err => console.log('[CallProvider] Push notification error:', err));
     } catch (error) {
       console.error('Failed to start audio call:', error);
       toast({
@@ -120,7 +160,7 @@ export function CallProvider({ userId, userName, children }: CallProviderProps) 
         variant: 'destructive',
       });
     }
-  }, [startCall, toast]);
+  }, [startCall, toast, userName, userId, currentSession]);
 
   const handleAnswer = useCallback(async () => {
     stopRingtone();
@@ -166,6 +206,16 @@ export function CallProvider({ userId, userName, children }: CallProviderProps) 
     setPendingSession(null);
   }, [endCall]);
 
+  // Handle switch to audio-only when video quality is poor
+  const handleSwitchToAudioOnly = useCallback(() => {
+    console.log('[CallProvider] Switching to audio-only mode');
+    toggleVideo(); // This will turn off video
+    toast({
+      title: 'Switched to Audio Only',
+      description: 'Video was disabled due to poor connection quality.',
+    });
+  }, [toggleVideo, toast]);
+
   const callerName = pendingSession ? incomingCallerName : 'Calling...';
 
   return (
@@ -193,6 +243,7 @@ export function CallProvider({ userId, userName, children }: CallProviderProps) 
         onToggleAudio={toggleAudio}
         onToggleVideo={toggleVideo}
         onToggleScreenShare={toggleScreenShare}
+        onSwitchToAudioOnly={handleSwitchToAudioOnly}
       />
     </CallContext.Provider>
   );
