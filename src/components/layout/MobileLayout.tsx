@@ -156,8 +156,8 @@ export function MobileLayout({
 
   return (
     <div className="flex flex-col h-[100dvh] w-full bg-background overflow-hidden">
-      {/* Safe area top spacer */}
-      <div className="bg-background shrink-0" style={{ height: 'max(env(safe-area-inset-top), 8px)' }} />
+      {/* Safe area top - painted with background color */}
+      <div className="shrink-0 safe-area-top" />
       {/* Header */}
       <header className="h-14 px-4 flex items-center justify-between border-b border-border bg-background shrink-0">
         <div className="flex items-center gap-3">
@@ -556,8 +556,8 @@ export function MobileLayout({
             </button>
           ))}
         </div>
-        {/* Safe area bottom fill - uses background color for consistency */}
-        <div className="bg-background" style={{ height: 'env(safe-area-inset-bottom)' }} />
+        {/* Safe area bottom - painted with background color */}
+        <div className="safe-area-bottom" />
       </nav>
 
       {/* ADHD Support Overlays */}
