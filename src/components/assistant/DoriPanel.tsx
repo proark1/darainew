@@ -9,6 +9,7 @@ import { useVoiceRecognition } from '@/hooks/useVoiceRecognition';
 import { findRelevantContacts, ContactSuggestion } from '@/lib/contactSuggestions';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ConversationHistoryPanel } from './ConversationHistoryPanel';
+import { AudioVisualizer } from '@/components/ghost/AudioVisualizer';
 import { Send, User, Bot, Mic, MicOff, MessageSquare, Users, X, History } from 'lucide-react';
 import { format } from 'date-fns';
 import doriFish from '@/assets/dori-fish.png';
@@ -160,24 +161,31 @@ export function DoriPanel({
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center">
-            <img src={doriFish} alt="Dori" className="w-24 h-24 object-contain mb-4" />
-            <h3 className="text-lg font-medium mb-2">Hi, I'm Dori!</h3>
-            <p className="text-sm text-muted-foreground max-w-xs">
-              Your personal assistant. Ask me to manage tasks, schedule events, brainstorm ideas, or search the web.
-            </p>
-            <div className="flex flex-wrap gap-2 mt-4 justify-center">
-              {['Add a task', 'Schedule meeting', 'Search latest news'].map((suggestion) => (
-                <Button
-                  key={suggestion}
-                  variant="outline"
-                  size="sm"
-                  className="text-xs"
-                  onClick={() => setInput(suggestion)}
-                >
-                  {suggestion}
-                </Button>
-              ))}
+          <div className="h-full flex flex-col items-center justify-center text-center relative">
+            {/* Audio Visualizer Background */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <AudioVisualizer isActive={true} isSpeaking={false} isListening={false} />
+            </div>
+            
+            {/* Content overlay */}
+            <div className="relative z-10">
+              <h3 className="text-lg font-medium mb-2">Hi, I'm Dori!</h3>
+              <p className="text-sm text-muted-foreground max-w-xs">
+                Your personal assistant. Ask me to manage tasks, schedule events, brainstorm ideas, or search the web.
+              </p>
+              <div className="flex flex-wrap gap-2 mt-4 justify-center">
+                {['Add a task', 'Schedule meeting', 'Search latest news'].map((suggestion) => (
+                  <Button
+                    key={suggestion}
+                    variant="outline"
+                    size="sm"
+                    className="text-xs bg-background/80 backdrop-blur-sm"
+                    onClick={() => setInput(suggestion)}
+                  >
+                    {suggestion}
+                  </Button>
+                ))}
+              </div>
             </div>
           </div>
         ) : (
