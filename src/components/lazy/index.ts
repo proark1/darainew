@@ -19,6 +19,8 @@ import { lazyWithRetry } from './LazyLoader';
 // ============================================
 export const LazyIndex = lazyWithRetry(() => import('@/pages/Index'));
 export const LazyAuth = lazyWithRetry(() => import('@/pages/Auth'));
+export const LazyForgotPassword = lazyWithRetry(() => import('@/pages/ForgotPassword'));
+export const LazyResetPassword = lazyWithRetry(() => import('@/pages/ResetPassword'));
 export const LazyDashboard = lazyWithRetry(() => import('@/pages/Dashboard'));
 export const LazyContactsPage = lazyWithRetry(() => import('@/pages/ContactsPage'));
 export const LazyContractsPage = lazyWithRetry(() => import('@/pages/Contracts'));

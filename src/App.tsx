@@ -13,6 +13,8 @@ import { useMorningAutoPlay } from "@/hooks/useMorningAutoPlay";
 import Index from "@/pages/Index";
 import {
   LazyAuth,
+  LazyForgotPassword,
+  LazyResetPassword,
   LazyDashboard,
   LazyContactsPage,
   LazyContractsPage,
@@ -105,6 +107,18 @@ function AppContent() {
                 <LazyAuth />
               </PublicRoute>
             }
+          />
+          <Route
+            path="/forgot-password"
+            element={
+              <PublicRoute>
+                <LazyForgotPassword />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/reset-password"
+            element={<LazyResetPassword />}
           />
           <Route path="*" element={<LazyNotFound />} />
         </Routes>
