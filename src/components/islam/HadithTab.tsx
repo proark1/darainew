@@ -279,9 +279,9 @@ export function HadithTab() {
     setLoadingAudioId(hadithId);
     
     try {
-      // Call edge function for Arabic TTS
+      // Call edge function for Arabic TTS with 'onyx' male voice
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
-        body: { text, voice: 'alloy' }
+        body: { text, voice: 'onyx' }
       });
       
       if (error) throw error;

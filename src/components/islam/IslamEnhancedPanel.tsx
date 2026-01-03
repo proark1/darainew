@@ -871,8 +871,9 @@ export function IslamEnhancedPanel() {
     
     setDuaLoading(dua.id);
     try {
+      // Use 'onyx' voice for Arabic male sound
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
-        body: { text: dua.arabic, voice: 'alloy' }
+        body: { text: dua.arabic, voice: 'onyx' }
       });
       
       if (error) throw error;
@@ -1106,48 +1107,119 @@ export function IslamEnhancedPanel() {
                 </Button>
               )}
 
-              <div className="relative w-64 h-64">
-                <div className="absolute inset-0 rounded-full border-4 border-border bg-card">
-                  <div className="absolute inset-4 rounded-full border-2 border-muted">
-                    {['N', 'E', 'S', 'W'].map((dir, i) => (
-                      <span
-                        key={dir}
-                        className={cn(
-                          "absolute text-xs font-bold",
-                          dir === 'N' && "top-1 left-1/2 -translate-x-1/2 text-red-500",
-                          dir === 'S' && "bottom-1 left-1/2 -translate-x-1/2",
-                          dir === 'E' && "right-1 top-1/2 -translate-y-1/2",
-                          dir === 'W' && "left-1 top-1/2 -translate-y-1/2"
-                        )}
+              {/* Premium Compass Design */}
+              <div className="relative w-72 h-72">
+                {/* Outer decorative ring */}
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-amber-500/20 via-emerald-500/10 to-amber-500/20 p-1">
+                  <div className="w-full h-full rounded-full bg-background" />
+                </div>
+                
+                {/* Main compass body */}
+                <div className="absolute inset-2 rounded-full bg-gradient-to-br from-card via-background to-card shadow-2xl border border-border/50">
+                  {/* Inner ring with degree markers */}
+                  <div className="absolute inset-4 rounded-full border border-border/30">
+                    {/* Degree marks */}
+                    {[...Array(72)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="absolute top-1/2 left-1/2 origin-center"
+                        style={{
+                          transform: `translate(-50%, -50%) rotate(${i * 5}deg)`,
+                        }}
+                      >
+                        <div 
+                          className={cn(
+                            "absolute left-1/2 -translate-x-1/2",
+                            i % 18 === 0 ? "w-0.5 h-3 bg-foreground/60 -top-[108px]" :
+                            i % 6 === 0 ? "w-0.5 h-2 bg-foreground/40 -top-[106px]" :
+                            "w-px h-1 bg-foreground/20 -top-[104px]"
+                          )}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Cardinal directions */}
+                  {[
+                    { dir: 'N', angle: 0, color: 'text-red-500 font-bold' },
+                    { dir: 'E', angle: 90, color: 'text-muted-foreground' },
+                    { dir: 'S', angle: 180, color: 'text-muted-foreground' },
+                    { dir: 'W', angle: 270, color: 'text-muted-foreground' },
+                  ].map(({ dir, angle, color }) => (
+                    <div
+                      key={dir}
+                      className="absolute top-1/2 left-1/2 origin-center"
+                      style={{ transform: `translate(-50%, -50%) rotate(${angle}deg)` }}
+                    >
+                      <span 
+                        className={cn("absolute left-1/2 -translate-x-1/2 -top-[85px] text-sm font-semibold", color)}
+                        style={{ transform: `rotate(-${angle}deg)` }}
                       >
                         {dir}
                       </span>
-                    ))}
+                    </div>
+                  ))}
+                  
+                  {/* Inner decorative circle */}
+                  <div className="absolute inset-[72px] rounded-full bg-gradient-to-br from-emerald-500/5 to-amber-500/5 border border-border/20" />
+                  
+                  {/* Center point */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-3 h-3 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-500/30 z-10" />
                   </div>
                 </div>
                 
+                {/* Qibla needle - smooth rotation */}
                 <div
-                  className="absolute inset-0 flex items-center justify-center transition-transform duration-300"
-                  style={{ transform: `rotate(${getQiblaRotation()}deg)` }}
+                  className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                  style={{ 
+                    transform: `rotate(${getQiblaRotation()}deg)`,
+                    transition: 'transform 0.15s cubic-bezier(0.4, 0, 0.2, 1)'
+                  }}
                 >
-                  <div className="w-1 h-24 bg-gradient-to-t from-transparent via-emerald-500 to-emerald-600 rounded-full" />
-                  <div className="absolute top-6 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center">
-                    <span className="text-white text-xs">🕋</span>
+                  {/* Needle */}
+                  <div className="absolute top-8 left-1/2 -translate-x-1/2 flex flex-col items-center">
+                    {/* Kaaba icon */}
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 shadow-lg shadow-emerald-500/40 flex items-center justify-center border-2 border-emerald-400/50">
+                      <span className="text-lg">🕋</span>
+                    </div>
+                    {/* Needle body */}
+                    <div className="w-1 h-20 bg-gradient-to-b from-emerald-500 to-emerald-700/50 rounded-b-full shadow-lg" />
+                  </div>
+                  
+                  {/* Opposite end of needle */}
+                  <div className="absolute bottom-16 left-1/2 -translate-x-1/2">
+                    <div className="w-0.5 h-10 bg-gradient-to-t from-muted-foreground/20 to-transparent rounded-t-full" />
                   </div>
                 </div>
+                
+                {/* Glow effect when compass is active */}
+                {deviceHeading !== null && (
+                  <div className="absolute inset-0 rounded-full bg-emerald-500/5 animate-pulse pointer-events-none" />
+                )}
               </div>
 
-              <div className="mt-6 text-center space-y-2">
+              <div className="mt-8 text-center space-y-3">
                 <div className="flex items-center gap-2 justify-center">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                   <MapPin className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm">{locationName || 'Getting location...'}</span>
+                  <span className="text-sm font-medium">{locationName || 'Getting location...'}</span>
                 </div>
                 {qiblaData && (
-                  <p className="text-lg font-medium">
-                    Qibla: {qiblaData.direction.toFixed(1)}° from North
-                  </p>
+                  <div className="space-y-1">
+                    <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                      {qiblaData.direction.toFixed(1)}°
+                    </p>
+                    <p className="text-sm text-muted-foreground">from North</p>
+                  </div>
                 )}
-                <Button variant="outline" size="sm" onClick={getLocation} disabled={loading}>
+                {deviceHeading !== null && (
+                  <Badge variant="secondary" className="gap-1">
+                    <Compass className="w-3 h-3" />
+                    Compass Active: {deviceHeading.toFixed(0)}°
+                  </Badge>
+                )}
+                <Button variant="outline" size="sm" onClick={getLocation} disabled={loading} className="mt-2">
                   <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} />
                   Refresh Location
                 </Button>
