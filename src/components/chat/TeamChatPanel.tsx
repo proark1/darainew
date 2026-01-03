@@ -343,7 +343,7 @@ export function TeamChatPanel({ userId }: TeamChatPanelProps) {
         </CardHeader>
         
         <ScrollArea className="flex-1 p-4">
-          <div className="space-y-4">
+          <div className="space-y-4 pb-4">
             {messages.map((msg) => renderMessage(msg, msg.sender_id === userId))}
             <div ref={messagesEndRef} />
           </div>

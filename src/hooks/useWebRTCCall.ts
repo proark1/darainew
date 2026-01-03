@@ -601,10 +601,15 @@ export function useWebRTCCall({ userId, onIncomingCall }: UseWebRTCCallOptions) 
 
   // Listen for incoming calls
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      console.log('[WebRTC] No userId, skipping incoming call subscription');
+      return;
+    }
+
+    console.log('[WebRTC] Setting up incoming call subscription for user:', userId);
 
     const channel = supabase
-      .channel('incoming-calls')
+      .channel(`incoming-calls-${userId}`)
       .on(
         'postgres_changes',
         {
@@ -614,17 +619,24 @@ export function useWebRTCCall({ userId, onIncomingCall }: UseWebRTCCallOptions) 
           filter: `callee_id=eq.${userId}`,
         },
         async (payload) => {
+          console.log('[WebRTC] Incoming call payload received:', payload);
           const session = payload.new as CallSession;
           
           if (session.status === 'ringing' && callStatus === 'idle') {
+            console.log('[WebRTC] New incoming call from:', session.caller_id);
             // Fetch caller info
-            const { data: profile } = await supabase
+            const { data: profile, error: profileError } = await supabase
               .from('profiles')
               .select('display_name, email')
               .eq('user_id', session.caller_id)
               .single();
 
+            if (profileError) {
+              console.error('[WebRTC] Error fetching caller profile:', profileError);
+            }
+
             const callerName = profile?.display_name || profile?.email || 'Unknown';
+            console.log('[WebRTC] Caller name:', callerName);
             
             setCallStatus('ringing');
             setCurrentSession(session);
@@ -632,9 +644,15 @@ export function useWebRTCCall({ userId, onIncomingCall }: UseWebRTCCallOptions) 
           }
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log('[WebRTC] Incoming call subscription status:', status);
+        if (err) {
+          console.error('[WebRTC] Incoming call subscription error:', err);
+        }
+      });
 
     return () => {
+      console.log('[WebRTC] Cleaning up incoming call subscription');
       supabase.removeChannel(channel);
     };
   }, [userId, callStatus, onIncomingCall]);
