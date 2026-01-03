@@ -765,21 +765,37 @@ export function IslamEnhancedPanel() {
   const fetchSurah = async (surahNumber: number, useTajweed: boolean = tajweedEnabled) => {
     setQuranLoading(true);
     try {
-      // Use tajweed edition if enabled, otherwise use standard Arabic with audio
-      const edition = useTajweed ? 'quran-tajweed' : 'ar.alafasy';
-      const response = await fetch(`https://api.alquran.cloud/v1/surah/${surahNumber}/${edition}`);
-      const data = await response.json();
-      if (data.code === 200) {
-        // If tajweed enabled, parse the markup into colored HTML
-        if (useTajweed && data.data.ayahs) {
-          data.data.ayahs = data.data.ayahs.map((ayah: Ayah) => ({
+      // Always fetch audio from ar.alafasy edition
+      const audioResponse = await fetch(`https://api.alquran.cloud/v1/surah/${surahNumber}/ar.alafasy`);
+      const audioData = await audioResponse.json();
+      
+      if (useTajweed) {
+        // Fetch tajweed text separately
+        const tajweedResponse = await fetch(`https://api.alquran.cloud/v1/surah/${surahNumber}/quran-tajweed`);
+        const tajweedData = await tajweedResponse.json();
+        
+        if (tajweedData.code === 200 && audioData.code === 200) {
+          // Merge: use tajweed text but audio from ar.alafasy
+          const mergedAyahs = tajweedData.data.ayahs.map((ayah: Ayah, index: number) => ({
             ...ayah,
-            text: parseTajweedMarkup(ayah.text)
+            text: parseTajweedMarkup(ayah.text),
+            audio: audioData.data.ayahs[index]?.audio || undefined
           }));
+          
+          setSelectedSurah({
+            ...tajweedData.data,
+            ayahs: mergedAyahs
+          });
+          setCurrentAyahIndex(0);
+          setShowSurahList(false);
         }
-        setSelectedSurah(data.data);
-        setCurrentAyahIndex(0);
-        setShowSurahList(false);
+      } else {
+        // Use ar.alafasy directly (has both text and audio)
+        if (audioData.code === 200) {
+          setSelectedSurah(audioData.data);
+          setCurrentAyahIndex(0);
+          setShowSurahList(false);
+        }
       }
     } catch (error) {
       toast.error('Failed to load surah');
@@ -1477,7 +1493,7 @@ export function IslamEnhancedPanel() {
               </div>
               
               <h3 className="font-medium">Upcoming Islamic Events</h3>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {upcomingEvents.map((event, idx) => {
                   const typeColors: Record<string, string> = {
                     major: 'border-l-primary bg-primary/5',
@@ -1499,11 +1515,11 @@ export function IslamEnhancedPanel() {
                     <Card 
                       key={idx} 
                       className={cn(
-                        "p-3 border-l-4",
+                        "p-4 border-l-4",
                         typeColors[eventType]
                       )}
                     >
-                      <div className="flex items-start justify-between">
+                      <div className="flex items-start justify-between mb-2">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             <p className="font-medium">{event.name}</p>
@@ -1516,13 +1532,46 @@ export function IslamEnhancedPanel() {
                           </div>
                           <p className="text-sm text-muted-foreground">{event.description}</p>
                         </div>
-                        <div className="text-right shrink-0">
+                        <div className="text-right shrink-0 ml-2">
                           <Badge variant="outline">{event.hijriDate}</Badge>
                           <p className="text-xs text-muted-foreground mt-1">
                             ~{format(event.date, 'MMM d, yyyy')}
                           </p>
                         </div>
                       </div>
+                      
+                      {/* Actions */}
+                      {event.actions && event.actions.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-border/50">
+                          <p className="text-xs font-medium text-muted-foreground mb-2">📋 What to do:</p>
+                          <ul className="text-sm space-y-1">
+                            {event.actions.map((action, actionIdx) => (
+                              <li key={actionIdx} className="flex items-start gap-2">
+                                <span className="text-primary mt-0.5">•</span>
+                                <span>{action}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      
+                      {/* Special Prayer */}
+                      {event.specialPrayer && (
+                        <div className="mt-3 pt-3 border-t border-border/50">
+                          <p className="text-xs font-medium text-muted-foreground mb-1">🕌 Special Prayer:</p>
+                          <p className="text-sm">{event.specialPrayer}</p>
+                        </div>
+                      )}
+                      
+                      {/* Dua */}
+                      {event.dua && (
+                        <div className="mt-3 pt-3 border-t border-border/50 bg-muted/30 -mx-4 -mb-4 p-4 rounded-b-lg">
+                          <p className="text-xs font-medium text-muted-foreground mb-2">🤲 Recommended Dua:</p>
+                          <p className="font-arabic text-lg text-right mb-2" dir="rtl">{event.dua.arabic}</p>
+                          <p className="text-sm italic text-muted-foreground mb-1">{event.dua.transliteration}</p>
+                          <p className="text-sm">{event.dua.translation}</p>
+                        </div>
+                      )}
                     </Card>
                   );
                 })}
