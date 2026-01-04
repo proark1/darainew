@@ -81,9 +81,9 @@ export function ContractCostWidget({ contracts }: ContractCostWidgetProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex items-start gap-6">
+        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
           {/* Pie Chart */}
-          <div className="w-36 h-36 shrink-0">
+          <div className="w-28 h-28 sm:w-36 sm:h-36 shrink-0">
             {costAnalysis.categoryData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -91,8 +91,8 @@ export function ContractCostWidget({ contracts }: ContractCostWidgetProps) {
                     data={costAnalysis.categoryData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={35}
-                    outerRadius={65}
+                    innerRadius={25}
+                    outerRadius={50}
                     paddingAngle={3}
                     dataKey="value"
                   >
@@ -119,24 +119,24 @@ export function ContractCostWidget({ contracts }: ContractCostWidgetProps) {
           </div>
           
           {/* Stats */}
-          <div className="flex-1 space-y-4">
+          <div className="flex-1 w-full space-y-4">
             {/* Monthly & Yearly Totals */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 rounded-lg bg-muted/50">
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+              <div className="p-2 sm:p-3 rounded-lg bg-muted/50 text-center sm:text-left">
+                <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs text-muted-foreground mb-1">
                   <TrendingUp className="w-3.5 h-3.5" />
                   Monthly
                 </div>
-                <div className="text-xl font-bold">
+                <div className="text-base sm:text-xl font-bold">
                   €{costAnalysis.monthlyTotal.toLocaleString()}
                 </div>
               </div>
-              <div className="p-3 rounded-lg bg-muted/50">
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+              <div className="p-2 sm:p-3 rounded-lg bg-muted/50 text-center sm:text-left">
+                <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs text-muted-foreground mb-1">
                   <TrendingDown className="w-3.5 h-3.5" />
                   Yearly
                 </div>
-                <div className="text-xl font-bold">
+                <div className="text-base sm:text-xl font-bold">
                   €{costAnalysis.yearlyTotal.toLocaleString()}
                 </div>
               </div>
