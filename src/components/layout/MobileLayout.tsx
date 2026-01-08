@@ -536,7 +536,14 @@ export function MobileLayout({
           {bottomTabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => tab.isCenter ? setActiveTab('chat') : setActiveTab(tab.id as Tab)}
+              onClick={() => {
+                if (tab.isCenter) {
+                  // Open voice mode directly when clicking the assistant button
+                  onVoiceMode();
+                } else {
+                  setActiveTab(tab.id as Tab);
+                }
+              }}
               className={cn(
                 "flex items-center justify-center w-12 h-12",
                 tab.isCenter ? "" : "",

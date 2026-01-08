@@ -31,7 +31,12 @@ import {
   PhoneOff,
   Bug,
   MessageSquare,
+  Sparkles,
+  Waves,
+  Orbit,
 } from 'lucide-react';
+
+type BackgroundStyle = 'orbs' | 'matrix' | 'nebula';
 
 interface GhostModeProps {
   onClose: () => void;
@@ -92,6 +97,7 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
   const [textMode, setTextMode] = useState(false);
   const [textInput, setTextInput] = useState('');
   const [transcriptHistory, setTranscriptHistory] = useState<Array<{ role: 'user' | 'assistant'; text: string; timestamp: Date }>>([]);
+  const [backgroundStyle, setBackgroundStyle] = useState<BackgroundStyle>('orbs');
   const aiResponseRef = useRef('');
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const isConnectingRef = useRef(false);
@@ -682,8 +688,49 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
 
   return (
     <div className="fixed inset-0 bg-gradient-to-br from-background via-background to-primary/5 dark:to-primary/10 z-50 flex flex-col animate-fade-in">
-      {/* Close button */}
-      <div className="absolute top-4 right-4 z-20">
+      {/* Header with background switcher and close button */}
+      <div className="absolute top-4 left-4 right-4 z-20 flex items-center justify-between">
+        {/* Background style switcher */}
+        <div className="flex items-center gap-1 bg-background/50 backdrop-blur-sm rounded-full p-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setBackgroundStyle('orbs')}
+            className={cn(
+              "rounded-full w-8 h-8",
+              backgroundStyle === 'orbs' ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
+            )}
+            title="Orbs"
+          >
+            <Sparkles className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setBackgroundStyle('matrix')}
+            className={cn(
+              "rounded-full w-8 h-8",
+              backgroundStyle === 'matrix' ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
+            )}
+            title="Matrix"
+          >
+            <Waves className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setBackgroundStyle('nebula')}
+            className={cn(
+              "rounded-full w-8 h-8",
+              backgroundStyle === 'nebula' ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
+            )}
+            title="Nebula"
+          >
+            <Orbit className="w-4 h-4" />
+          </Button>
+        </div>
+
+        {/* Close button */}
         <Button
           variant="ghost"
           size="icon"
@@ -747,6 +794,7 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
             isActive={isConnected || connectionStatus === 'connecting'}
             isSpeaking={isSpeaking}
             isListening={isListening && !isSpeaking}
+            style={backgroundStyle}
           />
         </div>
 
