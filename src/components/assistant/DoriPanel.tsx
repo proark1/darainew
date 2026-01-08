@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,10 +7,9 @@ import { ChatMessage } from '@/types/flux';
 import { Contact } from '@/hooks/useContacts';
 import { useVoiceRecognition } from '@/hooks/useVoiceRecognition';
 import { findRelevantContacts, ContactSuggestion } from '@/lib/contactSuggestions';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { ConversationHistoryPanel } from './ConversationHistoryPanel';
 import { AudioVisualizer } from '@/components/ghost/AudioVisualizer';
-import { Send, User, Bot, Mic, MicOff, MessageSquare, Users, X, History } from 'lucide-react';
+import { Send, User, Mic, MicOff, Users, X, History } from 'lucide-react';
 import { format } from 'date-fns';
 import doriFish from '@/assets/dori-fish.png';
 
@@ -24,8 +23,6 @@ interface DoriPanelProps {
   contacts?: Contact[];
 }
 
-type Mode = 'text' | 'voice';
-
 export function DoriPanel({
   messages,
   onSendMessage,
@@ -33,8 +30,6 @@ export function DoriPanel({
   onVoiceMode,
   contacts = EMPTY_CONTACTS,
 }: DoriPanelProps) {
-  const isMobile = useIsMobile();
-  const [mode, setMode] = useState<Mode>('voice');
   const [showHistory, setShowHistory] = useState(false);
   const [input, setInput] = useState('');
   const [contactSuggestions, setContactSuggestions] = useState<ContactSuggestion[]>([]);
@@ -52,11 +47,6 @@ export function DoriPanel({
   } = useVoiceRecognition({
     continuous: false,
   });
-
-  // Auto-trigger voice mode on mount
-  useEffect(() => {
-    onVoiceMode();
-  }, []);
 
   // Handle final transcripts from voice recognition
   useEffect(() => {
@@ -99,11 +89,8 @@ export function DoriPanel({
     }
   };
 
-  const handleModeSwitch = (newMode: Mode) => {
-    if (newMode === 'voice') {
-      onVoiceMode();
-    }
-    setMode(newMode);
+  const handleVoiceModeClick = () => {
+    onVoiceMode();
   };
 
   // Show conversation history panel
@@ -131,15 +118,14 @@ export function DoriPanel({
             <History className="w-4 h-4" />
           </Button>
 
-          {/* Voice Mode Button - Only show when in text mode */}
+          {/* Voice Mode Button */}
           <Button
             variant="outline"
-            size="sm"
-            className="gap-1.5 h-7"
-            onClick={() => handleModeSwitch('voice')}
+            size="icon"
+            className="h-8 w-8"
+            onClick={handleVoiceModeClick}
           >
-            <Mic className="w-3.5 h-3.5" />
-            {!isMobile && <span className="text-xs">Voice Mode</span>}
+            <Mic className="w-4 h-4" />
           </Button>
         </div>
       </div>
