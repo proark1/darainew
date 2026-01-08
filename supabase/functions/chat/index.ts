@@ -47,6 +47,41 @@ interface HealthData {
   appointments?: { title: string; date: string; provider?: string; type?: string; isCompleted: boolean }[];
   vaccinations?: { name: string; date: string; nextDose?: string }[];
   metrics?: { type: string; value: number; unit: string; date: string; source: string }[];
+  // Daily health summary with detailed data
+  dailySummary?: {
+    date: string;
+    steps: number;
+    calories: number;
+    activeMinutes: number;
+    sleepHours: number;
+    heartRateAvg: number;
+    weight?: number;
+    waterIntake: number;
+    restingHeartRate?: number;
+    hrv?: number;
+    bloodOxygen?: number;
+    distance?: number;
+    flightsClimbed?: number;
+    mindfulnessMinutes?: number;
+    // Detailed sleep data
+    sleepStartTime?: string;
+    sleepEndTime?: string;
+    sleepRemMinutes?: number;
+    sleepDeepMinutes?: number;
+    sleepCoreMinutes?: number;
+    sleepAwakeMinutes?: number;
+    sleepEfficiency?: number;
+    sleepInBedMinutes?: number;
+  };
+  weeklyTrends?: {
+    date: string;
+    steps: number;
+    sleepHours: number;
+    calories: number;
+    activeMinutes: number;
+    heartRateAvg: number;
+  }[];
+  appleHealthConnected?: boolean;
 }
 
 interface OverdueTask {
@@ -523,6 +558,58 @@ serve(async (req) => {
     // Add health data
     if (healthData) {
       contextMessage += `\n\n## HEALTH & WELLNESS DATA`;
+      
+      // Daily summary from Apple Health / fitness tracking
+      if (healthData.dailySummary) {
+        const ds = healthData.dailySummary;
+        contextMessage += `\n\n### Today's Health Summary (${ds.date}):`;
+        contextMessage += `\n- Steps: ${ds.steps.toLocaleString()}`;
+        contextMessage += `\n- Calories burned: ${ds.calories.toLocaleString()}`;
+        contextMessage += `\n- Active minutes: ${ds.activeMinutes}`;
+        if (ds.distance) contextMessage += `\n- Distance: ${ds.distance.toFixed(1)} km`;
+        if (ds.flightsClimbed) contextMessage += `\n- Flights climbed: ${ds.flightsClimbed}`;
+        contextMessage += `\n- Heart rate (avg): ${ds.heartRateAvg} bpm`;
+        if (ds.restingHeartRate) contextMessage += `\n- Resting heart rate: ${ds.restingHeartRate} bpm`;
+        if (ds.hrv) contextMessage += `\n- Heart Rate Variability (HRV): ${ds.hrv} ms`;
+        if (ds.bloodOxygen) contextMessage += `\n- Blood oxygen: ${ds.bloodOxygen}%`;
+        if (ds.weight) contextMessage += `\n- Weight: ${ds.weight} kg`;
+        contextMessage += `\n- Water intake: ${ds.waterIntake} glasses`;
+        if (ds.mindfulnessMinutes) contextMessage += `\n- Mindfulness: ${ds.mindfulnessMinutes} minutes`;
+        
+        // Detailed sleep data
+        if (ds.sleepHours > 0) {
+          contextMessage += `\n\n### Last Night's Sleep:`;
+          contextMessage += `\n- Total sleep: ${ds.sleepHours.toFixed(1)} hours`;
+          if (ds.sleepStartTime && ds.sleepEndTime) {
+            const startTime = new Date(ds.sleepStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const endTime = new Date(ds.sleepEndTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            contextMessage += `\n- Bedtime: ${startTime} → Woke up: ${endTime}`;
+          }
+          if (ds.sleepInBedMinutes) contextMessage += `\n- Time in bed: ${Math.round(ds.sleepInBedMinutes / 60 * 10) / 10} hours`;
+          if (ds.sleepEfficiency) contextMessage += `\n- Sleep efficiency: ${ds.sleepEfficiency}%`;
+          
+          // Sleep stages
+          if (ds.sleepDeepMinutes || ds.sleepRemMinutes || ds.sleepCoreMinutes) {
+            contextMessage += `\n- Sleep stages:`;
+            if (ds.sleepDeepMinutes) contextMessage += `\n  - Deep sleep: ${ds.sleepDeepMinutes} min (${Math.round(ds.sleepDeepMinutes / (ds.sleepHours * 60) * 100)}%)`;
+            if (ds.sleepRemMinutes) contextMessage += `\n  - REM sleep: ${ds.sleepRemMinutes} min (${Math.round(ds.sleepRemMinutes / (ds.sleepHours * 60) * 100)}%)`;
+            if (ds.sleepCoreMinutes) contextMessage += `\n  - Core/Light sleep: ${ds.sleepCoreMinutes} min`;
+            if (ds.sleepAwakeMinutes) contextMessage += `\n  - Awake time: ${ds.sleepAwakeMinutes} min`;
+          }
+        }
+      }
+      
+      // Weekly trends
+      if (healthData.weeklyTrends && healthData.weeklyTrends.length > 0) {
+        const avgSteps = healthData.weeklyTrends.reduce((sum, d) => sum + d.steps, 0) / healthData.weeklyTrends.length;
+        const avgSleep = healthData.weeklyTrends.reduce((sum, d) => sum + d.sleepHours, 0) / healthData.weeklyTrends.length;
+        const avgCalories = healthData.weeklyTrends.reduce((sum, d) => sum + d.calories, 0) / healthData.weeklyTrends.length;
+        
+        contextMessage += `\n\n### Weekly Health Trends (last ${healthData.weeklyTrends.length} days):`;
+        contextMessage += `\n- Avg daily steps: ${Math.round(avgSteps).toLocaleString()}`;
+        contextMessage += `\n- Avg sleep: ${avgSleep.toFixed(1)} hours/night`;
+        contextMessage += `\n- Avg calories burned: ${Math.round(avgCalories).toLocaleString()}`;
+      }
       
       if (healthData.medications && healthData.medications.length > 0) {
         const activeMeds = healthData.medications.filter(m => m.isActive);

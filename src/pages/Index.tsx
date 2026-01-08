@@ -18,6 +18,7 @@ import { useGlobalSearch } from '@/hooks/useGlobalSearch';
 import { useContracts } from '@/hooks/useContracts';
 import { useContractReminders } from '@/hooks/useContractReminders';
 import { useHealthTracking } from '@/hooks/useHealthTracking';
+import { useAppleHealth } from '@/hooks/useAppleHealth';
 import { useFamilyEvents } from '@/hooks/useFamilyEvents';
 import { useNotes } from '@/hooks/useNotes';
 import { StandardMode } from '@/components/layout/StandardMode';
@@ -151,6 +152,13 @@ const Index = () => {
     getUpcomingAppointments,
     getRecentMetrics,
   } = useHealthTracking();
+
+  // Apple Health data for AI assistant
+  const {
+    todaySummary: appleHealthToday,
+    weeklyData: appleHealthWeekly,
+    isConnected: appleHealthConnected,
+  } = useAppleHealth();
 
   // Family events for AI assistant
   const { events: familyEvents, getUpcomingEvents: getUpcomingFamilyEvents } = useFamilyEvents();
@@ -340,6 +348,42 @@ const Index = () => {
           date: m.recorded_at,
           source: m.source,
         })),
+        // Apple Health daily summary with detailed sleep data
+        dailySummary: appleHealthToday ? {
+          date: appleHealthToday.date,
+          steps: appleHealthToday.steps,
+          calories: appleHealthToday.calories,
+          activeMinutes: appleHealthToday.activeMinutes,
+          sleepHours: appleHealthToday.sleepHours,
+          heartRateAvg: appleHealthToday.heartRateAvg,
+          weight: appleHealthToday.weight,
+          waterIntake: appleHealthToday.waterIntake,
+          restingHeartRate: appleHealthToday.restingHeartRate,
+          hrv: appleHealthToday.hrv,
+          bloodOxygen: appleHealthToday.bloodOxygen,
+          distance: appleHealthToday.distance,
+          flightsClimbed: appleHealthToday.flightsClimbed,
+          mindfulnessMinutes: appleHealthToday.mindfulnessMinutes,
+          // Detailed sleep data
+          sleepStartTime: appleHealthToday.sleepStartTime,
+          sleepEndTime: appleHealthToday.sleepEndTime,
+          sleepRemMinutes: appleHealthToday.sleepRemMinutes,
+          sleepDeepMinutes: appleHealthToday.sleepDeepMinutes,
+          sleepCoreMinutes: appleHealthToday.sleepCoreMinutes,
+          sleepAwakeMinutes: appleHealthToday.sleepAwakeMinutes,
+          sleepEfficiency: appleHealthToday.sleepEfficiency,
+          sleepInBedMinutes: appleHealthToday.sleepInBedMinutes,
+        } : undefined,
+        // Weekly health trends
+        weeklyTrends: appleHealthWeekly?.slice(0, 7).map(d => ({
+          date: d.date,
+          steps: d.steps,
+          sleepHours: d.sleepHours,
+          calories: d.calories,
+          activeMinutes: d.activeMinutes,
+          heartRateAvg: d.heartRateAvg,
+        })),
+        appleHealthConnected,
       };
 
       // Get events for AI context including today, tomorrow, and next 30 days
