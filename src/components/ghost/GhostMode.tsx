@@ -230,7 +230,7 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
       color: p.color,
     }));
 
-    // Health data for AI access
+    // Health data for AI access - include all available metrics
     const healthData = {
       isConnected: healthConnected,
       todaySummary: todaySummary ? {
@@ -242,6 +242,26 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
         heartRateAvg: todaySummary.heartRateAvg,
         weight: todaySummary.weight,
         waterIntake: todaySummary.waterIntake,
+        // Enhanced vitals
+        restingHeartRate: todaySummary.restingHeartRate,
+        hrv: todaySummary.hrv,
+        respiratoryRate: todaySummary.respiratoryRate,
+        bloodOxygen: todaySummary.bloodOxygen,
+        bloodPressureSystolic: todaySummary.bloodPressureSystolic,
+        bloodPressureDiastolic: todaySummary.bloodPressureDiastolic,
+        distance: todaySummary.distance,
+        flightsClimbed: todaySummary.flightsClimbed,
+        bodyFat: todaySummary.bodyFat,
+        mindfulnessMinutes: todaySummary.mindfulnessMinutes,
+        // Detailed sleep data
+        sleepStartTime: todaySummary.sleepStartTime,
+        sleepEndTime: todaySummary.sleepEndTime,
+        sleepRemMinutes: todaySummary.sleepRemMinutes,
+        sleepDeepMinutes: todaySummary.sleepDeepMinutes,
+        sleepCoreMinutes: todaySummary.sleepCoreMinutes,
+        sleepAwakeMinutes: todaySummary.sleepAwakeMinutes,
+        sleepEfficiency: todaySummary.sleepEfficiency,
+        sleepInBedMinutes: todaySummary.sleepInBedMinutes,
       } : null,
       weeklyData: weeklyData.map(d => ({
         date: d.date,
@@ -250,6 +270,14 @@ export function GhostMode({ onClose, onCommand, personality = 'balanced' }: Ghos
         activeMinutes: d.activeMinutes,
         sleepHours: d.sleepHours,
         heartRateAvg: d.heartRateAvg,
+        // Include sleep details in weekly data too
+        sleepRemMinutes: (d as any).sleepRemMinutes,
+        sleepDeepMinutes: (d as any).sleepDeepMinutes,
+        sleepCoreMinutes: (d as any).sleepCoreMinutes,
+        sleepAwakeMinutes: (d as any).sleepAwakeMinutes,
+        sleepEfficiency: (d as any).sleepEfficiency,
+        hrv: (d as any).hrv,
+        restingHeartRate: (d as any).restingHeartRate,
       })),
       recentMetrics: healthMetrics.slice(0, 100).map(m => ({
         type: m.metric_type,

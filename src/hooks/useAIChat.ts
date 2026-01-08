@@ -57,6 +57,42 @@ interface HealthData {
   appointments?: { title: string; date: string; provider?: string; type?: string; isCompleted: boolean }[];
   vaccinations?: { name: string; date: string; nextDose?: string }[];
   metrics?: { type: string; value: number; unit: string; date: string; source: string }[];
+  // Daily health summary with detailed data
+  dailySummary?: {
+    date: string;
+    steps: number;
+    calories: number;
+    activeMinutes: number;
+    sleepHours: number;
+    heartRateAvg: number;
+    weight?: number;
+    waterIntake: number;
+    restingHeartRate?: number;
+    hrv?: number;
+    bloodOxygen?: number;
+    distance?: number;
+    flightsClimbed?: number;
+    mindfulnessMinutes?: number;
+    // Detailed sleep data
+    sleepStartTime?: string;
+    sleepEndTime?: string;
+    sleepRemMinutes?: number;
+    sleepDeepMinutes?: number;
+    sleepCoreMinutes?: number;
+    sleepAwakeMinutes?: number;
+    sleepEfficiency?: number;
+    sleepInBedMinutes?: number;
+  };
+  // Weekly trends
+  weeklyTrends?: {
+    date: string;
+    steps: number;
+    sleepHours: number;
+    calories: number;
+    activeMinutes: number;
+    heartRateAvg: number;
+  }[];
+  appleHealthConnected?: boolean;
 }
 
 interface FamilyMemberContext {
