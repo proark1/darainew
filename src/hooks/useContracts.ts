@@ -97,7 +97,9 @@ export function useContracts(userId: string | undefined) {
       .eq('user_id', userId)
       .order('renewal_date', { ascending: true, nullsFirst: false });
 
-    if (data && !error) {
+    if (error) {
+      console.error('Error fetching contracts:', error);
+    } else if (data) {
       setContracts(data.map(mapDbToContract));
     }
     setLoading(false);
