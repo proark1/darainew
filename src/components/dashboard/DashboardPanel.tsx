@@ -12,8 +12,12 @@ import { FollowUpCard } from './FollowUpCard';
 import { DayPredictionCard } from './DayPredictionCard';
 import { SmartSchedulingCard } from './SmartSchedulingCard';
 import { AutoPilotCard } from './AutoPilotCard';
+import { QuickActionsBar } from './QuickActionsBar';
+import { LifeScoreCard } from './LifeScoreCard';
 import { CorrelationsDashboard } from '@/components/insights/CorrelationsDashboard';
 import { WeeklyCoachCard } from '@/components/insights/WeeklyCoachCard';
+import { MoodTrackingCard } from '@/components/insights/MoodTrackingCard';
+import { ChallengesPanel } from '@/components/gamification/ChallengesPanel';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { 
   CheckCircle2, 
@@ -194,6 +198,12 @@ export function DashboardPanel({ userId }: DashboardPanelProps) {
         </div>
       </div>
 
+      {/* Quick Actions Bar - Contextual actions based on time of day */}
+      <QuickActionsBar maxActions={6} />
+
+      {/* Life Score - Hero metric */}
+      <LifeScoreCard />
+
       {/* Stats Grid */}
       <div className="grid grid-cols-2 gap-2 md:gap-3 lg:grid-cols-4">
         <Card className="glass-panel-solid">
@@ -337,6 +347,15 @@ export function DashboardPanel({ userId }: DashboardPanelProps) {
         
         {/* Weekly Coach */}
         <WeeklyCoachCard />
+      </div>
+
+      {/* Mood & Challenges Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Mood Tracking */}
+        <MoodTrackingCard />
+        
+        {/* Active Challenges */}
+        <ChallengesPanel />
       </div>
 
       {/* Auto-Pilot */}
