@@ -828,21 +828,38 @@ export function useAppleHealth() {
         for (const bucket of sleepData.aggregatedData) {
           if (bucket.value && bucket.value > 0) {
             const date = new Date(bucket.startDate).toISOString().split('T')[0];
-            // Sleep value from HealthKit: check if value seems like minutes or hours
-            // If value > 24, it's likely in minutes; if > 1440, it's likely in seconds
+            // Sleep value from HealthKit is typically in MINUTES
+            // The capacitor-health-extended plugin returns sleep data in minutes
+            // Edge cases:
+            // - If value is very large (> 1440 = 24 hours in minutes), it might be in seconds
+            // - If value is small (< 1), it might already be in hours as a decimal
+            // - Normal sleep range: 180-720 minutes (3-12 hours)
             let hours: number;
+            
             if (bucket.value > 1440) {
-              // Value is in seconds
+              // Value is definitely in seconds (more than 24 hours worth of minutes)
               hours = bucket.value / 3600;
-            } else if (bucket.value > 24) {
-              // Value is in minutes
-              hours = bucket.value / 60;
-            } else {
-              // Value is already in hours
+              logHealthDebug('sleep_conversion', { raw: bucket.value, assumed: 'seconds', hours });
+            } else if (bucket.value < 1) {
+              // Value is a small decimal, might already be in hours
               hours = bucket.value;
+              logHealthDebug('sleep_conversion', { raw: bucket.value, assumed: 'hours_decimal', hours });
+            } else {
+              // Standard case: value is in minutes (most common for HealthKit sleep data)
+              hours = bucket.value / 60;
+              logHealthDebug('sleep_conversion', { raw: bucket.value, assumed: 'minutes', hours });
             }
-            // Cap at reasonable max (24 hours)
-            hours = Math.min(hours, 24);
+            
+            // Sanity check: cap at 16 hours max (nobody sleeps more than this in one day)
+            // and minimum 0.5 hours (30 min) to filter out micro-naps
+            if (hours > 16) {
+              logHealthDebug('sleep_capped', { original: hours, capped: 16 });
+              hours = 16;
+            }
+            if (hours < 0.5) {
+              logHealthDebug('sleep_skipped_too_short', { hours });
+              continue; // Skip very short sleep entries
+            }
             
             metricsToInsert.push({
               user_id: user.id,
