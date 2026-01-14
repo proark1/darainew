@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NetworkStatusBanner } from "@/components/NetworkStatusBanner";
+import { XPBadgeProvider } from "@/components/ui/xp-badge";
 
 import { useMorningAutoPlay } from "@/hooks/useMorningAutoPlay";
 import Index from "@/pages/Index";
@@ -149,13 +150,15 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <LanguageProvider>
       <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <ErrorBoundary fallbackTitle="DarAI couldn't load">
-          <BrowserRouter>
-            <AppContent />
-          </BrowserRouter>
-        </ErrorBoundary>
+        <XPBadgeProvider>
+          <Toaster />
+          <Sonner />
+          <ErrorBoundary fallbackTitle="DarAI couldn't load">
+            <BrowserRouter>
+              <AppContent />
+            </BrowserRouter>
+          </ErrorBoundary>
+        </XPBadgeProvider>
       </TooltipProvider>
     </LanguageProvider>
   </QueryClientProvider>
