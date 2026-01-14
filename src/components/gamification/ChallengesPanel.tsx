@@ -5,11 +5,13 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useChallenges } from '@/hooks/useChallenges';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { Trophy, Target, CheckCircle, Clock, Plus, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MilestoneCelebration } from './MilestoneCelebration';
 
 export function ChallengesPanel() {
+  const { t } = useLanguage();
   const { 
     loading, 
     celebratingChallenge,
@@ -48,20 +50,20 @@ export function ChallengesPanel() {
         <CardHeader className="pb-2">
           <CardTitle className="text-lg flex items-center gap-2">
             <Trophy className="w-5 h-5 text-amber-500" />
-            Challenges
+            {t('challenges.title')}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="active" className="w-full">
             <TabsList className="grid w-full grid-cols-3 mb-4">
               <TabsTrigger value="active" className="text-xs">
-                Active ({activeChallenges.length})
+                {t('challenges.active')} ({activeChallenges.length})
               </TabsTrigger>
               <TabsTrigger value="available" className="text-xs">
-                Available ({availableChallenges.length})
+                {t('challenges.available')} ({availableChallenges.length})
               </TabsTrigger>
               <TabsTrigger value="completed" className="text-xs">
-                Done ({completedChallenges.length})
+                {t('challenges.done')} ({completedChallenges.length})
               </TabsTrigger>
             </TabsList>
 
@@ -69,8 +71,8 @@ export function ChallengesPanel() {
               {activeChallenges.length === 0 ? (
                 <div className="text-center py-6 text-muted-foreground">
                   <Target className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">No active challenges</p>
-                  <p className="text-xs">Join one to get started!</p>
+                  <p className="text-sm">{t('challenges.noActive')}</p>
+                  <p className="text-xs">{t('challenges.joinToStart')}</p>
                 </div>
               ) : (
                 activeChallenges.map((uc) => (
@@ -105,7 +107,7 @@ export function ChallengesPanel() {
               {availableChallenges.length === 0 ? (
                 <div className="text-center py-6 text-muted-foreground">
                   <Sparkles className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">You've joined all available challenges!</p>
+                  <p className="text-sm">{t('challenges.allJoined')}</p>
                 </div>
               ) : (
                 availableChallenges.map((challenge) => (
@@ -135,7 +137,7 @@ export function ChallengesPanel() {
                         className="shrink-0"
                       >
                         <Plus className="w-3 h-3 mr-1" />
-                        Join
+                        {t('challenges.join')}
                       </Button>
                     </div>
                   </div>
@@ -147,8 +149,8 @@ export function ChallengesPanel() {
               {completedChallenges.length === 0 ? (
                 <div className="text-center py-6 text-muted-foreground">
                   <CheckCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">No completed challenges yet</p>
-                  <p className="text-xs">Keep going!</p>
+                  <p className="text-sm">{t('challenges.noCompleted')}</p>
+                  <p className="text-xs">{t('challenges.keepGoing')}</p>
                 </div>
               ) : (
                 completedChallenges.map((uc) => (
@@ -163,8 +165,8 @@ export function ChallengesPanel() {
                       <div className="flex-1">
                         <h4 className="font-medium text-sm">{uc.challenge.title}</h4>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Clock className="w-3 h-3" />
-                          Completed {uc.completedAt ? new Date(uc.completedAt).toLocaleDateString() : 'recently'}
+                        <Clock className="w-3 h-3" />
+                          {t('challenges.completed')} {uc.completedAt ? new Date(uc.completedAt).toLocaleDateString() : ''}
                         </div>
                       </div>
                       <Badge className="bg-green-500 text-white">
