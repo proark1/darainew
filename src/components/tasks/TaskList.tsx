@@ -164,7 +164,11 @@ function SortableTaskItem({
   };
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div 
+      ref={setNodeRef} 
+      style={style}
+      className="animate-fade-in"
+    >
       <div 
         className={cn(
           "group flex items-start gap-1.5 rounded-lg transition-all duration-200 hover:bg-muted/50",

@@ -21,6 +21,7 @@ import { PropertyPanel } from '../property/PropertyPanel';
 import { StartupWorkspacePanel } from '../startup/StartupWorkspacePanel';
 import { TechNewsPanel } from '../news/TechNewsPanel';
 import { SmartNudgeProvider } from '../nudges/SmartNudgeProvider';
+import { QuickActionsFAB } from '../ui/floating-action-button';
 
 import { useNotifications } from '@/hooks/useNotifications';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -598,6 +599,14 @@ export function MobileLayout({
           })}
         </div>
       </nav>
+
+      {/* Quick Actions FAB */}
+      <QuickActionsFAB
+        onAddTask={() => handleTabChange('calendar')}
+        onAddEvent={() => handleTabChange('calendar')}
+        onAskDori={handleDoriPress}
+        onBrainDump={() => handleTabChange('notes')}
+      />
 
       {/* ADHD Support Overlays */}
       <SmartNudgeProvider tasks={tasks} events={events} />

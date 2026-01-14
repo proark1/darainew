@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, ReactNode } from 'react';
-import { X, Sun, Calendar, CheckCircle2, Flame, Clock, Users, FileText, Zap, FolderKanban, Battery, BatteryLow, BatteryFull, AlertTriangle, Moon, CloudSun, Newspaper, MapPin, Loader2 } from 'lucide-react';
+import { X, Sun, Calendar, CheckCircle2, Flame, Clock, Users, FileText, Zap, FolderKanban, Battery, BatteryLow, BatteryFull, AlertTriangle, Moon, CloudSun, Newspaper, MapPin, Loader2, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +10,7 @@ import { Contract } from '@/hooks/useContracts';
 import { useWeather } from '@/hooks/useWeather';
 import { usePersonalizedNews } from '@/hooks/usePersonalizedNews';
 import { useUserProfile } from '@/hooks/useUserProfile';
+import { useHaptics } from '@/hooks/useHaptics';
 import { isToday, isTomorrow, isPast, differenceInDays, startOfDay, format, addDays, isWithinInterval, endOfDay, getHours } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -596,10 +597,23 @@ export function MorningBriefing({
             </div>
           </div>
 
-          {/* Action Button */}
-          <Button onClick={handleDismiss} className="w-full" size="lg">
-            🚀 Let's Get Started
-          </Button>
+          {/* Action Buttons */}
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              className="flex-1 gap-2"
+              onClick={() => {
+                // Audio briefing feature - would integrate with text-to-speech
+                console.log('Audio briefing requested');
+              }}
+            >
+              <Volume2 className="w-4 h-4" />
+              Listen
+            </Button>
+            <Button onClick={handleDismiss} className="flex-1" size="lg">
+              🚀 Let's Go
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

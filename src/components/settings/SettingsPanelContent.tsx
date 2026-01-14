@@ -44,6 +44,7 @@ import { SpaceMembersPanel } from './SpaceMembersPanel';
 import { NotificationSettingsPanel } from './NotificationSettingsPanel';
 import { ProactiveSettingsPanel } from './ProactiveSettingsPanel';
 import { KeyboardShortcutsPanel, useKeyboardShortcutsPanel } from './KeyboardShortcutsPanel';
+import { AutomationRulesPanel } from './AutomationRulesPanel';
 import { CalendarConnectionsPanel } from './CalendarConnectionsPanel';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -768,6 +769,9 @@ export function SettingsPanelContent({
             <ProactiveSettingsPanel />
             <div className="border-t border-border pt-6">
               <NotificationSettingsPanel />
+            </div>
+            <div className="border-t border-border pt-6">
+              <AutomationRulesPanel />
             </div>
           </div>
         )}
