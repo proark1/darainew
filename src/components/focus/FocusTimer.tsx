@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Task } from '@/types/flux';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import { AmbientSoundsPanel } from './AmbientSoundsPanel';
 import { 
   Play, 
   Pause, 
@@ -16,7 +18,9 @@ import {
   Coffee,
   Flame,
   X,
-  Clock
+  Clock,
+  Volume2,
+  ChevronDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -285,6 +289,22 @@ export function FocusTimer({ tasks, isOpen, onClose }: FocusTimerProps) {
               <X className="w-5 h-5" />
             </Button>
           </div>
+
+          {/* Ambient Sounds */}
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="w-full justify-between">
+                <span className="flex items-center gap-2">
+                  <Volume2 className="w-4 h-4" />
+                  Ambient Sounds
+                </span>
+                <ChevronDown className="w-4 h-4" />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-2">
+              <AmbientSoundsPanel />
+            </CollapsibleContent>
+          </Collapsible>
 
           {/* Stats */}
           <div className="grid grid-cols-2 gap-4 pt-4 border-t">
