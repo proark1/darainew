@@ -4,32 +4,35 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { useMoodTracking } from '@/hooks/useMoodTracking';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { Smile, Frown, Meh, Zap, Battery, TrendingUp, TrendingDown, Minus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
-const MOOD_OPTIONS = [
-  { value: 1, icon: Frown, label: 'Very Low', color: 'text-red-500' },
-  { value: 2, icon: Frown, label: 'Low', color: 'text-orange-500' },
-  { value: 3, icon: Meh, label: 'Neutral', color: 'text-yellow-500' },
-  { value: 4, icon: Smile, label: 'Good', color: 'text-lime-500' },
-  { value: 5, icon: Smile, label: 'Great', color: 'text-green-500' },
-];
-
-const ENERGY_OPTIONS = [
-  { value: 1, icon: Battery, label: 'Exhausted', color: 'text-red-500' },
-  { value: 2, icon: Battery, label: 'Tired', color: 'text-orange-500' },
-  { value: 3, icon: Battery, label: 'Okay', color: 'text-yellow-500' },
-  { value: 4, icon: Zap, label: 'Energized', color: 'text-lime-500' },
-  { value: 5, icon: Zap, label: 'Pumped', color: 'text-green-500' },
-];
-
-const CONTEXT_TAGS = [
-  'Work', 'Family', 'Exercise', 'Social', 'Alone Time', 
-  'Outdoors', 'Creative', 'Learning', 'Relaxing', 'Stressed'
-];
-
 export function MoodTrackingCard() {
+  const { t } = useLanguage();
+  
+  const MOOD_OPTIONS = [
+    { value: 1, icon: Frown, label: t('mood.veryLow'), color: 'text-red-500' },
+    { value: 2, icon: Frown, label: t('mood.low'), color: 'text-orange-500' },
+    { value: 3, icon: Meh, label: t('mood.neutral'), color: 'text-yellow-500' },
+    { value: 4, icon: Smile, label: t('mood.good'), color: 'text-lime-500' },
+    { value: 5, icon: Smile, label: t('mood.great'), color: 'text-green-500' },
+  ];
+
+  const ENERGY_OPTIONS = [
+    { value: 1, icon: Battery, label: t('mood.exhausted'), color: 'text-red-500' },
+    { value: 2, icon: Battery, label: t('mood.tired'), color: 'text-orange-500' },
+    { value: 3, icon: Battery, label: t('mood.okay'), color: 'text-yellow-500' },
+    { value: 4, icon: Zap, label: t('mood.energized'), color: 'text-lime-500' },
+    { value: 5, icon: Zap, label: t('mood.pumped'), color: 'text-green-500' },
+  ];
+
+  const CONTEXT_TAGS = [
+    t('mood.work'), t('mood.family'), t('mood.exercise'), t('mood.social'), t('mood.aloneTime'), 
+    t('mood.outdoors'), t('mood.creative'), t('mood.learning'), t('mood.relaxing'), t('mood.stressed')
+  ];
+
   const { todayLogs, stats, logMood, loading } = useMoodTracking();
   const [isLogging, setIsLogging] = useState(false);
   const [selectedMood, setSelectedMood] = useState<number | null>(null);
@@ -95,11 +98,11 @@ export function MoodTrackingCard() {
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg flex items-center gap-2">
             <Smile className="w-5 h-5 text-primary" />
-            Mood & Energy
+            {t('mood.title')}
           </CardTitle>
           {!isLogging && (
             <Button size="sm" onClick={() => setIsLogging(true)}>
-              Log Now
+              {t('mood.logNow')}
             </Button>
           )}
         </div>
@@ -109,7 +112,7 @@ export function MoodTrackingCard() {
           <div className="space-y-4">
             {/* Mood Selection */}
             <div>
-              <p className="text-sm font-medium mb-2">How are you feeling?</p>
+              <p className="text-sm font-medium mb-2">{t('mood.howFeeling')}</p>
               <div className="flex justify-between">
                 {MOOD_OPTIONS.map((option) => {
                   const Icon = option.icon;
@@ -134,7 +137,7 @@ export function MoodTrackingCard() {
 
             {/* Energy Selection */}
             <div>
-              <p className="text-sm font-medium mb-2">Energy level?</p>
+              <p className="text-sm font-medium mb-2">{t('mood.energyLevel')}</p>
               <div className="flex justify-between">
                 {ENERGY_OPTIONS.map((option) => {
                   const Icon = option.icon;
@@ -159,7 +162,7 @@ export function MoodTrackingCard() {
 
             {/* Context Tags */}
             <div>
-              <p className="text-sm font-medium mb-2">What's influencing you? (optional)</p>
+              <p className="text-sm font-medium mb-2">{t('mood.influences')}</p>
               <div className="flex flex-wrap gap-1.5">
                 {CONTEXT_TAGS.map((tag) => (
                   <Badge
@@ -176,7 +179,7 @@ export function MoodTrackingCard() {
 
             {/* Notes */}
             <Textarea
-              placeholder="Any notes? (optional)"
+              placeholder={t('mood.notes')}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
@@ -189,14 +192,14 @@ export function MoodTrackingCard() {
                 onClick={() => setIsLogging(false)}
                 className="flex-1"
               >
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button 
                 onClick={handleSubmit} 
                 disabled={submitting || !selectedMood || !selectedEnergy}
                 className="flex-1"
               >
-                {submitting ? 'Saving...' : 'Save'}
+                {submitting ? t('mood.saving') : t('mood.save')}
               </Button>
             </div>
           </div>
@@ -206,7 +209,7 @@ export function MoodTrackingCard() {
             {todayLogs.length > 0 ? (
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <p className="text-sm text-muted-foreground">Today's average</p>
+                  <p className="text-sm text-muted-foreground">{t('mood.todayAverage')}</p>
                   <div className="flex items-center gap-4 mt-1">
                     <div className="flex items-center gap-1">
                       <Smile className="w-4 h-4 text-primary" />
@@ -222,11 +225,11 @@ export function MoodTrackingCard() {
                     </div>
                   </div>
                 </div>
-                <Badge variant="outline">{todayLogs.length} logs</Badge>
+                <Badge variant="outline">{todayLogs.length} {t('mood.logs')}</Badge>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground text-center py-2">
-                No mood logs today. How are you feeling?
+                {t('mood.noLogsToday')}
               </p>
             )}
 
@@ -240,16 +243,16 @@ export function MoodTrackingCard() {
                     {getTrendIcon(stats.moodTrend)}
                   </div>
                   <p className="text-2xl font-bold">{stats.averageMood}</p>
-                  <p className="text-xs text-muted-foreground">weekly avg</p>
+                  <p className="text-xs text-muted-foreground">{t('mood.weeklyAvg')}</p>
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center gap-1.5">
                     <Zap className="w-4 h-4 text-amber-500" />
-                    <span className="text-sm font-medium">Energy</span>
+                    <span className="text-sm font-medium">{t('mood.energized')}</span>
                     {getTrendIcon(stats.energyTrend)}
                   </div>
                   <p className="text-2xl font-bold">{stats.averageEnergy}</p>
-                  <p className="text-xs text-muted-foreground">weekly avg</p>
+                  <p className="text-xs text-muted-foreground">{t('mood.weeklyAvg')}</p>
                 </div>
               </div>
             )}
@@ -257,7 +260,7 @@ export function MoodTrackingCard() {
             {/* Top Contexts */}
             {stats?.topContexts && stats.topContexts.length > 0 && (
               <div className="pt-2 border-t">
-                <p className="text-xs text-muted-foreground mb-1.5">Top influences this week</p>
+                <p className="text-xs text-muted-foreground mb-1.5">{t('mood.topInfluences')}</p>
                 <div className="flex flex-wrap gap-1">
                   {stats.topContexts.slice(0, 3).map((tag) => (
                     <Badge key={tag} variant="secondary" className="text-xs">

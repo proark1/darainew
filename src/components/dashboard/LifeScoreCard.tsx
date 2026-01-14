@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useLifeScore } from '@/hooks/useLifeScore';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { RefreshCw, TrendingUp, TrendingDown, Minus, Brain, Heart, Users, Star, Home } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -38,6 +39,7 @@ function ScoreCategory({ label, score, icon, trend, color }: ScoreCategoryProps)
 
 export function LifeScoreCard() {
   const { todayScore, calculating, calculateScore, getTrend, loading } = useLifeScore();
+  const { t } = useLanguage();
 
   const overallScore = todayScore?.overallScore || 0;
   const circumference = 2 * Math.PI * 45;
@@ -51,10 +53,10 @@ export function LifeScoreCard() {
   };
 
   const getScoreLabel = (score: number) => {
-    if (score >= 80) return 'Thriving';
-    if (score >= 60) return 'Good';
-    if (score >= 40) return 'Fair';
-    return 'Needs Attention';
+    if (score >= 80) return t('lifeScore.thriving');
+    if (score >= 60) return t('lifeScore.good');
+    if (score >= 40) return t('lifeScore.fair');
+    return t('lifeScore.needsAttention');
   };
 
   if (loading) {
@@ -79,7 +81,7 @@ export function LifeScoreCard() {
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg flex items-center gap-2">
             <Star className="w-5 h-5 text-primary" />
-            Life Score
+            {t('lifeScore.title')}
           </CardTitle>
           <Button
             variant="ghost"
@@ -133,35 +135,35 @@ export function LifeScoreCard() {
         {/* Category Scores */}
         <div className="space-y-3">
           <ScoreCategory
-            label="Productivity"
+            label={t('lifeScore.productivity')}
             score={todayScore?.productivityScore || 0}
             icon={<Brain className="w-4 h-4 text-white" />}
             trend={getTrend('productivityScore').trend}
             color="bg-blue-500"
           />
           <ScoreCategory
-            label="Health"
+            label={t('lifeScore.health')}
             score={todayScore?.healthScore || 0}
             icon={<Heart className="w-4 h-4 text-white" />}
             trend={getTrend('healthScore').trend}
             color="bg-red-500"
           />
           <ScoreCategory
-            label="Relationships"
+            label={t('lifeScore.relationships')}
             score={todayScore?.relationshipsScore || 0}
             icon={<Users className="w-4 h-4 text-white" />}
             trend={getTrend('relationshipsScore').trend}
             color="bg-green-500"
           />
           <ScoreCategory
-            label="Spiritual"
+            label={t('lifeScore.spiritual')}
             score={todayScore?.spiritualScore || 0}
             icon={<Star className="w-4 h-4 text-white" />}
             trend={getTrend('spiritualScore').trend}
             color="bg-purple-500"
           />
           <ScoreCategory
-            label="Family"
+            label={t('lifeScore.family')}
             score={todayScore?.familyScore || 0}
             icon={<Home className="w-4 h-4 text-white" />}
             trend={getTrend('familyScore').trend}
@@ -173,15 +175,15 @@ export function LifeScoreCard() {
         <div className="grid grid-cols-3 gap-2 pt-2 border-t">
           <div className="text-center">
             <p className="text-lg font-semibold">{todayScore?.tasksCompleted || 0}</p>
-            <p className="text-xs text-muted-foreground">Tasks</p>
+            <p className="text-xs text-muted-foreground">{t('lifeScore.tasks')}</p>
           </div>
           <div className="text-center">
             <p className="text-lg font-semibold">{todayScore?.focusMinutes || 0}</p>
-            <p className="text-xs text-muted-foreground">Focus min</p>
+            <p className="text-xs text-muted-foreground">{t('lifeScore.focusMin')}</p>
           </div>
           <div className="text-center">
             <p className="text-lg font-semibold">{todayScore?.habitsLogged || 0}</p>
-            <p className="text-xs text-muted-foreground">Habits</p>
+            <p className="text-xs text-muted-foreground">{t('lifeScore.habits')}</p>
           </div>
         </div>
       </CardContent>

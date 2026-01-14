@@ -575,6 +575,205 @@ const translations: Record<Language, Record<string, string>> = {
     'auth.signUpFailed': 'Sign Up Failed',
     'auth.accountCreated': 'Account Created!',
     'auth.startUsingApp': 'You can now start using DarAI.',
+
+    // Life Score
+    'lifeScore.title': 'Life Score',
+    'lifeScore.thriving': 'Thriving',
+    'lifeScore.good': 'Good',
+    'lifeScore.fair': 'Fair',
+    'lifeScore.needsAttention': 'Needs Attention',
+    'lifeScore.productivity': 'Productivity',
+    'lifeScore.health': 'Health',
+    'lifeScore.relationships': 'Relationships',
+    'lifeScore.spiritual': 'Spiritual',
+    'lifeScore.family': 'Family',
+    'lifeScore.tasks': 'Tasks',
+    'lifeScore.focusMin': 'Focus min',
+    'lifeScore.habits': 'Habits',
+
+    // Challenges
+    'challenges.title': 'Challenges',
+    'challenges.active': 'Active',
+    'challenges.available': 'Available',
+    'challenges.done': 'Done',
+    'challenges.noActive': 'No active challenges',
+    'challenges.joinToStart': 'Join one to get started!',
+    'challenges.allJoined': "You've joined all available challenges!",
+    'challenges.noCompleted': 'No completed challenges yet',
+    'challenges.keepGoing': 'Keep going!',
+    'challenges.join': 'Join',
+    'challenges.completed': 'Completed',
+
+    // Mood Tracking
+    'mood.title': 'Mood & Energy',
+    'mood.logNow': 'Log Now',
+    'mood.howFeeling': 'How are you feeling?',
+    'mood.energyLevel': 'Energy level?',
+    'mood.influences': "What's influencing you? (optional)",
+    'mood.notes': 'Any notes? (optional)',
+    'mood.save': 'Save',
+    'mood.saving': 'Saving...',
+    'mood.todayAverage': "Today's average",
+    'mood.logs': 'logs',
+    'mood.noLogsToday': 'No mood logs today. How are you feeling?',
+    'mood.weeklyAvg': 'weekly avg',
+    'mood.topInfluences': 'Top influences this week',
+    'mood.veryLow': 'Very Low',
+    'mood.low': 'Low',
+    'mood.neutral': 'Neutral',
+    'mood.good': 'Good',
+    'mood.great': 'Great',
+    'mood.exhausted': 'Exhausted',
+    'mood.tired': 'Tired',
+    'mood.okay': 'Okay',
+    'mood.energized': 'Energized',
+    'mood.pumped': 'Pumped',
+    'mood.work': 'Work',
+    'mood.family': 'Family',
+    'mood.exercise': 'Exercise',
+    'mood.social': 'Social',
+    'mood.aloneTime': 'Alone Time',
+    'mood.outdoors': 'Outdoors',
+    'mood.creative': 'Creative',
+    'mood.learning': 'Learning',
+    'mood.relaxing': 'Relaxing',
+    'mood.stressed': 'Stressed',
+
+    // XP & Gamification
+    'xp.level': 'Level',
+    'xp.totalXp': 'Total XP',
+    'xp.dayStreak': 'day streak',
+    'xp.progressToLevel': 'Progress to Level',
+    'xp.thisWeek': 'XP this week',
+    'xp.tasks': 'Tasks',
+    'xp.focusMin': 'Focus min',
+    'xp.habits': 'Habits',
+    'xp.badges': 'Badges',
+
+    // What Now / AI Assistant
+    'whatNow.title': 'What Should I Do Now?',
+    'whatNow.description': 'AI-powered decision helper based on your tasks, schedule, and energy',
+    'whatNow.analyzing': 'Analyzing your context...',
+    'whatNow.takeBreak': 'Take a Break!',
+    'whatNow.doThisNow': 'Do this now',
+    'whatNow.startNow': 'Start Now',
+    'whatNow.orTryThese': 'Or try these:',
+    'whatNow.noSuggestions': 'No suggestions available',
+    'whatNow.newSuggestion': 'Get new suggestion',
+
+    // Auto-Pilot
+    'autoPilot.title': 'Auto-Pilot',
+    'autoPilot.subtitle': 'AI-suggested actions to optimize your day',
+    'autoPilot.noActions': 'No pending actions',
+    'autoPilot.scanning': 'Scanning...',
+    'autoPilot.scanForActions': 'Scan for Actions',
+    'autoPilot.approveAll': 'Approve All',
+    'autoPilot.reschedule': 'Reschedule',
+    'autoPilot.breakdown': 'Break Down',
+    'autoPilot.shoppingList': 'Shopping List',
+    'autoPilot.followUp': 'Follow-up',
+    'autoPilot.takeBreak': 'Take Break',
+
+    // Follow-ups
+    'followUp.title': 'Quick Follow-ups',
+    'followUp.taskCheckIn': 'Task Check-in',
+    'followUp.eventFollowUp': 'Event Follow-up',
+    'followUp.goalProgress': 'Goal Progress',
+    'followUp.habitReminder': 'Habit Reminder',
+    'followUp.dayInsight': 'Day Insight',
+    'followUp.done': 'Done',
+    'followUp.later': 'Later',
+    'followUp.moreFollowUps': 'more follow-ups',
+
+    // Proactive Reminders
+    'proactive.title': 'Proactive Reminders',
+    'proactive.noReminders': 'No reminders right now',
+
+    // Day Prediction
+    'dayPrediction.title': 'Day Prediction',
+    'dayPrediction.excellent': 'Excellent',
+    'dayPrediction.good': 'Good',
+    'dayPrediction.moderate': 'Moderate',
+    'dayPrediction.challenging': 'Challenging',
+
+    // Weekly Coach
+    'weeklyCoach.title': 'Weekly Coach',
+    'weeklyCoach.getAdvice': 'Get Advice',
+    'weeklyCoach.noAdvice': 'No coaching tips yet',
+
+    // Correlations
+    'correlations.title': 'Life Correlations',
+    'correlations.analyze': 'Analyze',
+    'correlations.noData': 'Not enough data for correlations',
+
+    // Smart Scheduling
+    'smartScheduling.title': 'Smart Scheduling',
+    'smartScheduling.suggestions': 'Scheduling suggestions',
+
+    // Health Hub
+    'health.title': 'Health',
+    'health.metrics': 'Metrics',
+    'health.sleep': 'Sleep',
+    'health.steps': 'Steps',
+    'health.water': 'Water',
+    'health.weight': 'Weight',
+    'health.heartRate': 'Heart Rate',
+    'health.bloodPressure': 'Blood Pressure',
+    'health.addMetric': 'Add Metric',
+
+    // Notifications
+    'notifications.title': 'Notifications',
+    'notifications.markAllRead': 'Mark all as read',
+    'notifications.noNotifications': 'No notifications',
+    'notifications.listen': 'Listen',
+
+    // Check-in
+    'checkin.morningTitle': 'Good Morning! ☀️',
+    'checkin.eveningTitle': 'Good Evening! 🌙',
+    'checkin.howDidItGo': 'How did your day go?',
+    'checkin.whatsYourFocus': "What's your focus today?",
+    'checkin.energyLevel': 'Energy Level',
+    'checkin.mood': 'Mood',
+    'checkin.skipForNow': 'Skip for now',
+    'checkin.submit': 'Submit',
+
+    // Automation Rules
+    'automation.title': 'Automation Rules',
+    'automation.addRule': 'Add Rule',
+    'automation.noRules': 'No automation rules',
+    'automation.trigger': 'Trigger',
+    'automation.action': 'Action',
+    'automation.condition': 'Condition',
+
+    // Quick Actions
+    'quickActions.addTask': 'Task',
+    'quickActions.addEvent': 'Event',
+    'quickActions.askDori': 'Ask Dori',
+    'quickActions.brainDump': 'Brain Dump',
+
+    // Voice
+    'voice.listening': 'Listening...',
+    'voice.processing': 'Processing...',
+    'voice.tapToSpeak': 'Tap to speak',
+
+    // Misc
+    'misc.viewAll': 'View all',
+    'misc.seeMore': 'See more',
+    'misc.collapse': 'Collapse',
+    'misc.expand': 'Expand',
+    'misc.refresh': 'Refresh',
+    'misc.retry': 'Retry',
+    'misc.error': 'Error',
+    'misc.success': 'Success',
+    'misc.warning': 'Warning',
+    'misc.info': 'Info',
+    'misc.share': 'Share',
+    'misc.copy': 'Copy',
+    'misc.copied': 'Copied!',
+    'misc.download': 'Download',
+    'misc.upload': 'Upload',
+    'misc.export': 'Export',
+    'misc.import': 'Import',
   },
   de: {
     // Navigation & Tabs
@@ -1142,6 +1341,205 @@ const translations: Record<Language, Record<string, string>> = {
     'auth.signUpFailed': 'Registrierung fehlgeschlagen',
     'auth.accountCreated': 'Konto erstellt!',
     'auth.startUsingApp': 'Du kannst jetzt DarAI nutzen.',
+
+    // Life Score
+    'lifeScore.title': 'Lebens-Score',
+    'lifeScore.thriving': 'Ausgezeichnet',
+    'lifeScore.good': 'Gut',
+    'lifeScore.fair': 'Befriedigend',
+    'lifeScore.needsAttention': 'Braucht Aufmerksamkeit',
+    'lifeScore.productivity': 'Produktivität',
+    'lifeScore.health': 'Gesundheit',
+    'lifeScore.relationships': 'Beziehungen',
+    'lifeScore.spiritual': 'Spirituell',
+    'lifeScore.family': 'Familie',
+    'lifeScore.tasks': 'Aufgaben',
+    'lifeScore.focusMin': 'Fokus Min',
+    'lifeScore.habits': 'Gewohnheiten',
+
+    // Challenges
+    'challenges.title': 'Herausforderungen',
+    'challenges.active': 'Aktiv',
+    'challenges.available': 'Verfügbar',
+    'challenges.done': 'Erledigt',
+    'challenges.noActive': 'Keine aktiven Herausforderungen',
+    'challenges.joinToStart': 'Nimm an einer teil, um loszulegen!',
+    'challenges.allJoined': 'Du nimmst an allen verfügbaren Herausforderungen teil!',
+    'challenges.noCompleted': 'Noch keine abgeschlossenen Herausforderungen',
+    'challenges.keepGoing': 'Weiter so!',
+    'challenges.join': 'Teilnehmen',
+    'challenges.completed': 'Abgeschlossen',
+
+    // Mood Tracking
+    'mood.title': 'Stimmung & Energie',
+    'mood.logNow': 'Jetzt erfassen',
+    'mood.howFeeling': 'Wie fühlst du dich?',
+    'mood.energyLevel': 'Energielevel?',
+    'mood.influences': 'Was beeinflusst dich? (optional)',
+    'mood.notes': 'Notizen? (optional)',
+    'mood.save': 'Speichern',
+    'mood.saving': 'Speichern...',
+    'mood.todayAverage': 'Heutiger Durchschnitt',
+    'mood.logs': 'Einträge',
+    'mood.noLogsToday': 'Keine Stimmungseinträge heute. Wie geht es dir?',
+    'mood.weeklyAvg': 'Wochen-Durchschnitt',
+    'mood.topInfluences': 'Top-Einflüsse diese Woche',
+    'mood.veryLow': 'Sehr niedrig',
+    'mood.low': 'Niedrig',
+    'mood.neutral': 'Neutral',
+    'mood.good': 'Gut',
+    'mood.great': 'Super',
+    'mood.exhausted': 'Erschöpft',
+    'mood.tired': 'Müde',
+    'mood.okay': 'Okay',
+    'mood.energized': 'Energiegeladen',
+    'mood.pumped': 'Voller Energie',
+    'mood.work': 'Arbeit',
+    'mood.family': 'Familie',
+    'mood.exercise': 'Sport',
+    'mood.social': 'Sozial',
+    'mood.aloneTime': 'Zeit für mich',
+    'mood.outdoors': 'Draußen',
+    'mood.creative': 'Kreativ',
+    'mood.learning': 'Lernen',
+    'mood.relaxing': 'Entspannung',
+    'mood.stressed': 'Gestresst',
+
+    // XP & Gamification
+    'xp.level': 'Level',
+    'xp.totalXp': 'Gesamt-XP',
+    'xp.dayStreak': 'Tage-Serie',
+    'xp.progressToLevel': 'Fortschritt zu Level',
+    'xp.thisWeek': 'Diese Woche XP',
+    'xp.tasks': 'Aufgaben',
+    'xp.focusMin': 'Fokus Min',
+    'xp.habits': 'Gewohnheiten',
+    'xp.badges': 'Abzeichen',
+
+    // What Now / AI Assistant
+    'whatNow.title': 'Was soll ich jetzt tun?',
+    'whatNow.description': 'KI-gestützte Entscheidungshilfe basierend auf deinen Aufgaben, Terminen und Energie',
+    'whatNow.analyzing': 'Analysiere deinen Kontext...',
+    'whatNow.takeBreak': 'Mach eine Pause!',
+    'whatNow.doThisNow': 'Mach das jetzt',
+    'whatNow.startNow': 'Jetzt starten',
+    'whatNow.orTryThese': 'Oder versuche diese:',
+    'whatNow.noSuggestions': 'Keine Vorschläge verfügbar',
+    'whatNow.newSuggestion': 'Neuen Vorschlag holen',
+
+    // Auto-Pilot
+    'autoPilot.title': 'Auto-Pilot',
+    'autoPilot.subtitle': 'KI-Vorschläge zur Optimierung deines Tages',
+    'autoPilot.noActions': 'Keine ausstehenden Aktionen',
+    'autoPilot.scanning': 'Scanne...',
+    'autoPilot.scanForActions': 'Nach Aktionen suchen',
+    'autoPilot.approveAll': 'Alle genehmigen',
+    'autoPilot.reschedule': 'Verschieben',
+    'autoPilot.breakdown': 'Aufteilen',
+    'autoPilot.shoppingList': 'Einkaufsliste',
+    'autoPilot.followUp': 'Nachfassen',
+    'autoPilot.takeBreak': 'Pause machen',
+
+    // Follow-ups
+    'followUp.title': 'Schnelle Nachfragen',
+    'followUp.taskCheckIn': 'Aufgaben-Check',
+    'followUp.eventFollowUp': 'Termin-Nachbereitung',
+    'followUp.goalProgress': 'Ziel-Fortschritt',
+    'followUp.habitReminder': 'Gewohnheits-Erinnerung',
+    'followUp.dayInsight': 'Tages-Einblick',
+    'followUp.done': 'Erledigt',
+    'followUp.later': 'Später',
+    'followUp.moreFollowUps': 'weitere Nachfragen',
+
+    // Proactive Reminders
+    'proactive.title': 'Proaktive Erinnerungen',
+    'proactive.noReminders': 'Keine Erinnerungen gerade',
+
+    // Day Prediction
+    'dayPrediction.title': 'Tagesvorhersage',
+    'dayPrediction.excellent': 'Ausgezeichnet',
+    'dayPrediction.good': 'Gut',
+    'dayPrediction.moderate': 'Moderat',
+    'dayPrediction.challenging': 'Herausfordernd',
+
+    // Weekly Coach
+    'weeklyCoach.title': 'Wochen-Coach',
+    'weeklyCoach.getAdvice': 'Rat holen',
+    'weeklyCoach.noAdvice': 'Noch keine Coaching-Tipps',
+
+    // Correlations
+    'correlations.title': 'Lebens-Korrelationen',
+    'correlations.analyze': 'Analysieren',
+    'correlations.noData': 'Nicht genug Daten für Korrelationen',
+
+    // Smart Scheduling
+    'smartScheduling.title': 'Intelligente Planung',
+    'smartScheduling.suggestions': 'Terminvorschläge',
+
+    // Health Hub
+    'health.title': 'Gesundheit',
+    'health.metrics': 'Messwerte',
+    'health.sleep': 'Schlaf',
+    'health.steps': 'Schritte',
+    'health.water': 'Wasser',
+    'health.weight': 'Gewicht',
+    'health.heartRate': 'Herzfrequenz',
+    'health.bloodPressure': 'Blutdruck',
+    'health.addMetric': 'Messwert hinzufügen',
+
+    // Notifications
+    'notifications.title': 'Benachrichtigungen',
+    'notifications.markAllRead': 'Alle als gelesen markieren',
+    'notifications.noNotifications': 'Keine Benachrichtigungen',
+    'notifications.listen': 'Anhören',
+
+    // Check-in
+    'checkin.morningTitle': 'Guten Morgen! ☀️',
+    'checkin.eveningTitle': 'Guten Abend! 🌙',
+    'checkin.howDidItGo': 'Wie war dein Tag?',
+    'checkin.whatsYourFocus': 'Was ist dein Fokus heute?',
+    'checkin.energyLevel': 'Energielevel',
+    'checkin.mood': 'Stimmung',
+    'checkin.skipForNow': 'Jetzt überspringen',
+    'checkin.submit': 'Absenden',
+
+    // Automation Rules
+    'automation.title': 'Automatisierungsregeln',
+    'automation.addRule': 'Regel hinzufügen',
+    'automation.noRules': 'Keine Automatisierungsregeln',
+    'automation.trigger': 'Auslöser',
+    'automation.action': 'Aktion',
+    'automation.condition': 'Bedingung',
+
+    // Quick Actions
+    'quickActions.addTask': 'Aufgabe',
+    'quickActions.addEvent': 'Termin',
+    'quickActions.askDori': 'Dori fragen',
+    'quickActions.brainDump': 'Gedanken',
+
+    // Voice
+    'voice.listening': 'Ich höre zu...',
+    'voice.processing': 'Verarbeite...',
+    'voice.tapToSpeak': 'Tippen zum Sprechen',
+
+    // Misc
+    'misc.viewAll': 'Alle anzeigen',
+    'misc.seeMore': 'Mehr anzeigen',
+    'misc.collapse': 'Einklappen',
+    'misc.expand': 'Ausklappen',
+    'misc.refresh': 'Aktualisieren',
+    'misc.retry': 'Erneut versuchen',
+    'misc.error': 'Fehler',
+    'misc.success': 'Erfolg',
+    'misc.warning': 'Warnung',
+    'misc.info': 'Info',
+    'misc.share': 'Teilen',
+    'misc.copy': 'Kopieren',
+    'misc.copied': 'Kopiert!',
+    'misc.download': 'Herunterladen',
+    'misc.upload': 'Hochladen',
+    'misc.export': 'Exportieren',
+    'misc.import': 'Importieren',
   },
 };
 
