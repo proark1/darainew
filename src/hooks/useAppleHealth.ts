@@ -170,21 +170,51 @@ export function useAppleHealth() {
     checkAuthorization();
   }, [isAvailable, pluginLoaded, user?.id]);
 
-  const fetchHealthMetrics = useCallback(async () => {
+  // Fetch the latest date that has health data
+  const fetchLatestHealthDate = useCallback(async (): Promise<string | null> => {
+    if (!user?.id) return null;
+    try {
+      const { data, error } = await supabase
+        .from('health_metrics')
+        .select('recorded_at')
+        .eq('user_id', user.id)
+        .order('recorded_at', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      if (data && data.length > 0) {
+        return data[0].recorded_at.split('T')[0];
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching latest health date:', error);
+      return null;
+    }
+  }, [user?.id]);
+
+  const fetchHealthMetrics = useCallback(async (dateRangeStart?: string, dateRangeEnd?: string) => {
     if (!user?.id) return;
     
     try {
+      // Default: 60-day window ending today
+      const endDate = dateRangeEnd || new Date().toISOString().split('T')[0];
+      const startDate = dateRangeStart || (() => {
+        const d = new Date(endDate);
+        d.setDate(d.getDate() - 60);
+        return d.toISOString().split('T')[0];
+      })();
+
       const { data, error } = await supabase
         .from('health_metrics')
         .select('*')
         .eq('user_id', user.id)
-        .order('recorded_at', { ascending: false })
-        .limit(1000);
+        .gte('recorded_at', `${startDate}T00:00:00`)
+        .lte('recorded_at', `${endDate}T23:59:59`)
+        .order('recorded_at', { ascending: false });
       
       if (error) throw error;
       setHealthMetrics(data || []);
       
-      console.log('[HealthMetrics] Fetched:', data?.length || 0, 'records');
+      console.log('[HealthMetrics] Fetched:', data?.length || 0, 'records for range', startDate, 'to', endDate);
       console.log('[HealthMetrics] Types:', [...new Set(data?.map(d => d.metric_type) || [])]);
       
       // Helper to sum values for a metric type on a given day
@@ -205,8 +235,6 @@ export function useAppleHealth() {
         m.recorded_at.startsWith(today)
       );
       
-      console.log('[HealthMetrics] Today metrics:', todayMetrics.length);
-      
       // Always set a summary (even if empty) to show zeros
       setTodaySummary({
         date: today,
@@ -217,7 +245,6 @@ export function useAppleHealth() {
         heartRateAvg: getLatestMetricForDay(todayMetrics, 'heart_rate') || 0,
         weight: getLatestMetricForDay(todayMetrics, 'weight'),
         waterIntake: sumMetricForDay(todayMetrics, 'water_intake'),
-        // Enhanced metrics
         restingHeartRate: getLatestMetricForDay(todayMetrics, 'resting_heart_rate'),
         hrv: getLatestMetricForDay(todayMetrics, 'hrv'),
         respiratoryRate: getLatestMetricForDay(todayMetrics, 'respiratory_rate'),
@@ -229,7 +256,6 @@ export function useAppleHealth() {
         bodyFat: getLatestMetricForDay(todayMetrics, 'body_fat'),
         mindfulnessMinutes: sumMetricForDay(todayMetrics, 'mindfulness_minutes'),
         height: getLatestMetricForDay(todayMetrics, 'height'),
-        // Enhanced sleep data
         sleepRemMinutes: getLatestMetricForDay(todayMetrics, 'sleep_rem_minutes'),
         sleepDeepMinutes: getLatestMetricForDay(todayMetrics, 'sleep_deep_minutes'),
         sleepCoreMinutes: getLatestMetricForDay(todayMetrics, 'sleep_core_minutes'),
@@ -238,11 +264,12 @@ export function useAppleHealth() {
         sleepEfficiency: getLatestMetricForDay(todayMetrics, 'sleep_efficiency'),
       });
       
-      // Calculate weekly data
+      // Calculate weekly data centered around endDate
       const weekly: DailyHealthSummary[] = [];
+      const endDateObj = new Date(endDate);
       
-      for (let i = 0; i < 7; i++) {
-        const date = new Date();
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(endDateObj);
         date.setDate(date.getDate() - i);
         const dateStr = date.toISOString().split('T')[0];
         const dayMetrics = (data || []).filter(m => m.recorded_at.startsWith(dateStr));
@@ -256,7 +283,6 @@ export function useAppleHealth() {
           heartRateAvg: getLatestMetricForDay(dayMetrics, 'heart_rate') || 0,
           weight: getLatestMetricForDay(dayMetrics, 'weight'),
           waterIntake: sumMetricForDay(dayMetrics, 'water_intake'),
-          // Enhanced metrics
           restingHeartRate: getLatestMetricForDay(dayMetrics, 'resting_heart_rate'),
           hrv: getLatestMetricForDay(dayMetrics, 'hrv'),
           respiratoryRate: getLatestMetricForDay(dayMetrics, 'respiratory_rate'),
@@ -268,7 +294,6 @@ export function useAppleHealth() {
           bodyFat: getLatestMetricForDay(dayMetrics, 'body_fat'),
           mindfulnessMinutes: sumMetricForDay(dayMetrics, 'mindfulness_minutes'),
           height: getLatestMetricForDay(dayMetrics, 'height'),
-          // Enhanced sleep data
           sleepRemMinutes: getLatestMetricForDay(dayMetrics, 'sleep_rem_minutes'),
           sleepDeepMinutes: getLatestMetricForDay(dayMetrics, 'sleep_deep_minutes'),
           sleepCoreMinutes: getLatestMetricForDay(dayMetrics, 'sleep_core_minutes'),
@@ -278,7 +303,7 @@ export function useAppleHealth() {
         });
       }
       
-      setWeeklyData(weekly.reverse());
+      setWeeklyData(weekly);
     } catch (error) {
       console.error('Error fetching health metrics:', error);
     }
@@ -1492,9 +1517,7 @@ export function useAppleHealth() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchHealthMetrics();
-  }, [fetchHealthMetrics]);
+  // Initial fetch removed - HealthHubPanel now controls date-range fetching
 
   // Function to open iOS Settings (app settings page, not Health permissions)
   const openAppSettings = useCallback(async () => {
@@ -1524,6 +1547,7 @@ export function useAppleHealth() {
     deleteMetric,
     openAppSettings,
     runHealthKitDiagnostics,
+    fetchLatestHealthDate,
     refetch: fetchHealthMetrics,
   };
 }
