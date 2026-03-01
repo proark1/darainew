@@ -277,6 +277,11 @@ export function useAIChat() {
     healthData,
     // Family context
     familyContext,
+    // Smart payload data (new)
+    statsSummary,
+    emailSummary,
+    notesSummary,
+    habitsSummary,
   }: {
     messages: Message[];
     tasks?: Task[];
@@ -295,6 +300,11 @@ export function useAIChat() {
     healthData?: HealthData;
     // Family context
     familyContext?: FamilyContextData;
+    // Smart payload data (new)
+    statsSummary?: string;
+    emailSummary?: { subject: string; from: string; priority: string; snippet: string }[];
+    notesSummary?: { title: string; snippet: string; tags: string[] }[];
+    habitsSummary?: { name: string; streak: number; isCompletedToday: boolean; frequency: string }[];
   }) => {
     setIsStreaming(true);
     setError(null);
@@ -373,6 +383,20 @@ export function useAIChat() {
 
       if (familyContext && familyContext.members.length > 0) {
         payload.familyContext = familyContext;
+      }
+
+      // Smart payload fields (new)
+      if (statsSummary) {
+        payload.statsSummary = statsSummary;
+      }
+      if (emailSummary && emailSummary.length > 0) {
+        payload.emailSummary = emailSummary;
+      }
+      if (notesSummary && notesSummary.length > 0) {
+        payload.notesSummary = notesSummary;
+      }
+      if (habitsSummary && habitsSummary.length > 0) {
+        payload.habitsSummary = habitsSummary;
       }
 
       const resp = await fetch(CHAT_URL, {

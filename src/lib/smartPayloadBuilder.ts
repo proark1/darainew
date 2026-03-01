@@ -1,0 +1,221 @@
+import { Contact } from '@/hooks/useContacts';
+import { UserProfile, Contract } from '@/hooks/useSmartContext';
+import { Email } from '@/hooks/useEmails';
+import { Note } from '@/hooks/useNotes';
+import { FamilyMember } from '@/hooks/useFamilyMembers';
+import { ShoppingList } from '@/hooks/useShoppingLists';
+
+// Keyword categories for smart context injection
+const CONTEXT_TRIGGERS = {
+  email: ['email', 'inbox', 'unread', 'mail', 'message from', 'reply to', 'e-mail', 'gmail'],
+  notes: ['note', 'notes', 'wrote', 'saved', 'remember', 'jot down', 'write down', 'notiz'],
+  habits: ['habit', 'streak', 'routine', 'consistency', 'daily routine', 'gewohnheit'],
+  family: ['family', 'kids', 'children', 'school', 'kindergarten', 'wife', 'husband', 'son', 'daughter', 'spouse', 'kinder', 'schule', 'familie'],
+  shopping: ['shopping', 'groceries', 'buy', 'shopping list', 'einkauf', 'einkaufen'],
+  contacts: ['who do i know', 'contact', 'investor', 'developer', 'designer', 'advisor', 'mentor', 'engineer', 'sales', 'marketing', 'lawyer', 'legal', 'accountant', 'finance', 'meeting with', 'call with'],
+  contracts: ['contract', 'subscription', 'cost', 'renewal', 'cancel', 'how much', 'spending', 'budget', 'expense', 'vertrag', 'kosten'],
+  cooking: ['recipe', 'meal', 'cook', 'dinner', 'lunch', 'breakfast', 'essen', 'kochen', 'rezept'],
+  location: [] as string[], // Filled dynamically from contact cities
+};
+
+const LOCATIONS = [
+  'dubai', 'uae', 'london', 'uk', 'new york', 'nyc', 'usa', 'berlin', 'germany',
+  'paris', 'france', 'singapore', 'hong kong', 'tokyo', 'japan', 'san francisco',
+  'los angeles', 'chicago', 'miami', 'boston', 'seattle', 'austin', 'denver',
+  'toronto', 'vancouver', 'sydney', 'melbourne', 'amsterdam', 'zurich', 'switzerland',
+  'portugal', 'lisbon', 'spain', 'madrid', 'barcelona', 'italy', 'rome', 'milan',
+  'austria', 'vienna', 'poland', 'warsaw', 'czech', 'prague', 'hungary', 'budapest',
+];
+
+interface HabitSummary {
+  name: string;
+  streak: number;
+  isCompletedToday: boolean;
+  frequency: string;
+}
+
+interface SmartPayload {
+  userProfile?: UserProfile | null;
+  statsSummary?: string;
+  relevantContacts?: { name: string; role?: string; company?: string; city?: string; country?: string; tags?: string[]; email?: string }[];
+  relevantContracts?: { name: string; provider?: string; category: string; costAmount?: number; costFrequency?: string; renewalDate?: string }[];
+  emailSummary?: { subject: string; from: string; priority: string; snippet: string }[];
+  notesSummary?: { title: string; snippet: string; tags: string[] }[];
+  habitsSummary?: HabitSummary[];
+  familyContext?: {
+    members: { name: string; relationship: string; age: number | null; school?: string; activities: string[] }[];
+    shoppingLists: { name: string; itemCount: number }[];
+  };
+}
+
+function matchesCategory(msg: string, keywords: string[]): boolean {
+  return keywords.some(kw => msg.includes(kw));
+}
+
+function matchesLocation(msg: string): string[] {
+  return LOCATIONS.filter(loc => msg.includes(loc));
+}
+
+function calculateAge(birthDate: string | null): number | null {
+  if (!birthDate) return null;
+  const birth = new Date(birthDate);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) age--;
+  return age;
+}
+
+export function buildSmartPayload({
+  message,
+  userProfile,
+  contacts,
+  contracts,
+  emails,
+  notes,
+  habits,
+  familyMembers,
+  shoppingLists,
+  stats,
+}: {
+  message: string;
+  userProfile?: UserProfile | null;
+  contacts?: Contact[];
+  contracts?: Contract[];
+  emails?: Email[];
+  notes?: Note[];
+  habits?: HabitSummary[];
+  familyMembers?: FamilyMember[];
+  shoppingLists?: ShoppingList[];
+  stats?: { totalContacts: number; totalContracts: number; pendingTasks: number; upcomingEvents: number; unreadEmails: number; activeHabits: number };
+}): SmartPayload {
+  const lowerMsg = message.toLowerCase();
+  const payload: SmartPayload = {};
+
+  // TIER 1: Always send (tiny)
+  if (userProfile) {
+    payload.userProfile = userProfile;
+  }
+
+  if (stats) {
+    const parts = [];
+    if (stats.totalContacts > 0) parts.push(`${stats.totalContacts} contacts`);
+    if (stats.totalContracts > 0) parts.push(`${stats.totalContracts} contracts`);
+    if (stats.pendingTasks > 0) parts.push(`${stats.pendingTasks} pending tasks`);
+    if (stats.upcomingEvents > 0) parts.push(`${stats.upcomingEvents} upcoming events`);
+    if (stats.unreadEmails > 0) parts.push(`${stats.unreadEmails} unread emails`);
+    if (stats.activeHabits > 0) parts.push(`${stats.activeHabits} active habits`);
+    payload.statsSummary = parts.join(', ');
+  }
+
+  // TIER 2: Smart-filtered (only when relevant)
+
+  // Also check for family member names dynamically
+  const familyNames = (familyMembers || []).map(m => m.name.toLowerCase());
+  const mentionsFamilyMember = familyNames.some(name => lowerMsg.includes(name));
+
+  // Contacts — triggered by location, role keywords, or direct name mention
+  const detectedLocations = matchesLocation(lowerMsg);
+  const wantsContacts = matchesCategory(lowerMsg, CONTEXT_TRIGGERS.contacts) || detectedLocations.length > 0;
+
+  if (wantsContacts && contacts && contacts.length > 0) {
+    const filtered = contacts.filter(c => {
+      // Match by location
+      if (detectedLocations.length > 0) {
+        const contactLoc = [c.city, c.country].filter(Boolean).join(' ').toLowerCase();
+        if (detectedLocations.some(loc => contactLoc.includes(loc))) return true;
+      }
+      // Match by name mention
+      if (c.name && lowerMsg.includes(c.name.toLowerCase())) return true;
+      // Match by role keywords
+      if (c.company && lowerMsg.includes(c.company.toLowerCase())) return true;
+      // Match by role/type keywords
+      const contactText = [c.role, c.company, ...c.tags].filter(Boolean).join(' ').toLowerCase();
+      const roleKeywords = [...CONTEXT_TRIGGERS.contacts];
+      if (roleKeywords.some(kw => contactText.includes(kw))) return true;
+      return false;
+    }).slice(0, 10);
+
+    if (filtered.length > 0) {
+      payload.relevantContacts = filtered.map(c => ({
+        name: c.name,
+        role: c.role || undefined,
+        company: c.company || undefined,
+        city: c.city || undefined,
+        country: c.country || undefined,
+        tags: c.tags.length > 0 ? c.tags : undefined,
+        email: c.email || undefined,
+      }));
+    }
+  }
+
+  // Contracts
+  if (matchesCategory(lowerMsg, CONTEXT_TRIGGERS.contracts) && contracts && contracts.length > 0) {
+    const filtered = contracts.filter(c => {
+      if (!c.isActive) return false;
+      // If asking about costs/renewal, include all active
+      if (lowerMsg.includes('cost') || lowerMsg.includes('spending') || lowerMsg.includes('how much') || lowerMsg.includes('renewal')) return true;
+      // Match by name/provider
+      if (c.name && lowerMsg.includes(c.name.toLowerCase())) return true;
+      if (c.provider && lowerMsg.includes(c.provider.toLowerCase())) return true;
+      return false;
+    }).slice(0, 10);
+
+    if (filtered.length > 0) {
+      payload.relevantContracts = filtered.map(c => ({
+        name: c.name,
+        provider: c.provider || undefined,
+        category: c.category,
+        costAmount: c.costAmount || undefined,
+        costFrequency: c.costFrequency || undefined,
+        renewalDate: c.renewalDate || undefined,
+      }));
+    }
+  }
+
+  // Emails
+  if (matchesCategory(lowerMsg, CONTEXT_TRIGGERS.email) && emails && emails.length > 0) {
+    const unread = emails.filter(e => !e.is_read && !e.user_archived).slice(0, 5);
+    if (unread.length > 0) {
+      payload.emailSummary = unread.map(e => ({
+        subject: e.subject || '(no subject)',
+        from: e.from_name || e.from_email,
+        priority: e.priority_score <= 2 ? 'high' : e.priority_score <= 4 ? 'medium' : 'low',
+        snippet: (e.snippet || '').slice(0, 80),
+      }));
+    }
+  }
+
+  // Notes
+  if (matchesCategory(lowerMsg, CONTEXT_TRIGGERS.notes) && notes && notes.length > 0) {
+    payload.notesSummary = notes.slice(0, 5).map(n => ({
+      title: n.title,
+      snippet: n.content.slice(0, 80),
+      tags: n.tags,
+    }));
+  }
+
+  // Habits
+  if (matchesCategory(lowerMsg, CONTEXT_TRIGGERS.habits) && habits && habits.length > 0) {
+    payload.habitsSummary = habits.slice(0, 10);
+  }
+
+  // Family context
+  if ((matchesCategory(lowerMsg, CONTEXT_TRIGGERS.family) || matchesCategory(lowerMsg, CONTEXT_TRIGGERS.shopping) || matchesCategory(lowerMsg, CONTEXT_TRIGGERS.cooking) || mentionsFamilyMember) && familyMembers && familyMembers.length > 0) {
+    payload.familyContext = {
+      members: familyMembers.map(m => ({
+        name: m.name,
+        relationship: m.relationship,
+        age: calculateAge(m.birth_date),
+        school: m.school_name || m.kindergarten_name || undefined,
+        activities: (m.activities || []).map(a => a.name),
+      })),
+      shoppingLists: (shoppingLists || []).filter(l => !l.is_completed && !l.is_template).map(l => ({
+        name: l.name,
+        itemCount: 0, // We don't fetch item counts to save queries
+      })),
+    };
+  }
+
+  return payload;
+}
