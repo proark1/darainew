@@ -1,144 +1,105 @@
 
 
-# Complete UI/UX Overhaul: Personal Assistant That Works For You
+# Desktop UI/UX Optimization
 
-## Core Problem
+## Current Issues
 
-The current interface has 15+ navigation items competing for attention, an odd bottom bar selection (Notes, Cooking, Islam as primary tabs), too many clicks to reach anything, and zero proactive intelligence surfacing. A personal assistant should anticipate, not wait.
+1. **No desktop header/toolbar** -- search and notifications are crammed into the sidebar header, invisible when collapsed
+2. **Wasted screen width** -- dashboard renders the same single-column mobile layout on a 1920px screen; no use of the extra horizontal space
+3. **No contextual awareness** -- no section title visible in the main content area; you have to look at the sidebar to know where you are
+4. **Single-column dashboard** -- all cards stack vertically even on wide screens, requiring unnecessary scrolling
+5. **Panel content has no top bar** -- every panel is a raw full-height rectangle with no header actions (search, fullscreen, view toggles)
+6. **QuickActionsBar not integrated** -- the contextual quick actions exist but aren't shown on desktop dashboard
+7. **Sidebar notifications/search disappear when collapsed** -- critical actions become inaccessible
 
-## Design Philosophy
+## Solution
 
-**"Zero-click intelligence, one-tap action."** The interface should proactively show what matters, and let you reach anything in 1-2 taps maximum.
+### 1. Add Desktop Content Header
 
----
+Create a persistent top bar inside the main content area (not the sidebar) that shows:
+- Current section title (dynamic based on active panel)
+- Global search button with Cmd+K shortcut hint
+- Notification center
+- Dori AI quick-access button
 
-## 1. Redesign Bottom Navigation (Mobile)
+This mirrors the mobile `ContextualHeader` but adapted for desktop, ensuring search and notifications are always visible regardless of sidebar state.
 
-Current bottom bar: Notes | Calendar | Cooking | **Dori** | Health | Islam | Social (7 items -- too many, wrong priorities)
+### 2. Two-Column Dashboard Layout on Desktop
 
-New bottom bar (5 items, the universal mobile standard):
-
-```text
-[Home]  [Calendar]  [*Dori*]  [Tasks]  [More]
-```
-
-- **Home** = Dashboard (your proactive daily view)
-- **Calendar** = Calendar hub (includes events + schedule)
-- **Dori** (center, elevated) = AI assistant chat + voice
-- **Tasks** = Task list / Kanban (your most-used action area)
-- **More** = Opens a clean grid sheet with all other sections
-
-The "More" button opens a bottom sheet (using Vaul drawer) showing a 3-column icon grid of all secondary panels: Contacts, Contracts, Notes, Habits, Health, Cooking, Islam, Properties, Startups, News, Social, Settings. Each with icon + label. This means everything is 2 taps away max.
-
-## 2. Redesign Header (Mobile)
-
-Current: Hamburger menu | DarAI logo | Notification icons
-
-New contextual header:
+Refactor `DashboardPanel` to use a responsive grid on larger screens:
 
 ```text
-[Back/Menu]  "Dashboard" (context title)  [Search] [Notifications]
+Desktop (md+):
++----------------------------+---------------------+
+| DashboardHero (full width)                        |
++----------------------------+---------------------+
+| FocusCard                  | StatPills            |
+|                            | SmartInsightCard     |
++----------------------------+---------------------+
+| TodayTimeline              | QuickActionsBar      |
++----------------------------+---------------------+
 ```
 
-- Shows current section name dynamically
-- Search icon opens Global Search (Cmd+K equivalent for mobile)
-- When in a sub-section, shows back arrow instead of menu
-- Profile avatar tap opens settings directly
+- Use CSS grid: `grid-cols-1 md:grid-cols-3` with span rules
+- Hero stays full-width
+- FocusCard takes 2 columns, stat/insight take 1 column
+- Timeline takes 2 columns, quick actions take 1 column
 
-## 3. Redesign Desktop Sidebar
+### 3. Integrate QuickActionsBar into Dashboard
 
-Current: 15+ flat items with no grouping hierarchy
+Import and render the existing `QuickActionsBar` component in the dashboard layout on desktop, giving proactive contextual actions prominence.
 
-New grouped sidebar with collapsible sections:
+### 4. Move Search/Notifications out of Sidebar
 
-```text
-[DarAI Logo]              [Search] [Notifications]
+- Remove `DoriNotificationIcon` and `notificationButton` from the sidebar header
+- Pass them into the new desktop content header instead
+- Keep the sidebar purely for navigation
 
-[Today Focus]  (gradient CTA button)
+### 5. Desktop Content Header Component
 
---- My Day ---
-  Dashboard
-  Tasks  
-  Calendar
+Reuse the existing `ContextualHeader` component (already created for mobile) in the desktop layout, or create a `DesktopContentHeader` that includes:
+- Section title derived from `activePanel`
+- Search icon triggering `onOpenGlobalSearch`
+- Notification center (moved from sidebar)
+- Dori quick-access bubble
 
---- Assistant ---
-  Dori AI
-  
---- Life ---
-  Health
-  Habits
-  Cooking
-  Islam
+### 6. Polish Sidebar Collapsed State
 
---- Business ---
-  Contacts
-  Contracts
-  Properties
-  Startups
-  News
+When sidebar is collapsed, keep the DarAI logo icon visible (currently hidden). Show icon-only tooltips for all items (already working). Remove the search/notification buttons from sidebar entirely since they'll live in the content header.
 
---- Tools ---
-  Notes
-  Social
-  
-[Settings]
-[Sign Out]
-```
-
-- Groups are collapsible with chevrons
-- Active item has clear highlight
-- Collapsed state shows only icons with tooltips
-- Badge counts on Tasks (pending) and Social (unread)
-
-## 4. "More" Bottom Sheet for Mobile
-
-Create a `MoreSheet` component using Vaul drawer:
-- Opens from bottom with spring animation
-- 3-column grid of icon+label buttons
-- Grouped: Life | Business | Tools
-- Each button navigates and closes the sheet
-- Recent/pinned items shown at top
-
-## 5. Proactive Dashboard Enhancements
-
-Add to the existing DashboardHero:
-- **Quick Actions Row**: Contextual action pills below the greeting (e.g., "Start focus session", "Call Ahmed back", "Review contract expiring tomorrow")
-- Uses the existing `QuickActionsBar` component but integrated into the hero
-- Weather + next prayer time as compact info chips in the hero
-
-## 6. Global Search Enhancement
-
-- Add search icon to mobile header (currently only in desktop sidebar)
-- Make it accessible via swipe-down gesture on dashboard
-- Show recent searches and suggested queries
-
-## 7. Remove Redundant Elements
-
-- Remove `QuickActionsFAB` on mobile (conflicts with bottom bar + Dori button)
-- Remove hamburger sidebar sheet on mobile (replaced by "More" bottom sheet)
-- Remove redundant DarAI logo from header (save space for context title)
-
----
-
-## Technical Implementation
-
-### Files to Create
-- `src/components/layout/MoreSheet.tsx` -- Bottom sheet with all secondary navigation items in a grid
-- `src/components/layout/ContextualHeader.tsx` -- Smart header that shows section name + search + notifications
+## Technical Details
 
 ### Files to Modify
-- `src/components/layout/MobileLayout.tsx` -- Major refactor: new 5-tab bottom nav, new header, integrate MoreSheet, remove hamburger sidebar
-- `src/components/layout/Sidebar.tsx` -- Reorganize into collapsible grouped sections with badges
-- `src/components/dashboard/DashboardPanel.tsx` -- Add QuickActionsBar to dashboard flow
-- `src/components/dashboard/DashboardHero.tsx` -- Add weather/prayer time chips and integrate quick actions
+
+**`src/components/layout/StandardMode.tsx`**
+- Add a desktop content header above the main panel area
+- Import `ContextualHeader` or create inline header
+- Move notification center from sidebar props to the content header
+- Pass `onOpenGlobalSearch` to the header
+
+**`src/components/layout/Sidebar.tsx`**
+- Remove `DoriNotificationIcon` and `notificationButton` from the sidebar header
+- Keep the collapse toggle button
+- Show a small DarAI icon when collapsed (currently shows nothing)
+- Remove `onOpenGlobalSearch` button (moved to content header)
+- Remove `BrainDumpFAB` from sidebar (move to content header or FAB overlay)
+
+**`src/components/dashboard/DashboardPanel.tsx`**
+- Change the layout from single-column `space-y` to a responsive CSS grid
+- Add `QuickActionsBar` as a grid item
+- Use `md:grid-cols-3` with appropriate span classes
+- Hero: `col-span-full`
+- FocusCard: `md:col-span-2`
+- StatPills: `md:col-span-1`
+- TodayTimeline: `md:col-span-2`
+- SmartInsightCard + QuickActions: `md:col-span-1`
+
+**`src/components/layout/ContextualHeader.tsx`**
+- Add optional `onOpenSearch` prop handler (already exists but not wired on desktop)
+- Ensure it works well at desktop widths (wider padding, larger title)
 
 ### Files Unchanged
-- All panel components (ContactsPanel, NotesPanel, etc.) remain untouched
-- Dashboard sub-components (FocusCard, StatPills, etc.) remain untouched
-
-### Key Patterns Used
-- Vaul drawer for the "More" sheet (already installed)
-- Framer Motion for sheet and tab transitions (already installed)
-- Haptic feedback on all navigation changes (existing useHaptics hook)
-- Existing GlassCard system for visual consistency
+- All panel components remain untouched
+- Mobile layout remains untouched
+- Dashboard sub-components (FocusCard, StatPills, etc.) stay the same
 
