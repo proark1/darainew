@@ -1,106 +1,107 @@
 
-# DarAI Assistant -- Intelligent Context Injection (Token-Efficient)
 
-## Problem
+# Task Views -- Multi-View System with UI/UX Polish
 
-The assistant currently receives tasks, events, and health data every message -- but has zero access to user profile, contacts, contracts, family, emails, notes, or habits. Sending all of this every time would be wasteful. We need a smart pre-filter that only injects what's relevant to the current message.
+## Current State
 
-## Solution: Two-Tier Context Architecture
+- **Desktop** (`StandardMode`): Has a list/kanban toggle -- good, but limited to two views
+- **Mobile** (`CalendarHubPanel`): Only shows a compact list view -- no view options at all
+- **Kanban Board**: Exists but is basic -- no filtering, no priority grouping, no delete action
+- **List View**: Recently upgraded with stats bar, undo delete, inline edit, swipe gestures -- solid foundation
+- **Missing views**: No priority-grouped view, no "by due date" timeline view
 
-### Tier 1: Always Send (Tiny, ~200 tokens)
-These are small and always useful:
-- **User profile** (name, role, businesses, location, goals) -- ~80 tokens
-- **Stats summary** (counts only: "62 contacts, 14 contracts, 5 unread emails, 3 active habits") -- ~30 tokens
-- Already-sent data: tasks, events, health (unchanged)
+## What Changes
 
-### Tier 2: Smart-Filtered (Only When Relevant)
-Use keyword detection on the user's message to decide what extra context to inject:
+### 1. Add View Switcher to Mobile Task Tab
 
-| Trigger Keywords | Data Injected |
-|---|---|
-| contact names, "who do I know", city names, "investor", "developer" | Filtered contacts (max 10) via existing `useSmartContext` |
-| "contract", "subscription", "cost", "renewal", "how much" | Filtered contracts (max 10) |
-| "email", "inbox", "unread", "mail", sender names | Top 5 unread emails (subject + sender + snippet only) |
-| "note", "notes", "what did I write", "remember" | Top 5 recent notes (title + first 80 chars) |
-| "habit", "streak", "routine", "consistency" | Active habits with streaks (max 10) |
-| "family", "kids", child names, "school", "shopping list" | Full family context (members, events, lists) |
-| "recipe", "meal", "cook", "dinner" | This week's meal plan |
+The mobile CalendarHubPanel currently hardcodes `compactMode={true}` for TaskList. Add a small view toggle inside the Tasks tab so mobile users can switch between List, Board, and Priority views.
 
-This means a simple "add a task" message sends ~200 extra tokens. A "who do I know in Dubai?" message sends ~400 extra tokens with the 10 relevant contacts. Only "tell me everything" type questions get the full payload.
+### 2. New "Priority Board" View
 
-## How It Works
+A grouped view that organizes tasks into three horizontal sections: High, Medium, Low. Each section is collapsible. This gives an instant "what matters most" overview without the overhead of a full Kanban board.
 
-### New utility: `buildSmartPayload` in Index.tsx
+- Three color-coded sections with task counts
+- Collapsible sections (High expanded by default, Low collapsed)
+- Same swipeable task items as list view for consistency
+- Drag-to-reprioritize: drag a task from Low to High section
 
-A single function that:
-1. Takes the user's message + all available data sources
-2. Runs keyword matching (reuses `INTENT_KEYWORDS` and `LOCATIONS` from `useSmartContext`)
-3. Returns only the relevant slices as a compact context object
-4. Passes it to `streamChat`
+### 3. Upgrade Kanban Board
 
-### Keyword Detection Categories (new)
+The existing Kanban is bare -- improve it:
+- Add priority filter chips (All / High / Medium / Low) at the top
+- Add a delete action (currently missing -- you can only complete/drag)
+- Show overdue badges on cards
+- Add task count badges on column headers (already exists, just verify)
+- Improve empty column states with actionable prompts
 
-Extend the existing `useSmartContext` keyword system with:
-- **email**: "email", "inbox", "unread", "mail", "message from", "reply to"
-- **notes**: "note", "notes", "wrote", "saved", "remember"
-- **habits**: "habit", "streak", "routine", "consistency", "daily"
-- **family**: "family", "kids", "children", "school", "kindergarten", "wife", "husband", child names (dynamic)
-- **shopping**: "shopping", "groceries", "buy", "shopping list"
+### 4. "Timeline" View (Grouped by Due Date)
+
+A chronological grouping: Overdue, Today, Tomorrow, This Week, Later, No Date. Each section shows task cards with priority indicators. This is the best "what's coming up" view.
+
+- Sections auto-hide when empty
+- Overdue section has a red accent
+- "Today" section has primary accent
+- Tasks within each section sorted by priority (high first)
+
+### 5. View Switcher UI Component
+
+A clean, reusable view toggle that works on both desktop and mobile:
+- Icons: List (lines), Board (grid), Priority (layers), Timeline (clock)
+- Tooltip labels on desktop, icon-only on mobile
+- Remembers last-used view per device
+
+### 6. TaskList Polish
+
+Small improvements to the existing list:
+- Add a sort dropdown: "Sort by: Due Date / Priority / Created / Name"
+- Show task count in the header next to "Tasks" label
+- Add priority color dot to the left of each task (in addition to the text badge) for faster scanning
+
+---
 
 ## Technical Plan
 
-### Files to Modify
+### New File: `src/components/tasks/PriorityBoardView.tsx`
+- Three collapsible sections: High (red accent), Medium (amber), Low (gray)
+- Each renders SwipeableTaskItem wrapping a compact task row
+- Supports onToggleComplete, onDeleteTask, onUpdateTask
+- Drag between sections changes priority via onUpdateTask
 
-**`src/pages/Index.tsx`**
-- Import `useUserProfile`, `useFamilyMembers`, `useShoppingLists`, `useHabits`, `useEmails`
-- In `handleSendMessage`, call a new `buildSmartPayload(userText, ...)` function that:
-  - Always includes: userProfile, stats counts
-  - Keyword-scans `userText` to decide which optional data to include
-  - Filters contacts/contracts via `useSmartContext` logic (already exists)
-  - Conditionally includes: emails (top 5 unread), notes (top 5 recent titles), habits (active with streaks), family context
-- Pass the resulting payload fields to `streamChat`
+### New File: `src/components/tasks/TimelineView.tsx`
+- Groups tasks by temporal bucket: Overdue, Today, Tomorrow, This Week, Later, No Date
+- Each bucket has a header with icon, label, and count
+- Tasks sorted by priority within each group
+- Same task row component as list view
 
-**`src/hooks/useAIChat.ts`**
-- Extend `streamChat` params to accept: `emailSummary`, `notesSummary`, `habitsSummary` (all optional lightweight arrays)
-- Pass them through to the edge function
+### New File: `src/components/tasks/TaskViewSwitcher.tsx`
+- Reusable toggle component accepting `activeView` and `onViewChange`
+- Four view options: list, kanban, priority, timeline
+- Compact icon buttons with tooltips
+- Used in both StandardMode and CalendarHubPanel
 
-**`supabase/functions/chat/index.ts`**
-- Extend `ChatRequest` interface with `emailSummary`, `notesSummary`, `habitsSummary`
-- Add context sections when these are present:
-  - Emails: "You have X unread emails. Top priorities: [subject from sender]..."
-  - Notes: "Recent notes: [title snippets]..."
-  - Habits: "Active habits: [name - X day streak]..."
-- Add instructions in system prompt so the AI knows it can reference these
+### Modified: `src/components/calendar/CalendarHubPanel.tsx`
+- Import TaskViewSwitcher, PriorityBoardView, TimelineView, KanbanBoard
+- Add `taskView` state: 'list' | 'kanban' | 'priority' | 'timeline'
+- Render TaskViewSwitcher inside the Tasks tab
+- Conditionally render the selected view component
+- Pass all necessary handlers (onUpdateTask is key for Kanban/Priority drag)
 
-### Smart Payload Builder Logic (pseudocode)
+### Modified: `src/components/layout/StandardMode.tsx`
+- Replace the manual list/kanban toggle buttons with TaskViewSwitcher
+- Add PriorityBoardView and TimelineView as additional view options
+- Extend `taskViewMode` type to include 'priority' | 'timeline'
 
-```text
-function buildSmartPayload(message, allData):
-  payload = { userProfile, stats: { counts only } }
-  
-  lowerMsg = message.toLowerCase()
-  
-  // Always-on: profile + stats (tiny)
-  // Conditional:
-  if matches(email_keywords):   payload.emails = top5Unread
-  if matches(note_keywords):    payload.notes = top5Recent  
-  if matches(habit_keywords):   payload.habits = activeWithStreaks
-  if matches(family_keywords):  payload.family = fullFamilyContext
-  if matches(contact_keywords): payload.contacts = filteredContacts
-  if matches(contract_keywords): payload.contracts = filteredContracts
-  
-  return payload
-```
+### Modified: `src/components/tasks/KanbanBoard.tsx`
+- Add priority filter chips row below header
+- Add delete button on task cards (hover-visible, like list view)
+- Add overdue badge on cards with past due dates
+- Improve empty column messaging
 
-### Token Budget Estimates
-
-| Scenario | Extra Tokens |
-|---|---|
-| Simple task command ("add a task") | ~200 (profile + stats only) |
-| Contact query ("who in Dubai?") | ~400 (+ 10 contacts) |
-| Email question ("any important emails?") | ~350 (+ 5 email summaries) |
-| Family question ("what's the kids' schedule?") | ~500 (+ family context) |
-| Everything question ("what's going on?") | ~1200 (all categories) |
+### Modified: `src/components/tasks/TaskList.tsx`
+- Add sort dropdown (Due Date / Priority / Created / Name) next to the time filter
+- Show total task count in header
+- Add small priority color dot before task title for faster visual scanning
 
 ### No database changes needed
-All data sources already exist. This is purely about wiring existing hooks with smart filtering into the chat pipeline.
+All improvements are purely UI components and local state.
+
