@@ -1,8 +1,8 @@
 import { cn } from '@/lib/utils';
-import { Shield, ShieldAlert, ChevronRight, Archive, Star, Check, ArrowUp, ArrowRight, ArrowDown } from 'lucide-react';
+import { Shield, ShieldAlert, ChevronRight, Archive, Star, Check, Clock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { motion, useMotionValue, useTransform, PanInfo } from 'framer-motion';
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { Email, EmailThread } from '@/hooks/useEmails';
 
 interface EmailCardProps {
@@ -10,6 +10,7 @@ interface EmailCardProps {
   onSelect: (email: Email) => void;
   onArchive?: (id: string) => void;
   onToggleImportant?: (id: string) => void;
+  onSnooze?: (id: string) => void;
   selectMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: (id: string) => void;
@@ -32,6 +33,20 @@ const sentimentDot: Record<string, string> = {
   neutral: 'bg-muted-foreground/30',
 };
 
+const categoryLabels: Record<string, string> = {
+  action_required: 'Action Required',
+  fyi: 'FYI',
+  newsletter: 'Newsletter',
+  promotion: 'Promotion',
+};
+
+function getPriorityBadge(score: number) {
+  if (score <= 2) return { label: 'High', className: 'bg-destructive/10 text-destructive' };
+  if (score === 3) return { label: 'Medium', className: 'bg-amber-500/10 text-amber-600' };
+  if (score >= 5) return { label: 'Low', className: 'bg-muted text-muted-foreground' };
+  return null;
+}
+
 function getInitials(name: string | null, email: string): string {
   if (name) {
     const parts = name.split(' ').filter(Boolean);
@@ -42,7 +57,7 @@ function getInitials(name: string | null, email: string): string {
 
 const SWIPE_THRESHOLD = 80;
 
-export function EmailCard({ thread, onSelect, onArchive, onToggleImportant, selectMode, isSelected, onToggleSelect }: EmailCardProps) {
+export function EmailCard({ thread, onSelect, onArchive, onToggleImportant, onSnooze, selectMode, isSelected, onToggleSelect }: EmailCardProps) {
   const email = thread.latestEmail;
   const isPriority = email.priority_score <= 2 || email.is_important;
   const isThreat = email.is_spam || email.is_phishing;
@@ -50,10 +65,14 @@ export function EmailCard({ thread, onSelect, onArchive, onToggleImportant, sele
   const initials = getInitials(email.from_name, email.from_email);
   const swiping = useRef(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showActions, setShowActions] = useState(false);
 
   const x = useMotionValue(0);
   const archiveBg = useTransform(x, [0, SWIPE_THRESHOLD], [0, 1]);
   const importantBg = useTransform(x, [-SWIPE_THRESHOLD, 0], [1, 0]);
+
+  const priorityBadge = getPriorityBadge(email.priority_score);
+  const categoryLabel = categoryLabels[email.category];
 
   const handleDragEnd = useCallback((_: any, info: PanInfo) => {
     if (selectMode) return;
@@ -74,16 +93,20 @@ export function EmailCard({ thread, onSelect, onArchive, onToggleImportant, sele
   const handlePointerDown = useCallback(() => {
     if (selectMode) return;
     longPressTimer.current = setTimeout(() => {
-      onToggleSelect?.(email.id);
+      setShowActions(true);
     }, 500);
-  }, [email.id, onToggleSelect, selectMode]);
+  }, [selectMode]);
 
   const handlePointerUp = useCallback(() => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
   }, []);
 
   return (
-    <div className="relative overflow-hidden rounded-xl">
+    <div
+      className="relative overflow-hidden rounded-xl group"
+      onMouseEnter={() => !selectMode && setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
+    >
       {!selectMode && (
         <>
           <motion.div className="absolute inset-0 bg-emerald-500/20 flex items-center pl-4 rounded-xl" style={{ opacity: archiveBg }}>
@@ -106,12 +129,12 @@ export function EmailCard({ thread, onSelect, onArchive, onToggleImportant, sele
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
         className={cn(
-          "relative flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-colors",
+          "relative flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-all duration-200",
           "hover:bg-muted/50 active:scale-[0.99]",
           "bg-background",
-          !email.is_read && "bg-primary/5 border border-primary/10",
-          email.is_read && "opacity-70",
-          isThreat && "bg-destructive/5 border border-destructive/20",
+          !email.is_read && "border-l-[3px] border-l-primary bg-primary/5 border border-primary/10",
+          email.is_read && "opacity-70 border-l-[3px] border-l-transparent",
+          isThreat && "bg-destructive/5 border border-destructive/20 border-l-destructive",
           isSelected && "bg-primary/10 border border-primary/30"
         )}
       >
@@ -155,10 +178,22 @@ export function EmailCard({ thread, onSelect, onArchive, onToggleImportant, sele
             {email.subject || '(No subject)'}
           </p>
           <p className="text-xs text-muted-foreground truncate mt-0.5">{email.ai_summary || email.snippet}</p>
+
+          {/* Tags row: AI action + priority badge + category chip + threat */}
           <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
             {email.ai_suggested_action && (
               <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", actionColors[email.ai_suggested_action] || "bg-muted text-muted-foreground")}>
                 {email.ai_suggested_action}
+              </span>
+            )}
+            {priorityBadge && (
+              <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-semibold", priorityBadge.className)}>
+                {priorityBadge.label}
+              </span>
+            )}
+            {categoryLabel && !isThreat && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/50 text-accent-foreground font-medium">
+                {categoryLabel}
               </span>
             )}
             {isThreat && (
@@ -172,13 +207,27 @@ export function EmailCard({ thread, onSelect, onArchive, onToggleImportant, sele
           </div>
         </div>
 
-        {/* Priority dot */}
-        <div className="flex flex-col items-center gap-1 mt-2 shrink-0">
-          {!selectMode && email.priority_score <= 2 && <ArrowUp className="w-3 h-3 text-destructive" />}
-          {!selectMode && email.priority_score === 3 && <ArrowRight className="w-3 h-3 text-amber-500" />}
-          {!selectMode && email.priority_score >= 5 && <ArrowDown className="w-3 h-3 text-muted-foreground/50" />}
-          {!selectMode && ![1,2,3,5].includes(email.priority_score) && <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-        </div>
+        {/* Quick actions on hover/long-press */}
+        {!selectMode && showActions ? (
+          <div className="flex flex-col items-center gap-1 mt-1 shrink-0">
+            <button
+              onClick={(e) => { e.stopPropagation(); onArchive?.(email.id); }}
+              className="p-1 rounded-md hover:bg-muted transition-colors"
+              title="Archive"
+            >
+              <Archive className="w-3.5 h-3.5 text-muted-foreground" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggleImportant?.(email.id); }}
+              className="p-1 rounded-md hover:bg-muted transition-colors"
+              title="Star"
+            >
+              <Star className={cn("w-3.5 h-3.5", email.is_important ? "text-amber-500 fill-amber-500" : "text-muted-foreground")} />
+            </button>
+          </div>
+        ) : (
+          !selectMode && <ChevronRight className="w-4 h-4 text-muted-foreground mt-2 shrink-0" />
+        )}
       </motion.div>
     </div>
   );
