@@ -1,49 +1,51 @@
 
+# Fix Health Hub Showing "No Health Data"
 
-# Reorganize Mobile Bottom Navigation + Burger Menu
+## Problem
 
-## Summary
+Your health data IS saved in the cloud -- 3,008 records covering steps, heart rate, sleep, HRV, blood oxygen, and more (Dec 2024 through Jan 29, 2026). The Health Hub appears empty because of two issues:
 
-Restructure the mobile bottom tab bar to: **Dashboard | Calendar | Dori AI | Email | Health**, and move the "More" menu to the top header as a hamburger/burger menu icon.
+1. **Query limit too low**: The database query fetches only 1,000 records max. With ~10 metrics per day, that only covers ~100 days of history -- and misses older data entirely.
+2. **Default date = today**: The UI always opens on "today" (March 1), but the latest synced data is from January 29. So the view is empty.
 
-## Changes
+## Solution
 
-### 1. Bottom Tab Bar (`src/components/layout/MobileLayout.tsx`)
+### 1. Smarter data fetching (`src/hooks/useAppleHealth.ts`)
 
-Update `primaryTabs` array from:
-```text
-[Dashboard] [Calendar] [Dori] [Tasks] [More]
+Instead of loading all records at once (which doesn't scale), fetch health metrics **by date range** around the selected date. Load a rolling window (e.g., 60 days from selected date backwards) so navigation is fast and data is always available.
+
+Also add a quick query to find the **latest available date** so the UI can default to it when today has no data.
+
+### 2. Default to latest data date (`src/components/health/HealthHubPanel.tsx`)
+
+When the panel loads:
+- Check if today has any data
+- If not, automatically set the selected date to the most recent date that has health data (January 29 in your case)
+- Show a subtle note like "Showing latest available data from Jan 29"
+
+### 3. Remove the hard 1,000 limit (`src/hooks/useAppleHealth.ts`)
+
+Replace the single `.limit(1000)` query with a date-bounded query:
 ```
-to:
-```text
-[Dashboard] [Calendar] [Dori] [Email] [Health]
+.gte('recorded_at', startOfRange)
+.lte('recorded_at', endOfRange)
 ```
-
-- Replace `tasks` (CheckSquare) with `email` (Mail icon)
-- Replace `more` (MoreHorizontal) with `health` (Heart icon)
-- Remove the special `tab === 'more'` logic that opens the drawer from the bottom bar
-- Add "Tasks" to the MoreSheet sections so it remains accessible
-
-### 2. Burger Menu in Header (`src/components/layout/ContextualHeader.tsx`)
-
-- Add a hamburger menu icon (Menu icon from lucide) on the left side of the header, before the title
-- Clicking it opens the existing `MoreSheet` drawer (same content, just triggered from the header now)
-- Pass `onOpenMenu` callback prop from MobileLayout into ContextualHeader
-
-### 3. Update MoreSheet Sections (`src/components/layout/MoreSheet.tsx`)
-
-- Add "Tasks" as an item in the MoreSheet (under a "Productivity" or "Tools" section) since it's no longer in the bottom bar
-- Use CheckSquare icon with `nav.tasks` label key
-
-### 4. Wire It Up (`src/components/layout/MobileLayout.tsx`)
-
-- Pass `onOpenMenu={() => setMoreOpen(true)}` to ContextualHeader
-- Remove the `if (tab === 'more')` branch from `handleTabChange` since "more" is no longer a bottom tab
-- Email and Health tabs already have their panels rendered in the main content area, so no new panel wiring is needed
+This ensures all data for the visible date range loads correctly regardless of total record count.
 
 ## Files to Modify
 
-1. **`src/components/layout/MobileLayout.tsx`** -- Update tab array, remove more-tab logic, pass menu handler to header
-2. **`src/components/layout/ContextualHeader.tsx`** -- Add hamburger menu button on left side
-3. **`src/components/layout/MoreSheet.tsx`** -- Add Tasks item to the sections grid
+1. **`src/hooks/useAppleHealth.ts`**
+   - Change `fetchHealthMetrics()` to accept a date range parameter
+   - Add `fetchLatestDate()` function that queries `SELECT MAX(recorded_at) FROM health_metrics`
+   - Remove the `.limit(1000)` and use date-range filtering instead
 
+2. **`src/components/health/HealthHubPanel.tsx`**
+   - On mount, call `fetchLatestDate()` and set `selectedDate` to that date if today has no data
+   - Re-fetch metrics when `selectedDate` changes (load ~60 day window around it)
+   - Add a small indicator when viewing historical data ("Latest data: Jan 29")
+
+## Result
+
+- Health Hub opens and immediately shows your latest health data (Jan 29)
+- Date navigation works across all historical data without hitting query limits
+- You can still navigate to today (it will just show empty if no sync has happened)
