@@ -1,119 +1,141 @@
 
+# Email Hub -- Next-Level Upgrades
 
-# World-Class Email Hub -- Smart, Personalized, Secure
+## Overview
 
-## What Changes
+Here are the most impactful improvements we can make across personalization, automation, and UI/UX, building on the solid AI-powered foundation already in place.
 
-Your email panel gets a complete redesign with AI-powered intelligence that goes far beyond basic sync. Every email is analyzed for safety, relevance, and required action -- personalized to you, your contacts, and your work context.
+---
 
-## Key Upgrades
+## 1. Sender Rules & Auto-Learning
 
-### 1. AI-Powered Email Analysis (Backend)
-Upgrade the `gmail-sync` edge function with a richer AI prompt that analyzes each email for:
-- **Spam detection** -- flags suspicious patterns, unknown bulk senders
-- **Phishing detection** -- checks for spoofed domains, urgency manipulation, suspicious links
-- **Content summary** -- one-line AI summary of what the email actually needs from you
-- **Sentiment** -- is this positive, neutral, urgent, or concerning?
-- **Suggested action** -- "Reply needed", "Just FYI", "Can ignore", "Review attachment"
+**What it does:** Let you teach the email system your preferences. Swipe to archive a newsletter once, and it auto-archives future emails from that sender. Set per-sender rules like "always mark as FYI" or "always priority."
 
-The AI receives your contact list context and profile info (business roles, company names) so it knows what's relevant to you personally.
+**How it works:**
+- New `email_sender_rules` table storing sender patterns (exact email or `*@domain.com`), default category, default priority, and auto-archive flag
+- When you archive or report spam, the system offers "Always do this for emails from [sender]?"
+- Gmail sync checks sender rules before AI analysis, saving AI calls for truly unknown senders
+- A simple Sender Rules management screen in Settings
 
-### 2. New Database Fields
-Add columns to `user_emails` for the new AI analysis:
-- `ai_summary` (text) -- one-line AI summary
-- `ai_suggested_action` (text) -- what you should do
-- `is_spam` (boolean) -- AI spam flag
-- `is_phishing` (boolean) -- AI phishing flag  
-- `threat_reason` (text) -- why it was flagged
-- `sentiment` (text) -- positive/neutral/urgent/warning
+---
 
-### 3. Redesigned Email Panel (UI)
-A clean, minimalist interface with smart grouping:
+## 2. Swipe Gestures on Email Cards
 
-**Smart Sections (not just filter tabs):**
-- **Needs Your Attention** -- action required emails from known contacts, sorted by priority
-- **FYI** -- informational emails you should see but don't need to act on
-- **Newsletters & Promotions** -- auto-grouped, collapsed by default
-- **Flagged** -- spam/phishing warnings with clear visual indicators
+**What it does:** Quick actions without opening the email -- swipe right to archive, swipe left to mark important. Feels native and fast.
 
-**Each Email Card shows:**
-- Sender avatar (initials or contact photo)
-- AI-generated one-line summary instead of raw snippet
-- Priority indicator based on contact tier
-- Suggested action chip ("Reply", "Review", "FYI")
-- Threat badge if spam/phishing detected
+**How it works:**
+- Add touch gesture handling to `EmailCard` using `framer-motion` (already installed)
+- Swipe right: archive with undo toast
+- Swipe left: toggle important
+- Smooth spring animations with color-coded reveal backgrounds (green for archive, gold for important)
 
-**Email Detail Sheet upgrades:**
-- AI summary section at top with suggested action
-- Phishing/spam warning banner if flagged (red alert with reason)
-- Contact card link if sender is a known contact
-- "Open in Gmail" button remains for full access
-- Quick actions: Archive, Mark Important, Report Spam
+---
 
-### 4. Personalization Context
-The AI prompt includes:
-- Your name and roles (Medieval Empires, OYA Play, Eleven Labs)
-- Your contact list with tiers so it knows who matters most
-- Domain matching (emails from company domains get business priority)
+## 3. Email Snooze
 
-### 5. Filter Tabs Redesign
-Replace current tabs with cleaner segmentation:
-- **Smart Inbox** (default) -- AI-curated view, important first
-- **All** -- everything chronologically
-- **Flagged** -- spam/phishing alerts
+**What it does:** "Not now, remind me later." Snooze an email to reappear at a specific time -- tomorrow morning, next Monday, or custom.
 
-## Technical Plan
+**How it works:**
+- Add `user_snoozed_until` column (already exists in the Email interface but not used in UI)
+- Snooze button in email detail sheet with preset options (Later Today, Tomorrow 9am, Next Monday, Custom)
+- Snoozed emails hidden from inbox, reappear when snooze expires
+- Snoozed section in Smart Inbox showing upcoming snoozes
 
-### Files to Modify
+---
 
-**`supabase/functions/gmail-sync/index.ts`**
-- Expand AI categorization prompt to include spam/phishing detection, summary generation, sentiment analysis, and suggested actions
-- Pass user profile context (name, companies) and contact names to the AI
-- Add new tool-call schema with fields: category, priority_boost, summary, suggested_action, is_spam, is_phishing, threat_reason, sentiment
-- Store all new fields in the database
+## 4. Auto-Sync on a Schedule
 
-**`src/hooks/useEmails.ts`**
-- Update Email interface with new fields (ai_summary, ai_suggested_action, is_spam, is_phishing, threat_reason, sentiment)
-- Add `reportSpam` action that archives + marks as spam
-- Update filter logic: "smart" view groups by sections, "flagged" shows threats
-- Add `markAsRead` function
+**What it does:** Stop manually syncing. Emails auto-sync every time you open the Email panel if it has been more than 5 minutes since the last sync.
 
-**`src/components/email/EmailPanel.tsx`**
-- Complete redesign with section-based layout (Needs Attention, FYI, Low Priority)
-- New filter tabs: Smart Inbox, All, Flagged
-- Section headers with counts
-- Empty states per section
-- Pull-to-refresh support
+**How it works:**
+- Store `lastSyncTime` in localStorage
+- On panel mount, check if > 5 min elapsed, auto-trigger sync
+- Show subtle "Last synced 3 min ago" text instead of requiring manual tap
+- Pull-to-refresh gesture as secondary sync trigger
 
-**`src/components/email/EmailCard.tsx`**
-- Show AI summary instead of raw snippet
-- Add suggested action chip
-- Threat warning badge for spam/phishing
-- Sender initials avatar with contact-tier color coding
-- Swipe-to-archive gesture support
+---
 
-**`src/components/email/EmailDetailSheet.tsx`**
-- AI analysis section at top (summary + suggested action)
-- Phishing/spam warning banner with threat reason
-- Contact link if matched
-- Report spam button
-- Mark as read on open
+## 5. Email Digest in Morning Briefing
 
-### Database Migration
-Add new columns to `user_emails`:
+**What it does:** Your existing Morning Briefing already covers weather, tasks, and events. Add a quick email summary: "You have 3 priority emails and 12 newsletters. One urgent from [contact name]."
+
+**How it works:**
+- Fetch email counts (priority, unread, flagged) in the morning briefing edge function
+- Add an email section to the briefing output
+- One-liner AI summary of the most important unread email
+
+---
+
+## 6. Quick Reply Drafts (AI-Generated)
+
+**What it does:** For "Reply needed" emails, show an AI-generated draft reply button. One tap to see a suggested response you can copy and send in Gmail.
+
+**How it works:**
+- New "Draft Reply" button in EmailDetailSheet for action_required emails
+- Calls an edge function that sends the email context + your profile to AI
+- Returns a short, professional draft matching your communication style
+- Copy-to-clipboard button + "Open in Gmail" to paste and send
+
+---
+
+## 7. Unread Badge on Navigation
+
+**What it does:** Show unread/priority email count as a badge on the Email nav item so you know at a glance without opening the panel.
+
+**How it works:**
+- Expose email counts from `useEmails` to the navigation/sidebar
+- Small red dot or number badge on the Email icon in the bottom nav or sidebar
+
+---
+
+## 8. Thread Grouping
+
+**What it does:** Group emails by `thread_id` so you see conversations together instead of individual messages. Shows "3 messages" with the latest snippet.
+
+**How it works:**
+- Group emails with the same `thread_id` in the hook's grouping logic
+- Show the most recent email in the thread as the card, with a "thread count" badge
+- Expanding a thread in the detail sheet shows all messages in order
+
+---
+
+## Recommended Priority
+
+For maximum impact with the least effort, I'd recommend this order:
+
+1. **Swipe gestures** -- instant UX upgrade, uses existing framer-motion
+2. **Auto-sync** -- removes friction, simple localStorage check
+3. **Sender rules with auto-learn** -- makes the system smarter over time
+4. **Snooze** -- column already exists, just needs UI
+5. **Unread badge on nav** -- small but high-visibility improvement
+6. **Quick reply drafts** -- leverages existing AI infrastructure
+7. **Thread grouping** -- moderate complexity, great UX payoff
+8. **Morning briefing integration** -- connects email to your daily routine
+
+## Technical Details
+
+### New Database Table (for Sender Rules)
 ```text
-ai_summary        TEXT
-ai_suggested_action TEXT
-is_spam           BOOLEAN DEFAULT false
-is_phishing       BOOLEAN DEFAULT false
-threat_reason     TEXT
-sentiment         TEXT DEFAULT 'neutral'
+email_sender_rules
+  id              UUID PRIMARY KEY
+  user_id         UUID NOT NULL (references auth.users)
+  sender_pattern  TEXT NOT NULL (e.g. "newsletter@company.com" or "*@company.com")
+  default_category TEXT
+  default_priority INTEGER
+  auto_archive    BOOLEAN DEFAULT false
+  created_at      TIMESTAMPTZ DEFAULT now()
+  UNIQUE(user_id, sender_pattern)
+  RLS: user_id = auth.uid()
 ```
 
-### AI Prompt Design
-The upgraded prompt gives the AI your personal context:
-- "You are analyzing emails for Asad, who runs Medieval Empires, OYA Play, and Eleven Labs"
-- Contact list with tiers so it knows family vs business vs unknown
-- Checks for phishing indicators: mismatched domains, urgency language, suspicious URLs
-- Returns structured data via tool calling for reliable parsing
+### Files to Create/Modify
+- `src/components/email/EmailCard.tsx` -- add swipe gesture layer
+- `src/components/email/EmailPanel.tsx` -- auto-sync logic, snooze section, pull-to-refresh
+- `src/components/email/EmailDetailSheet.tsx` -- snooze picker, draft reply button, sender rule prompt
+- `src/hooks/useEmails.ts` -- snooze filtering, thread grouping, sender rule creation
+- `supabase/functions/gmail-sync/index.ts` -- apply sender rules before AI analysis
+- `supabase/functions/email-draft-reply/index.ts` -- new edge function for AI reply drafts
+- Navigation components -- unread badge integration
+- Database migration -- `email_sender_rules` table
 
+Would you like me to implement all of these, or would you prefer to pick specific ones to start with?
