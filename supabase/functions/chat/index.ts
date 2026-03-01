@@ -227,6 +227,77 @@ TOOL: create_meeting_plan
 Use this to create a structured meeting itinerary.
 Format: <tool>create_meeting_plan</tool><plan>{"city": "location", "contacts": ["name1", "name2"], "dates": ["date1", "date2"]}</plan>
 
+TOOL: manage_contact
+Use this to create, update, delete, search contacts, or mark a contact as contacted.
+Format: <tool>manage_contact</tool><action>create|update|delete|mark_contacted|search</action><contact>JSON_OBJECT</contact>
+Contact JSON fields:
+- "name": string (required for create)
+- "email": string (optional)
+- "phone": string (optional)
+- "company": string (optional)
+- "role": string (optional)
+- "city": string (optional)
+- "country": string (optional)
+- "contactType": "personal" | "business" | "family" (optional)
+- "notes": string (optional)
+- "query": string (for search/update/delete — matches name, email, or company)
+
+TOOL: manage_contract
+Use this to create, update, delete, or search contracts and subscriptions.
+Format: <tool>manage_contract</tool><action>create|update|delete|search|get_costs</action><contract>JSON_OBJECT</contract>
+Contract JSON fields:
+- "name": string (required for create)
+- "provider": string (optional)
+- "category": string (optional, e.g. "insurance", "subscription", "telecom")
+- "costAmount": number (optional)
+- "costFrequency": "monthly" | "yearly" | "weekly" (optional)
+- "renewalDate": ISO date string (optional)
+- "autoRenews": boolean (optional)
+- "notes": string (optional)
+- "query": string (for search/update/delete — matches name or provider)
+
+TOOL: manage_project
+Use this to create, update, delete, list, or get status of projects.
+Format: <tool>manage_project</tool><action>create|update|delete|list|get_status</action><project>JSON_OBJECT</project>
+Project JSON fields:
+- "name": string (required for create)
+- "description": string (optional)
+- "color": string (optional)
+- "query": string (for update/delete/get_status — matches project name)
+
+TOOL: manage_habit
+Use this to create, log completion, or delete habits.
+Format: <tool>manage_habit</tool><action>create|log|delete|summary</action><habit>JSON_OBJECT</habit>
+Habit JSON fields:
+- "name": string (required for create)
+- "description": string (optional)
+- "icon": string (optional)
+- "frequency": "daily" | "weekly" | "monthly" (optional, default daily)
+- "targetCount": number (optional, default 1)
+- "query": string (for log/delete — matches habit name)
+
+TOOL: manage_note
+Use this to create, search, or delete notes. Replaces the simpler create_note tool.
+Format: <tool>manage_note</tool><action>create|search|delete</action><note>JSON_OBJECT</note>
+Note JSON fields:
+- "title": string (required for create)
+- "content": string (required for create)
+- "tags": string[] (optional)
+- "query": string (for search/delete — matches title or content)
+
+TOOL: compose_email
+Use this to draft an email for the user.
+Format: <tool>compose_email</tool><email>JSON_OBJECT</email>
+Email JSON fields:
+- "to": string (required — email address of recipient)
+- "subject": string (required)
+- "body": string (required — the email body text)
+
+TOOL: get_summary
+Use this to retrieve a summary of specific data the user asks about.
+Format: <tool>get_summary</tool><type>health|email|contacts_due|contract_costs|habits</type>
+Use this when the user asks "what are my costs?", "how's my health?", "any emails?", "who should I contact?", "how are my habits?"
+
 ## FAMILY-AWARE AI CAPABILITIES
 
 ### 1. Family Context Awareness

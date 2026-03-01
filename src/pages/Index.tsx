@@ -153,10 +153,10 @@ const Index = () => {
   } = useWeeklyReview(user?.id);
 
   // Contacts for task assignment
-  const { contacts, markContacted } = useContacts(user?.id);
+  const { contacts, markContacted, addContact, updateContact, deleteContact } = useContacts(user?.id);
 
   // Contracts management
-  const { contracts } = useContracts(user?.id);
+  const { contracts, addContract, updateContract, deleteContract } = useContracts(user?.id);
 
   // Health tracking for AI assistant
   const { 
@@ -180,7 +180,7 @@ const Index = () => {
   const { events: familyEvents, getUpcomingEvents: getUpcomingFamilyEvents } = useFamilyEvents();
 
   // Notes for voice assistant
-  const { createNote, notes } = useNotes(user?.id);
+  const { createNote, deleteNote, searchNotes, notes } = useNotes(user?.id);
 
   // User profile for AI context
   const { profile: userProfile } = useUserProfile();
@@ -192,7 +192,7 @@ const Index = () => {
   const { lists: shoppingLists } = useShoppingLists();
 
   // Habits for AI context
-  const { todayHabits } = useHabits(user?.id);
+  const { todayHabits, createHabit, logHabit, deleteHabit } = useHabits(user?.id);
 
   // Emails for AI context
   const { allEmails, unreadCount: unreadEmailCount } = useEmails();
@@ -668,6 +668,157 @@ const Index = () => {
                 description: noteTitle,
               });
             }
+          } else if (toolCall.tool === 'manage_contact' && toolCall.contact) {
+            const { action, contact } = toolCall;
+            if (action === 'create' && contact.name) {
+              const result = await addContact({
+                name: contact.name,
+                email: contact.email || '',
+                phone: contact.phone || '',
+                company: contact.company || '',
+                role: contact.role || '',
+                city: contact.city || '',
+                country: contact.country || '',
+                contactType: (contact.contactType === 'business' ? 'business' : 'personal') as 'personal' | 'business',
+                notes: contact.notes || '',
+              });
+              if (result) toast({ title: 'Contact Added', description: contact.name });
+            } else if (action === 'delete' && contact.query) {
+              const match = contacts.find(c => c.name.toLowerCase().includes(contact.query!.toLowerCase()));
+              if (match) {
+                await deleteContact(match.id);
+                toast({ title: 'Contact Deleted', description: match.name });
+              }
+            } else if (action === 'update' && contact.query) {
+              const match = contacts.find(c => c.name.toLowerCase().includes(contact.query!.toLowerCase()));
+              if (match) {
+                const updates: Record<string, unknown> = {};
+                if (contact.name) updates.name = contact.name;
+                if (contact.email) updates.email = contact.email;
+                if (contact.phone) updates.phone = contact.phone;
+                if (contact.company) updates.company = contact.company;
+                if (contact.role) updates.role = contact.role;
+                if (contact.city) updates.city = contact.city;
+                if (contact.country) updates.country = contact.country;
+                if (contact.notes) updates.notes = contact.notes;
+                await updateContact(match.id, updates);
+                toast({ title: 'Contact Updated', description: match.name });
+              }
+            } else if (action === 'mark_contacted' && contact.query) {
+              const match = contacts.find(c => c.name.toLowerCase().includes(contact.query!.toLowerCase()));
+              if (match) {
+                await markContacted(match.id);
+                toast({ title: 'Contact Marked', description: `${match.name} marked as contacted` });
+              }
+            }
+          } else if (toolCall.tool === 'manage_contract' && toolCall.contract) {
+            const { action, contract } = toolCall;
+            if (action === 'create' && contract.name) {
+              const result = await addContract({
+                name: contract.name,
+                provider: contract.provider || '',
+                category: (contract.category || 'other') as any,
+                costAmount: contract.costAmount || null,
+                costFrequency: (contract.costFrequency || 'monthly') as any,
+                renewalDate: contract.renewalDate ? new Date(contract.renewalDate) : null,
+                autoRenews: contract.autoRenews ?? false,
+                notes: contract.notes || '',
+              });
+              if (result) toast({ title: 'Contract Added', description: contract.name });
+            } else if (action === 'delete' && contract.query) {
+              const match = contracts.find(c => c.name.toLowerCase().includes(contract.query!.toLowerCase()));
+              if (match) {
+                await deleteContract(match.id);
+                toast({ title: 'Contract Deleted', description: match.name });
+              }
+            } else if (action === 'update' && contract.query) {
+              const match = contracts.find(c => c.name.toLowerCase().includes(contract.query!.toLowerCase()));
+              if (match) {
+                const updates: Record<string, unknown> = {};
+                if (contract.name) updates.name = contract.name;
+                if (contract.provider) updates.provider = contract.provider;
+                if (contract.category) updates.category = contract.category;
+                if (contract.costAmount !== undefined) updates.costAmount = contract.costAmount;
+                if (contract.costFrequency) updates.costFrequency = contract.costFrequency;
+                if (contract.renewalDate) updates.renewalDate = new Date(contract.renewalDate);
+                if (contract.notes) updates.notes = contract.notes;
+                await updateContract(match.id, updates);
+                toast({ title: 'Contract Updated', description: match.name });
+              }
+            }
+          } else if (toolCall.tool === 'manage_project' && toolCall.project) {
+            const { action, project } = toolCall;
+            if (action === 'create' && project.name) {
+              const result = await addProject({
+                name: project.name,
+                description: project.description || '',
+                color: project.color || '#6366f1',
+                isArchived: false,
+              });
+              if (result) toast({ title: 'Project Created', description: project.name });
+            } else if (action === 'delete' && project.query) {
+              const match = projects.find(p => p.name.toLowerCase().includes(project.query!.toLowerCase()));
+              if (match) {
+                await deleteProject(match.id);
+                toast({ title: 'Project Deleted', description: match.name });
+              }
+            } else if (action === 'update' && project.query) {
+              const match = projects.find(p => p.name.toLowerCase().includes(project.query!.toLowerCase()));
+              if (match) {
+                const updates: Record<string, unknown> = {};
+                if (project.name) updates.name = project.name;
+                if (project.description) updates.description = project.description;
+                if (project.color) updates.color = project.color;
+                await updateProject(match.id, updates);
+                toast({ title: 'Project Updated', description: match.name });
+              }
+            }
+          } else if (toolCall.tool === 'manage_habit' && toolCall.habit) {
+            const { action, habit } = toolCall;
+            if (action === 'create' && habit.name) {
+              await createHabit({
+                name: habit.name,
+                description: habit.description || '',
+                icon: habit.icon || '✅',
+                frequency: (habit.frequency === 'weekly' ? 'weekly' : 'daily') as 'daily' | 'weekly' | 'custom',
+                targetCount: habit.targetCount || 1,
+                isActive: true,
+                color: '#6366f1',
+                daysOfWeek: [],
+                reminderTime: null,
+              });
+              toast({ title: 'Habit Created', description: habit.name });
+            } else if (action === 'log' && habit.query) {
+              const match = todayHabits.find(h => h.name.toLowerCase().includes(habit.query!.toLowerCase()));
+              if (match) {
+                await logHabit(match.id);
+                toast({ title: 'Habit Logged', description: match.name });
+              }
+            } else if (action === 'delete' && habit.query) {
+              const match = todayHabits.find(h => h.name.toLowerCase().includes(habit.query!.toLowerCase()));
+              if (match) {
+                await deleteHabit(match.id);
+                toast({ title: 'Habit Deleted', description: match.name });
+              }
+            }
+          } else if (toolCall.tool === 'manage_note') {
+            const { action, note } = toolCall;
+            if (action === 'create' && note) {
+              const result = await createNote(note.title || 'Note', note.content || '', note.tags || []);
+              if (result) toast({ title: 'Note Saved', description: note.title });
+            } else if (action === 'delete' && note?.query) {
+              const match = notes.find(n => n.title.toLowerCase().includes(note.query!.toLowerCase()));
+              if (match) {
+                await deleteNote(match.id);
+                toast({ title: 'Note Deleted', description: match.title });
+              }
+            }
+          } else if (toolCall.tool === 'compose_email' && toolCall.email) {
+            // Store email data for the compose sheet to pick up
+            const emailData = toolCall.email;
+            toast({ title: 'Email Draft Ready', description: `To: ${emailData.to} — "${emailData.subject}"` });
+            // The compose sheet will be opened via a custom event
+            window.dispatchEvent(new CustomEvent('compose-email', { detail: emailData }));
           }
         },
         onDone: () => {
@@ -680,6 +831,13 @@ const Index = () => {
         .replace(/<tool>[\s\S]*?<\/task>/g, '')
         .replace(/<tool>[\s\S]*?<\/event>/g, '')
         .replace(/<tool>[\s\S]*?<\/note>/g, '')
+        .replace(/<tool>[\s\S]*?<\/contact>/g, '')
+        .replace(/<tool>[\s\S]*?<\/contract>/g, '')
+        .replace(/<tool>[\s\S]*?<\/project>/g, '')
+        .replace(/<tool>[\s\S]*?<\/habit>/g, '')
+        .replace(/<tool>[\s\S]*?<\/email>/g, '')
+        .replace(/<tool>[\s\S]*?<\/item>/g, '')
+        .replace(/<tool>get_summary<\/tool>\s*<type>\w+<\/type>/g, '')
         .trim();
 
       if (cleanContent) {
@@ -701,7 +859,7 @@ const Index = () => {
     } finally {
       sendLockRef.current = false;
     }
-  }, [addMessage, addTask, addEvent, deleteTask, toggleTaskComplete, updateTask, events, messages, settings, streamChat, tasks, toast, contacts, contracts, allEmails, notes, todayHabits, familyMembers, shoppingLists, userProfile, unreadEmailCount, createNote]);
+  }, [addMessage, addTask, addEvent, deleteTask, toggleTaskComplete, updateTask, events, messages, settings, streamChat, tasks, toast, contacts, contracts, allEmails, notes, todayHabits, familyMembers, shoppingLists, userProfile, unreadEmailCount, createNote, deleteNote, searchNotes, addContact, updateContact, deleteContact, markContacted, addContract, updateContract, deleteContract, addProject, updateProject, deleteProject, projects, createHabit, logHabit, deleteHabit]);
 
   const handleGhostCommand = useCallback((command: string) => {
     handleSendMessage(command);
