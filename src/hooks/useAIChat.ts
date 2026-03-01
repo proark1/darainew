@@ -14,6 +14,7 @@ interface NoteData {
   title: string;
   content: string;
   tags?: string[];
+  query?: string;
 }
 
 interface ShoppingItemData {
@@ -22,15 +23,68 @@ interface ShoppingItemData {
   category?: string;
 }
 
+interface ContactData {
+  name?: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+  role?: string;
+  city?: string;
+  country?: string;
+  contactType?: string;
+  notes?: string;
+  query?: string;
+}
+
+interface ContractData {
+  name?: string;
+  provider?: string;
+  category?: string;
+  costAmount?: number;
+  costFrequency?: string;
+  renewalDate?: string;
+  autoRenews?: boolean;
+  notes?: string;
+  query?: string;
+}
+
+interface ProjectData {
+  name?: string;
+  description?: string;
+  color?: string;
+  query?: string;
+}
+
+interface HabitData {
+  name?: string;
+  description?: string;
+  icon?: string;
+  frequency?: string;
+  targetCount?: number;
+  query?: string;
+}
+
+interface EmailData {
+  to?: string;
+  subject?: string;
+  body?: string;
+}
+
 interface ToolCall {
-  tool: 'manage_task' | 'schedule_event' | 'suggest_contacts' | 'create_meeting_plan' | 'create_note' | 'add_shopping_item';
-  action?: 'add' | 'update' | 'delete' | 'complete';
+  tool: 'manage_task' | 'schedule_event' | 'suggest_contacts' | 'create_meeting_plan' | 'create_note' | 'add_shopping_item' | 'manage_contact' | 'manage_contract' | 'manage_project' | 'manage_habit' | 'manage_note' | 'compose_email' | 'get_summary';
+  action?: string;
   task?: Partial<Task>;
   event?: Partial<CalendarEvent>;
   criteria?: { location?: string; type?: string; keywords?: string[] };
   plan?: { city?: string; contacts?: string[]; dates?: string[] };
   note?: NoteData;
   shoppingItem?: ShoppingItemData;
+  contact?: ContactData;
+  contract?: ContractData;
+  project?: ProjectData;
+  habit?: HabitData;
+  email?: EmailData;
+  summaryType?: string;
 }
 
 interface RelevantContact {
@@ -253,6 +307,104 @@ export function useAIChat() {
       } catch (e) {
         console.error('Failed to parse shopping item tool call:', e);
       }
+    }
+
+    // Parse manage_contact tool calls
+    const contactMatches2 = content.matchAll(
+      /<tool>manage_contact<\/tool>\s*<action>(\w+)<\/action>\s*<contact>(\{[\s\S]*?\})<\/contact>/g
+    );
+    for (const match of contactMatches2) {
+      try {
+        const action = match[1];
+        const contactData = JSON.parse(match[2]);
+        toolCalls.push({ tool: 'manage_contact', action, contact: contactData });
+        cleanContent = cleanContent.replace(match[0], '');
+      } catch (e) {
+        console.error('Failed to parse manage_contact tool call:', e);
+      }
+    }
+
+    // Parse manage_contract tool calls
+    const contractMatches = content.matchAll(
+      /<tool>manage_contract<\/tool>\s*<action>(\w+)<\/action>\s*<contract>(\{[\s\S]*?\})<\/contract>/g
+    );
+    for (const match of contractMatches) {
+      try {
+        const action = match[1];
+        const contractData = JSON.parse(match[2]);
+        toolCalls.push({ tool: 'manage_contract', action, contract: contractData });
+        cleanContent = cleanContent.replace(match[0], '');
+      } catch (e) {
+        console.error('Failed to parse manage_contract tool call:', e);
+      }
+    }
+
+    // Parse manage_project tool calls
+    const projectMatches = content.matchAll(
+      /<tool>manage_project<\/tool>\s*<action>(\w+)<\/action>\s*<project>(\{[\s\S]*?\})<\/project>/g
+    );
+    for (const match of projectMatches) {
+      try {
+        const action = match[1];
+        const projectData = JSON.parse(match[2]);
+        toolCalls.push({ tool: 'manage_project', action, project: projectData });
+        cleanContent = cleanContent.replace(match[0], '');
+      } catch (e) {
+        console.error('Failed to parse manage_project tool call:', e);
+      }
+    }
+
+    // Parse manage_habit tool calls
+    const habitMatches = content.matchAll(
+      /<tool>manage_habit<\/tool>\s*<action>(\w+)<\/action>\s*<habit>(\{[\s\S]*?\})<\/habit>/g
+    );
+    for (const match of habitMatches) {
+      try {
+        const action = match[1];
+        const habitData = JSON.parse(match[2]);
+        toolCalls.push({ tool: 'manage_habit', action, habit: habitData });
+        cleanContent = cleanContent.replace(match[0], '');
+      } catch (e) {
+        console.error('Failed to parse manage_habit tool call:', e);
+      }
+    }
+
+    // Parse manage_note tool calls (new extended version)
+    const manageNoteMatches = content.matchAll(
+      /<tool>manage_note<\/tool>\s*<action>(\w+)<\/action>\s*<note>(\{[\s\S]*?\})<\/note>/g
+    );
+    for (const match of manageNoteMatches) {
+      try {
+        const action = match[1];
+        const noteData = JSON.parse(match[2]);
+        toolCalls.push({ tool: 'manage_note', action, note: noteData });
+        cleanContent = cleanContent.replace(match[0], '');
+      } catch (e) {
+        console.error('Failed to parse manage_note tool call:', e);
+      }
+    }
+
+    // Parse compose_email tool calls
+    const emailMatches = content.matchAll(
+      /<tool>compose_email<\/tool>\s*<email>(\{[\s\S]*?\})<\/email>/g
+    );
+    for (const match of emailMatches) {
+      try {
+        const emailData = JSON.parse(match[1]);
+        toolCalls.push({ tool: 'compose_email', email: emailData });
+        cleanContent = cleanContent.replace(match[0], '');
+      } catch (e) {
+        console.error('Failed to parse compose_email tool call:', e);
+      }
+    }
+
+    // Parse get_summary tool calls
+    const summaryMatches = content.matchAll(
+      /<tool>get_summary<\/tool>\s*<type>(\w+)<\/type>/g
+    );
+    for (const match of summaryMatches) {
+      toolCalls.push({ tool: 'get_summary', summaryType: match[1] });
+      cleanContent = cleanContent.replace(match[0], '');
     }
 
     console.log('[useAIChat] Parse complete. Total tool calls found:', toolCalls.length, toolCalls.map(tc => tc.tool));
