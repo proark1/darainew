@@ -6,6 +6,7 @@ import { EmailDetailSheet } from './EmailDetailSheet';
 import { ComposeEmailSheet } from './ComposeEmailSheet';
 import { RecurringPaymentDetector, DetectedPayment } from './RecurringPaymentDetector';
 import { AddEditContractDialog } from '@/components/contracts/AddEditContractDialog';
+import { format } from 'date-fns';
 import { useContracts, ContractInput } from '@/hooks/useContracts';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -153,18 +154,50 @@ export function EmailPanel() {
     return undefined;
   };
 
+  const extractContractNumber = (text: string): string | undefined => {
+    const patterns = [
+      /(?:contract|vertrag|invoice|rechnung|order|bestellung|ref|reference|nr|number)[#:\s-]*([A-Z0-9-]{4,20})/i,
+      /(?:INV|ORD|REF|CTR|VTR|RG|RE|AB)[- ]?(\d{4,15})/i,
+      /#(\d{5,15})/,
+    ];
+    for (const p of patterns) {
+      const m = text.match(p);
+      if (m) return m[1];
+    }
+    return undefined;
+  };
+
+  const detectCategory = (text: string): string => {
+    const lower = text.toLowerCase();
+    if (/insurance|versicherung/.test(lower)) return 'insurance';
+    if (/internet|broadband|fiber|glasfaser/.test(lower)) return 'internet';
+    if (/phone|mobile|telefon|handy/.test(lower)) return 'phone';
+    if (/netflix|spotify|disney|streaming|hulu|apple\s?tv/.test(lower)) return 'streaming';
+    if (/electricity|gas|water|energy|strom|stadtwerke/.test(lower)) return 'utilities';
+    if (/gym|fitness|sport/.test(lower)) return 'other';
+    return 'subscription';
+  };
+
   const handleSaveEmailAsContract = (email: Email) => {
     const providerName = email.from_name || email.from_email.split('@')[0];
     const searchText = `${email.subject || ''} ${email.snippet || ''} ${email.body_preview || ''}`;
     const amount = extractAmountFromText(searchText);
+    const contractNumber = extractContractNumber(searchText);
+    const category = detectCategory(`${providerName} ${searchText}`);
+    const emailDate = email.received_at ? format(new Date(email.received_at), 'yyyy-MM-dd') : '';
+    const notes = `Created from email: "${email.subject || '(No subject)'}" (received ${email.received_at ? format(new Date(email.received_at), 'PPP') : 'unknown date'})`;
 
     setContractPrefill({
       name: providerName,
       provider: providerName,
       costAmount: amount,
       costFrequency: 'monthly',
-      category: 'subscription',
+      category: category as any,
       autoRenews: true,
+      startDate: emailDate ? new Date(emailDate) : undefined,
+      renewalDate: emailDate ? new Date(emailDate) : undefined,
+      contractNumber,
+      notes,
     });
     setContractDialogOpen(true);
     setDetailOpen(false);

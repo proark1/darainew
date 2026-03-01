@@ -93,13 +93,13 @@ export function AddEditContractDialog({
       setProvider(prefill.provider || '');
       setCostAmount(prefill.costAmount?.toString() || '');
       setCostFrequency(prefill.costFrequency || 'monthly');
-      setStartDate('');
+      setStartDate(prefill.startDate ? format(new Date(prefill.startDate), 'yyyy-MM-dd') : '');
       setEndDate('');
-      setRenewalDate('');
+      setRenewalDate(prefill.renewalDate ? format(new Date(prefill.renewalDate), 'yyyy-MM-dd') : '');
       setCancellationNoticeDays('30');
       setAutoRenews(prefill.autoRenews ?? true);
-      setContractNumber('');
-      setNotes('');
+      setContractNumber(prefill.contractNumber || '');
+      setNotes(prefill.notes || '');
       setDocumentUrls([]);
       setFileNames([]);
       setIsActive(true);

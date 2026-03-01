@@ -165,7 +165,7 @@ export function EmailCard({ thread, onSelect, onArchive, onToggleImportant, onSn
               {email.sentiment && email.sentiment !== 'neutral' && (
                 <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", sentimentDot[email.sentiment] || sentimentDot.neutral)} />
               )}
-              <span className={cn("text-sm truncate", !email.is_read ? "font-semibold text-foreground" : "font-medium text-muted-foreground")}>
+              <span className={cn("text-sm", !email.is_read ? "font-bold text-foreground" : "font-semibold text-muted-foreground")}>
                 {email.from_name || email.from_email}
               </span>
               {thread.threadCount > 1 && (
