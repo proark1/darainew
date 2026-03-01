@@ -1,100 +1,87 @@
 
-# Unify Text Mode and Voice Mode: Full Feature Parity
+
+# Incremental Email Sync: Only Fetch New Emails
 
 ## Problem
-Text mode (chat) and voice mode have diverged significantly. Voice mode has **far more capabilities** than text mode:
 
-### Voice mode CAN do but text mode CANNOT:
-- **Contacts**: Search, create, update, delete, mark contacted, get contacts due
-- **Contracts**: Search, create, update, delete, get costs, get expiring
-- **Projects**: Create, list, get status, add tasks to project, update, delete
-- **Habits**: Create, log as done, delete
-- **Health**: Get health summary, steps, sleep, calories, heart rate
-- **Email**: Get inbox summary, search emails
-- **Messaging**: Send chat messages to contacts
-- **Calls**: Initiate calls to contacts
-- **Startup brainstorming**: Brainstorm, save, list ideas
-- **Notes**: Search, delete (text can create but not search/delete)
-- **Tasks**: Search, get summaries, reschedule, edit (text can add/complete/delete but not search or reschedule)
-
-### Text mode CAN do but voice mode already covers:
-- Add tasks, schedule events, create notes, add shopping items (voice has all these too)
-
-**Root cause**: Text mode uses XML-tag-based tool markup parsed client-side, while voice mode uses OpenAI native function calling. The XML tool set was never expanded to match voice's tool set.
+Currently, every sync fetches the latest 30 messages from Gmail, downloads metadata for all of them, runs AI analysis on up to 20, and upserts everything -- even emails already stored in the database. This is wasteful and slow.
 
 ## Solution
-Add the missing tools to text mode by:
-1. Expanding the system prompt in `chat/index.ts` with new XML tool definitions
-2. Expanding the parser in `useAIChat.ts` to recognize the new XML tool tags
-3. Expanding the handler in `Index.tsx` to execute the new tool calls
+
+Use Gmail's History API for incremental sync. Gmail assigns a `historyId` to every message. By storing the last `historyId`, subsequent syncs only fetch changes (new messages, label changes) since that point.
 
 ## Changes
 
-### 1. `supabase/functions/chat/index.ts` -- Add new XML tool definitions to system prompt
+### 1. Database Migration: Add `gmail_history_id` column
 
-Add these new tool definitions alongside the existing ones (manage_task, schedule_event, create_note, add_shopping_item):
+Add a `gmail_history_id` text column to `external_calendar_connections` to store the Gmail sync cursor per user's Google connection.
 
-- **manage_contact**: `<tool>manage_contact</tool><action>create|update|delete|mark_contacted|search</action><contact>JSON</contact>`
-  - Fields: name, email, phone, company, role, city, country, contactType, notes, query (for search/update/delete)
+```sql
+ALTER TABLE external_calendar_connections
+ADD COLUMN gmail_history_id text;
+```
 
-- **manage_contract**: `<tool>manage_contract</tool><action>create|update|delete|search|get_costs</action><contract>JSON</contract>`
-  - Fields: name, provider, category, costAmount, costFrequency, renewalDate, autoRenews, notes, query
+### 2. `supabase/functions/gmail-sync/index.ts` -- Incremental sync logic
 
-- **manage_project**: `<tool>manage_project</tool><action>create|update|delete|list|get_status</action><project>JSON</project>`
-  - Fields: name, description, color, query
+**Current flow** (every sync):
+1. List 30 messages from INBOX
+2. Fetch metadata for all 30
+3. AI analyze up to 20
+4. Upsert all 30
 
-- **manage_habit**: `<tool>manage_habit</tool><action>create|log|delete|summary</action><habit>JSON</habit>`
-  - Fields: name, description, icon, frequency, targetCount, query
+**New flow:**
 
-- **manage_note** (extend existing create_note): `<tool>manage_note</tool><action>create|search|delete</action><note>JSON</note>`
-  - Fields: title, content, tags, query
+1. Check if `gmail_history_id` exists on the connection
+2. **If yes (incremental sync):**
+   - Call `GET /gmail/v1/users/me/history?startHistoryId={id}&historyTypes=messageAdded&labelId=INBOX`
+   - Extract only new message IDs from `messagesAdded`
+   - If no new messages, return early with `{ synced: 0 }`
+   - Fetch metadata only for new messages
+   - AI analyze only new messages
+   - Upsert only new messages
+   - If history is expired (404/invalid), fall back to full sync
+3. **If no (first sync / fallback):**
+   - Do current full sync (fetch latest 30)
+4. **After sync:** Get the latest `historyId` from Gmail profile and save it to the connection
 
-- **compose_email**: `<tool>compose_email</tool><email>JSON</email>`
-  - Fields: to, subject, body (for drafting a reply or new email)
+**Getting the historyId:**
+- Call `GET /gmail/v1/users/me/profile` which returns `{ historyId: "12345" }`
+- Store it in `external_calendar_connections.gmail_history_id`
 
-- **get_summary**: `<tool>get_summary</tool><type>health|email|contacts_due|contract_costs|habits</type>`
-  - For read-only summaries that return data from context
+### 3. `src/hooks/useEmails.ts` -- Minor improvements
 
-Also update the system prompt capabilities section to mention all these features.
+- The client already loads emails from the database first (line 61-79), which is correct -- cached emails show instantly
+- Sync only fetches/processes new ones server-side
+- Add the new email count from sync response to show "3 new emails" instead of "Synced 30 emails"
+- Update toast message to reflect incremental behavior
 
-### 2. `src/hooks/useAIChat.ts` -- Add parsers for new tool XML tags
+### 4. `useEmails.ts` -- Increase fetch limit
 
-Add regex parsers for each new tool tag in `parseToolCalls()`:
-- `manage_contact` with action extraction
-- `manage_contract` with action extraction
-- `manage_project` with action extraction
-- `manage_habit` with action extraction
-- `manage_note` (update existing create_note to support actions)
-- `compose_email`
-- `get_summary`
+Currently limited to 100 emails. Since all emails are now persisted in the cloud, increase to 200 or add pagination for older emails.
 
-Update the `ToolCall` interface to include new tool types and their associated data shapes.
+## Technical Flow
 
-### 3. `src/pages/Index.tsx` -- Add tool call handlers
+```text
+First sync:
+  Client -> gmail-sync -> Gmail API (list 30) -> AI analyze -> upsert -> save historyId
 
-In the `onToolCall` handler (around line 553), add cases for:
-- `manage_contact`: Call addContact/updateContact/deleteContact/markContacted from useContacts
-- `manage_contract`: Call addContract/updateContract/deleteContract from useContracts
-- `manage_project`: Call addProject/updateProject/deleteProject from useProjects
-- `manage_habit`: Call createHabit/logHabit/deleteHabit (need to wire up habit hooks)
-- `manage_note`: Call createNote/deleteNote (search returns from context)
-- `compose_email`: Open compose sheet or draft email
-- `get_summary`: Return data from existing context (health, emails, contacts due, etc.)
+Subsequent syncs:
+  Client -> gmail-sync -> Gmail History API (only changes) -> fetch new only -> AI analyze new only -> upsert new -> update historyId
 
-Need to import and wire up hooks that aren't currently used in Index.tsx: useHabits (or the existing todayHabits data), useProjects, useContracts (check if already available).
-
-### 4. `src/lib/smartPayloadBuilder.ts` -- No changes needed
-The smart payload builder already handles context injection for all data types. The text mode already receives contacts, contracts, emails, notes, habits, and family context when relevant keywords are detected.
+History expired (rare):
+  Client -> gmail-sync -> History API returns 404 -> fallback to full sync -> save new historyId
+```
 
 ## Files to Modify
-1. `supabase/functions/chat/index.ts` -- Add ~15 new tool definitions to system prompt
-2. `src/hooks/useAIChat.ts` -- Add ~7 new XML tag parsers + update ToolCall interface  
-3. `src/pages/Index.tsx` -- Add ~6 new tool call handlers in onToolCall callback
 
-## Technical Notes
-- Text mode uses Gemini (via Lovable API) which handles XML tool tags well
-- The XML tag pattern is already proven with manage_task, schedule_event, create_note
-- All hooks (useContacts, useContracts, useProjects, useNotes, useHabits) are already imported or available in Index.tsx
-- Email compose will open the compose sheet UI rather than sending directly (matching the existing email UX)
-- Health summaries are read-only from context already present in the payload
-- No database changes needed -- all CRUD operations use existing hooks and tables
+1. **Database migration** -- Add `gmail_history_id` column to `external_calendar_connections`
+2. **`supabase/functions/gmail-sync/index.ts`** -- Add History API logic, save/read historyId, skip already-synced emails
+3. **`src/hooks/useEmails.ts`** -- Update toast messages, increase fetch limit
+
+## Benefits
+
+- Syncs complete in under 1 second when no new emails (vs 5-10s currently)
+- No redundant AI analysis calls (saves API credits)
+- All historical emails stay in cloud database permanently
+- Client loads instantly from database cache, sync only adds new ones
+
