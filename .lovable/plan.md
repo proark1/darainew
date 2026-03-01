@@ -1,58 +1,77 @@
 
-# Mobile Email and Calendar Fixes + Contact Picker
 
-## Problem
-1. Email cards and calendar items have text overflowing off the right side of the screen on mobile
-2. Compose email has no way to search/select contacts -- you must manually type email addresses
+# Detect Recurring Payments in Emails and Auto-Create Contracts
+
+## Summary
+
+Add a feature that scans your emails for recurring payment patterns (invoices, receipts, subscription confirmations) and suggests creating contracts from them. Two entry points:
+
+1. **Manual button** in the Email panel header: "Find Recurring Payments"
+2. **Automatic notification** after email sync when new recurring payments are detected
+
+## How It Works
+
+1. User clicks "Find Recurring Payments" button (or it runs automatically after sync)
+2. An edge function queries the user's emails, sends them to AI (Gemini Flash) to identify recurring payment patterns
+3. AI extracts: company name, amount, frequency, category
+4. Results appear in a dialog listing detected recurring payments
+5. User clicks one to open the Add Contract dialog, pre-filled with the detected data
+6. User reviews, adjusts, and saves
 
 ## Changes
 
-### 1. Fix Email Panel overflow (`src/components/email/EmailPanel.tsx`)
-- Add `overflow-hidden` to the root container `div` (line 200: `h-full flex flex-col relative`)
-- Ensure the header section constrains content width with `overflow-hidden` and `min-w-0`
+### 1. New Edge Function: `detect-recurring-payments`
 
-### 2. Fix Email Card overflow (`src/components/email/EmailCard.tsx`)
-- Add `overflow-hidden` to the content wrapper div (line 162: `flex-1 min-w-0`)
-- The attendees line (line 395) can overflow -- add `truncate` to the attendees text span
-- Ensure the tags row (line 183) wraps properly -- it already has `flex-wrap`, but parent needs width constraint
+- Queries `user_emails` for the user (last 6 months, looking for payment-related keywords in subjects/snippets)
+- Sends email data to Gemini Flash Lite with a prompt to identify recurring senders and payment patterns
+- Returns a list of detected subscriptions/contracts with extracted details:
+  - Company/provider name
+  - Amount and currency
+  - Payment frequency (monthly, quarterly, yearly)
+  - Suggested category (subscription, insurance, utilities, etc.)
+- Cross-references with existing contracts to avoid duplicates
 
-### 3. Fix Calendar Panel overflow (`src/components/calendar/CalendarPanel.tsx`)
-- Add `overflow-x-hidden` to the items list container (line 468)
-- The `ItemCard` component (line 295) has content that can overflow:
-  - The title area (line 309) needs the parent `flex` container to have `min-w-0` and `overflow-hidden`
-  - Attendees join text (line 395) needs `truncate`
-  - Recurrence description (line 402) needs `truncate`
-  - SharedBy badge (line 407) needs `truncate` on the text
+### 2. New Component: `RecurringPaymentDetector` dialog
 
-### 4. Add Contact Picker to Compose Email (`src/components/email/ComposeEmailSheet.tsx`)
-- Replace the plain "To" input with a searchable contact selector
-- Import `useContacts` hook to access the user's contacts list
-- When the user focuses/types in the "To" field:
-  - Filter contacts by name or email matching the typed text
-  - Show a dropdown list of matching contacts below the input
-  - Clicking a contact fills in their email address
-- Keep manual typing supported for non-contact emails
-- Show contact name + email in the dropdown for easy identification
+- Shows a list of detected recurring payments as cards
+- Each card shows: company name, detected amount, frequency, number of matching emails
+- "Add as Contract" button on each card opens `AddEditContractDialog` pre-filled
+- "Dismiss" button to skip individual suggestions
+- Loading state while AI analyzes
+
+### 3. Update Email Panel (`src/components/email/EmailPanel.tsx`)
+
+- Add a "Find Recurring Payments" button in the header actions area (next to sync button)
+- Uses a receipt/file-text icon
+- Opens the `RecurringPaymentDetector` dialog
+
+### 4. Update Add Contract Dialog (`src/components/contracts/AddEditContractDialog.tsx`)
+
+- Accept optional `prefill` prop with detected payment data
+- When prefill is provided, auto-populate: name, provider, costAmount, costFrequency, category
+- Show a subtle banner: "Pre-filled from email analysis. Please review and adjust."
 
 ## Technical Details
 
-### Contact Picker Implementation
+### Edge Function: `detect-recurring-payments`
 ```
-ComposeEmailSheet:
-  - Add state: contactSearch, showContactList, filteredContacts
-  - Import useContacts hook
-  - Replace "To" Input with a wrapper div containing:
-    - Input field for typing/searching
-    - Conditional dropdown below showing filtered contacts
-  - On contact select: set `to` to contact.email, clear search
-  - On blur (with delay): hide dropdown
+Input: user's auth token
+Process:
+  1. Fetch emails from user_emails (last 6 months, non-archived)
+  2. Fetch existing contracts to exclude known ones
+  3. Send email subjects/senders/snippets to Gemini with prompt:
+     "Identify recurring payments from these emails. Group by sender/service.
+      Extract: company, amount, frequency, category."
+  4. Return structured list of detected payments
+Output: { payments: [{ name, provider, amount, frequency, category, emailCount }] }
 ```
 
-### Overflow Fixes Summary
-The core issue is that `flex-1` children without `min-w-0` or `overflow-hidden` allow content to push beyond viewport. The fix is adding `min-w-0 overflow-hidden` to flex containers and `truncate` to text elements that could exceed available width.
+### New Files
+- `supabase/functions/detect-recurring-payments/index.ts` -- Edge function for AI analysis
+- `src/components/email/RecurringPaymentDetector.tsx` -- Detection results dialog with "Add as Contract" action
 
-## Files to Modify
-1. `src/components/email/EmailPanel.tsx` -- Add overflow containment to root and header
-2. `src/components/email/EmailCard.tsx` -- Ensure all text truncates properly within card bounds
-3. `src/components/email/ComposeEmailSheet.tsx` -- Add contact search/picker dropdown to "To" field
-4. `src/components/calendar/CalendarPanel.tsx` -- Add overflow containment to item cards and text elements
+### Modified Files
+- `src/components/email/EmailPanel.tsx` -- Add "Find Recurring Payments" button
+- `src/components/contracts/AddEditContractDialog.tsx` -- Accept and apply prefill data
+- `src/hooks/useContracts.ts` -- Export addContract for use from the detector
+
