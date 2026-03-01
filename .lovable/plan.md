@@ -1,77 +1,105 @@
 
 
-# Detect Recurring Payments in Emails and Auto-Create Contracts
+# Move Everything Important to the Dashboard (Remove Popup)
 
-## Summary
+## What Changes
 
-Add a feature that scans your emails for recurring payment patterns (invoices, receipts, subscription confirmations) and suggests creating contracts from them. Two entry points:
+The Morning Briefing popup that appears when you open the app will be removed. Instead, all the important daily information it contained will be added directly to the dashboard so you see everything at a glance without dismissing anything.
 
-1. **Manual button** in the Email panel header: "Find Recurring Payments"
-2. **Automatic notification** after email sync when new recurring payments are detected
+## What the Dashboard Will Gain
 
-## How It Works
+Currently the dashboard shows: greeting, focus task, stats, today's timeline (tasks only), and quick actions. After this change it will also include:
 
-1. User clicks "Find Recurring Payments" button (or it runs automatically after sync)
-2. An edge function queries the user's emails, sends them to AI (Gemini Flash) to identify recurring payment patterns
-3. AI extracts: company name, amount, frequency, category
-4. Results appear in a dialog listing detected recurring payments
-5. User clicks one to open the Add Contract dialog, pre-filled with the detected data
-6. User reviews, adjusts, and saves
+- **Weather widget** -- compact card showing current temperature, condition, and location
+- **Today's events** -- the timeline will show both tasks AND calendar events merged chronologically
+- **Contract alerts** -- upcoming renewal deadlines and cancellation notices shown as alert cards
+- **Contact follow-ups** -- contacts overdue for a check-in shown as a compact reminder
 
-## Changes
+## Files to Change
 
-### 1. New Edge Function: `detect-recurring-payments`
+### 1. Remove the Morning Briefing popup (`src/pages/Index.tsx`)
+- Remove the `showMorningDigest` state and the `MorningBriefing` component render
+- The briefing component files stay in the codebase (no deletion needed) but are no longer mounted on load
 
-- Queries `user_emails` for the user (last 6 months, looking for payment-related keywords in subjects/snippets)
-- Sends email data to Gemini Flash Lite with a prompt to identify recurring senders and payment patterns
-- Returns a list of detected subscriptions/contracts with extracted details:
-  - Company/provider name
-  - Amount and currency
-  - Payment frequency (monthly, quarterly, yearly)
-  - Suggested category (subscription, insurance, utilities, etc.)
-- Cross-references with existing contracts to avoid duplicates
+### 2. Enhance Dashboard Panel (`src/components/dashboard/DashboardPanel.tsx`)
+- Fetch today's **events** from the `events` table in addition to tasks
+- Fetch **contract alerts** (contracts with renewals in the next 14 days)
+- Fetch **contacts due for follow-up** (contacts not contacted in 30+ days)
+- Fetch **weather data** using the existing `useWeather` hook
+- Pass events to the `TodayTimeline` component
+- Add new inline cards for weather, contract alerts, and contact reminders
 
-### 2. New Component: `RecurringPaymentDetector` dialog
+### 3. New compact widget: Weather Card (`src/components/dashboard/WeatherCard.tsx`)
+- Small card showing temperature, weather icon, condition, and location
+- Uses the existing `useWeather` hook (already built)
+- Fits into the dashboard grid (1 column on desktop)
 
-- Shows a list of detected recurring payments as cards
-- Each card shows: company name, detected amount, frequency, number of matching emails
-- "Add as Contract" button on each card opens `AddEditContractDialog` pre-filled
-- "Dismiss" button to skip individual suggestions
-- Loading state while AI analyzes
+### 4. New compact widget: Contract Alerts Card (`src/components/dashboard/ContractAlertsCard.tsx`)
+- Shows contracts with upcoming cancellation deadlines or renewals (next 14 days)
+- Each alert shows: contract name, days left, type (renewal/cancellation)
+- "View all" link navigates to the contracts panel
+- Only renders if there are active alerts
 
-### 3. Update Email Panel (`src/components/email/EmailPanel.tsx`)
+### 5. New compact widget: Contact Reminders Card (`src/components/dashboard/ContactRemindersCard.tsx`)
+- Shows up to 3 contacts overdue for follow-up
+- Each shows: name, days since last contact
+- "Reach out" link navigates to contacts panel
+- Only renders if there are overdue contacts
 
-- Add a "Find Recurring Payments" button in the header actions area (next to sync button)
-- Uses a receipt/file-text icon
-- Opens the `RecurringPaymentDetector` dialog
+## Dashboard Layout (Updated)
 
-### 4. Update Add Contract Dialog (`src/components/contracts/AddEditContractDialog.tsx`)
-
-- Accept optional `prefill` prop with detected payment data
-- When prefill is provided, auto-populate: name, provider, costAmount, costFrequency, category
-- Show a subtle banner: "Pre-filled from email analysis. Please review and adjust."
+```text
++-----------------------------------------------+
+|  Check-in Prompt (if needed)                   |
++-----------------------------------------------+
+|  Hero Greeting                                 |
++------------------------------+----------------+
+|  Focus Card (2 cols)         | Weather +       |
+|                              | Stat Pills     |
++------------------------------+----------------+
+|  Today Timeline (2 cols)     | Smart Insight   |
+|  (tasks + events merged)     |                |
++------------------------------+----------------+
+|  Contract Alerts (if any)    | Contact         |
+|  (2 cols)                    | Reminders       |
++------------------------------+----------------+
+|  Quick Actions                                 |
++-----------------------------------------------+
+```
 
 ## Technical Details
 
-### Edge Function: `detect-recurring-payments`
-```
-Input: user's auth token
-Process:
-  1. Fetch emails from user_emails (last 6 months, non-archived)
-  2. Fetch existing contracts to exclude known ones
-  3. Send email subjects/senders/snippets to Gemini with prompt:
-     "Identify recurring payments from these emails. Group by sender/service.
-      Extract: company, amount, frequency, category."
-  4. Return structured list of detected payments
-Output: { payments: [{ name, provider, amount, frequency, category, emailCount }] }
+### Event fetching in DashboardPanel
+```typescript
+// Fetch today's events
+const { data: eventData } = await supabase
+  .from('events')
+  .select('*')
+  .eq('user_id', userId)
+  .gte('start_time', startOfDay(new Date()).toISOString())
+  .lte('start_time', endOfDay(new Date()).toISOString());
 ```
 
-### New Files
-- `supabase/functions/detect-recurring-payments/index.ts` -- Edge function for AI analysis
-- `src/components/email/RecurringPaymentDetector.tsx` -- Detection results dialog with "Add as Contract" action
+### Contract alerts query
+```typescript
+const { data: contractData } = await supabase
+  .from('contracts')
+  .select('*')
+  .eq('user_id', userId)
+  .eq('is_active', true)
+  .not('renewal_date', 'is', null);
+// Then filter client-side for renewals within 14 days
+```
 
-### Modified Files
-- `src/components/email/EmailPanel.tsx` -- Add "Find Recurring Payments" button
-- `src/components/contracts/AddEditContractDialog.tsx` -- Accept and apply prefill data
-- `src/hooks/useContracts.ts` -- Export addContract for use from the detector
+### Contact reminders query
+```typescript
+const { data: contactData } = await supabase
+  .from('user_contacts')
+  .select('id, name, last_contacted_at')
+  .eq('user_id', userId)
+  .lt('last_contacted_at', subDays(new Date(), 30).toISOString())
+  .order('last_contacted_at', { ascending: true })
+  .limit(3);
+```
 
+All new cards follow the existing GlassCard design pattern used throughout the dashboard.
