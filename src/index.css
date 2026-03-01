@@ -861,3 +861,36 @@ body::before {
     border-color: transparent hsl(var(--chat-incoming)) transparent transparent;
   }
 }
+
+/* Scoped email body styles — prevent email HTML from bleeding into the app */
+.email-body-scoped {
+  all: initial;
+  font-family: inherit;
+  font-size: 0.875rem;
+  line-height: 1.625;
+  color: hsl(var(--foreground));
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+.email-body-scoped * {
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+.email-body-scoped img {
+  max-width: 100% !important;
+  height: auto !important;
+}
+.email-body-scoped a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+}
+.email-body-scoped table {
+  max-width: 100% !important;
+  width: auto !important;
+  overflow-x: auto;
+  display: block;
+}
+.email-body-scoped style,
+.email-body-scoped script {
+  display: none !important;
+}

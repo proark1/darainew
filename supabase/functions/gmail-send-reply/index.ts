@@ -18,19 +18,19 @@ async function refreshAccessToken(refreshToken: string): Promise<{ access_token:
   return response.json();
 }
 
-function buildRawEmail(to: string, subject: string, body: string, threadId: string, messageId: string, fromEmail: string): string {
-  const replySubject = subject?.startsWith('Re:') ? subject : `Re: ${subject}`;
+function buildRawEmail(to: string, subject: string, body: string, threadId: string | null, messageId: string | null, fromEmail: string): string {
+  const isReply = !!threadId && !!messageId;
+  const finalSubject = isReply ? (subject?.startsWith('Re:') ? subject : `Re: ${subject}`) : (subject || '(No subject)');
   const lines = [
     `From: ${fromEmail}`,
     `To: ${to}`,
-    `Subject: ${replySubject}`,
-    `In-Reply-To: <${messageId}>`,
-    `References: <${messageId}>`,
-    `Content-Type: text/plain; charset=UTF-8`,
-    '',
-    body,
+    `Subject: ${finalSubject}`,
   ];
-  // Gmail API wants URL-safe base64
+  if (isReply && messageId) {
+    lines.push(`In-Reply-To: <${messageId}>`);
+    lines.push(`References: <${messageId}>`);
+  }
+  lines.push(`Content-Type: text/plain; charset=UTF-8`, '', body);
   const raw = lines.join('\r\n');
   return btoa(unescape(encodeURIComponent(raw))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
