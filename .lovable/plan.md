@@ -1,105 +1,59 @@
 
 
-# Move Everything Important to the Dashboard (Remove Popup)
+# Add "Save as Contract" Button to Email Detail View
 
 ## What Changes
 
-The Morning Briefing popup that appears when you open the app will be removed. Instead, all the important daily information it contained will be added directly to the dashboard so you see everything at a glance without dismissing anything.
+Two additions to the email experience:
 
-## What the Dashboard Will Gain
+1. **"Save as Contract" button in the email detail view** -- When you open any email, there will be a contract icon button in the action bar (alongside Archive, Important, Snooze, Spam). Clicking it extracts data from the email (sender name as provider, any amounts detected in subject/snippet) and opens the Add Contract dialog pre-filled.
 
-Currently the dashboard shows: greeting, focus task, stats, today's timeline (tasks only), and quick actions. After this change it will also include:
+2. **The "Find Recurring Payments" button already exists** in the email header -- no changes needed there.
 
-- **Weather widget** -- compact card showing current temperature, condition, and location
-- **Today's events** -- the timeline will show both tasks AND calendar events merged chronologically
-- **Contract alerts** -- upcoming renewal deadlines and cancellation notices shown as alert cards
-- **Contact follow-ups** -- contacts overdue for a check-in shown as a compact reminder
+## How It Works
 
-## Files to Change
+When you click the contract button on an individual email:
+- The sender name/email becomes the **provider**
+- The sender name becomes the **contract name**
+- Any currency amount found in the subject or snippet is extracted as the **cost**
+- The dialog opens pre-filled so you can review, adjust, and save
 
-### 1. Remove the Morning Briefing popup (`src/pages/Index.tsx`)
-- Remove the `showMorningDigest` state and the `MorningBriefing` component render
-- The briefing component files stay in the codebase (no deletion needed) but are no longer mounted on load
+## Files to Modify
 
-### 2. Enhance Dashboard Panel (`src/components/dashboard/DashboardPanel.tsx`)
-- Fetch today's **events** from the `events` table in addition to tasks
-- Fetch **contract alerts** (contracts with renewals in the next 14 days)
-- Fetch **contacts due for follow-up** (contacts not contacted in 30+ days)
-- Fetch **weather data** using the existing `useWeather` hook
-- Pass events to the `TodayTimeline` component
-- Add new inline cards for weather, contract alerts, and contact reminders
+### 1. `src/components/email/EmailDetailSheet.tsx`
+- Add `onSaveAsContract` callback prop to the component interface
+- Add a `FileText` (or `Receipt`) icon button in the actions bar (line ~249-264), next to Archive/Important/Snooze/Spam
+- When clicked, it calls `onSaveAsContract` with the current email data
 
-### 3. New compact widget: Weather Card (`src/components/dashboard/WeatherCard.tsx`)
-- Small card showing temperature, weather icon, condition, and location
-- Uses the existing `useWeather` hook (already built)
-- Fits into the dashboard grid (1 column on desktop)
-
-### 4. New compact widget: Contract Alerts Card (`src/components/dashboard/ContractAlertsCard.tsx`)
-- Shows contracts with upcoming cancellation deadlines or renewals (next 14 days)
-- Each alert shows: contract name, days left, type (renewal/cancellation)
-- "View all" link navigates to the contracts panel
-- Only renders if there are active alerts
-
-### 5. New compact widget: Contact Reminders Card (`src/components/dashboard/ContactRemindersCard.tsx`)
-- Shows up to 3 contacts overdue for follow-up
-- Each shows: name, days since last contact
-- "Reach out" link navigates to contacts panel
-- Only renders if there are overdue contacts
-
-## Dashboard Layout (Updated)
-
-```text
-+-----------------------------------------------+
-|  Check-in Prompt (if needed)                   |
-+-----------------------------------------------+
-|  Hero Greeting                                 |
-+------------------------------+----------------+
-|  Focus Card (2 cols)         | Weather +       |
-|                              | Stat Pills     |
-+------------------------------+----------------+
-|  Today Timeline (2 cols)     | Smart Insight   |
-|  (tasks + events merged)     |                |
-+------------------------------+----------------+
-|  Contract Alerts (if any)    | Contact         |
-|  (2 cols)                    | Reminders       |
-+------------------------------+----------------+
-|  Quick Actions                                 |
-+-----------------------------------------------+
-```
+### 2. `src/components/email/EmailPanel.tsx`
+- Pass a new `onSaveAsContract` prop to `EmailDetailSheet`
+- The handler extracts data from the email:
+  - Parse `from_name` / `from_email` for provider name
+  - Use a regex to find currency amounts (e.g., "15,99 EUR", "$49.99", "162,00 EUR") in subject + snippet
+  - Set default frequency to "monthly"
+  - Set category to "subscription" as default
+- Opens the existing `AddEditContractDialog` with the prefill data (same flow as the recurring payment detector)
 
 ## Technical Details
 
-### Event fetching in DashboardPanel
+### Amount extraction logic
 ```typescript
-// Fetch today's events
-const { data: eventData } = await supabase
-  .from('events')
-  .select('*')
-  .eq('user_id', userId)
-  .gte('start_time', startOfDay(new Date()).toISOString())
-  .lte('start_time', endOfDay(new Date()).toISOString());
+function extractAmount(text: string): number | undefined {
+  // Match patterns like: 15,99 EUR, $49.99, 162,00 EUR, 51.62 EUR
+  const match = text.match(/(\d+[.,]\d{2})\s*(?:EUR|USD|\$|€)/i) 
+              || text.match(/[$€]\s*(\d+[.,]\d{2})/);
+  if (match) {
+    return parseFloat(match[1].replace(',', '.'));
+  }
+  return undefined;
+}
 ```
 
-### Contract alerts query
+### New prop on EmailDetailSheet
 ```typescript
-const { data: contractData } = await supabase
-  .from('contracts')
-  .select('*')
-  .eq('user_id', userId)
-  .eq('is_active', true)
-  .not('renewal_date', 'is', null);
-// Then filter client-side for renewals within 14 days
+onSaveAsContract?: (email: Email) => void;
 ```
 
-### Contact reminders query
-```typescript
-const { data: contactData } = await supabase
-  .from('user_contacts')
-  .select('id, name, last_contacted_at')
-  .eq('user_id', userId)
-  .lt('last_contacted_at', subDays(new Date(), 30).toISOString())
-  .order('last_contacted_at', { ascending: true })
-  .limit(3);
-```
+### Button placement
+Added to the existing actions bar in the email detail drawer, as a clearly labeled "Contract" button with a Receipt icon, matching the style of Archive/Important/Snooze/Spam buttons.
 
-All new cards follow the existing GlassCard design pattern used throughout the dashboard.
