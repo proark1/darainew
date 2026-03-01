@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -59,6 +59,8 @@ export function HealthHubPanel() {
   const [showDebugInfo, setShowDebugInfo] = useState(false);
   const [showSetupGuide, setShowSetupGuide] = useState(false);
   const [isRunningDiagnostics, setIsRunningDiagnostics] = useState(false);
+  const [latestDataDate, setLatestDataDate] = useState<string | null>(null);
+  const [initialDateSet, setInitialDateSet] = useState(false);
   
   const {
     isAvailable,
@@ -73,7 +75,35 @@ export function HealthHubPanel() {
     addManualMetric,
     openAppSettings,
     runHealthKitDiagnostics,
+    fetchLatestHealthDate,
+    refetch,
   } = useAppleHealth();
+
+  // On mount: find latest data date and default to it if today has no data
+  useEffect(() => {
+    if (initialDateSet) return;
+    const init = async () => {
+      const latest = await fetchLatestHealthDate();
+      if (latest) {
+        setLatestDataDate(latest);
+        const today = new Date().toISOString().split('T')[0];
+        if (latest !== today) {
+          setSelectedDate(new Date(latest + 'T12:00:00'));
+        }
+      }
+      setInitialDateSet(true);
+    };
+    init();
+  }, [fetchLatestHealthDate, initialDateSet]);
+
+  // Re-fetch metrics when selected date changes (60-day window around it)
+  useEffect(() => {
+    if (!initialDateSet) return;
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const startDate = format(subDays(selectedDate, 30), 'yyyy-MM-dd');
+    const endDate = format(addDays(selectedDate, 7), 'yyyy-MM-dd');
+    refetch(startDate, endDate);
+  }, [selectedDate, initialDateSet, refetch]);
   
   const {
     medications,
@@ -195,7 +225,11 @@ export function HealthHubPanel() {
               Health Hub
             </h1>
             <p className="text-sm text-muted-foreground">
-              Track your health & wellness
+              {latestDataDate && !isSameDay(selectedDate, new Date()) ? (
+                <>Showing data from {format(selectedDate, 'MMM d, yyyy')}</>
+              ) : (
+                'Track your health & wellness'
+              )}
             </p>
           </div>
           <div className="flex items-center gap-2">
