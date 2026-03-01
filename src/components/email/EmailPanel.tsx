@@ -3,10 +3,11 @@ import { useEmails, EmailView, Email, EmailThread } from '@/hooks/useEmails';
 import { useGmailConnection } from '@/hooks/useGmailConnection';
 import { EmailCard } from './EmailCard';
 import { EmailDetailSheet } from './EmailDetailSheet';
+import { ComposeEmailSheet } from './ComposeEmailSheet';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
-import { RefreshCw, Mail, Inbox, ShieldAlert, Loader2, PlugZap, ChevronDown, ChevronRight, Sparkles, Clock, Search, X, CheckSquare, Archive, Eye, Flag } from 'lucide-react';
+import { RefreshCw, Mail, Inbox, ShieldAlert, Loader2, PlugZap, ChevronDown, ChevronRight, Sparkles, Clock, Search, X, CheckSquare, Archive, Eye, Flag, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -62,28 +63,33 @@ export function EmailPanel() {
   const {
     emails, grouped, loading, syncing, view, setView,
     syncEmails, archiveEmail, markImportant, markAsRead, reportSpam, snoozeEmail, createSenderRule,
-    fetchEmailBody, sendReply,
+    fetchEmailBody, sendReply, composeEmail, categorizeEmail,
     searchQuery, setSearchQuery,
     selectMode, setSelectMode, selectedIds, toggleSelect, clearSelection,
     batchArchive, batchMarkRead, batchReportSpam,
     unreadCount, priorityCount, flaggedCount, lastSyncTime,
   } = useEmails();
+  const [selectedThread, setSelectedThread] = useState<EmailThread | null>(null);
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
+
+  // Find thread for an email
+  const findThread = (email: Email): EmailThread | null => {
+    const allThreads = [...(grouped.attention || []), ...(grouped.fyi || []), ...(grouped.lowPriority || []), ...(grouped.flagged || []), ...(grouped.snoozed || [])];
+    return allThreads.find(t => t.latestEmail.id === email.id || t.allEmails.some(e => e.id === email.id)) || null;
+  };
 
   const handleSelect = (email: Email) => {
     if (selectMode) {
       toggleSelect(email.id);
       return;
     }
+    const thread = findThread(email);
+    setSelectedThread(thread);
     setSelectedEmail(email);
     setDetailOpen(true);
     if (!email.is_read) markAsRead(email.id);
-  };
-
-  const handleLongPress = (emailId: string) => {
-    setSelectMode(true);
-    toggleSelect(emailId);
   };
 
   if (!connectionLoading && !isConnected) {
@@ -108,11 +114,10 @@ export function EmailPanel() {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col relative">
       {/* Header */}
       <div className="p-3 border-b border-border space-y-2">
         {selectMode ? (
-          /* Batch actions bar */
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="sm" onClick={clearSelection} className="gap-1">
@@ -155,7 +160,6 @@ export function EmailPanel() {
               </div>
             </div>
 
-            {/* Search */}
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <Input
@@ -235,7 +239,18 @@ export function EmailPanel() {
         </div>
       </ScrollArea>
 
+      {/* Compose FAB */}
+      {!selectMode && (
+        <button
+          onClick={() => setComposeOpen(true)}
+          className="absolute bottom-4 right-4 w-12 h-12 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 transition-colors active:scale-95"
+        >
+          <Plus className="w-5 h-5" />
+        </button>
+      )}
+
       <EmailDetailSheet
+        thread={selectedThread}
         email={selectedEmail}
         open={detailOpen}
         onOpenChange={setDetailOpen}
@@ -246,6 +261,13 @@ export function EmailPanel() {
         onCreateSenderRule={createSenderRule}
         onFetchBody={fetchEmailBody}
         onSendReply={sendReply}
+        onCategorize={categorizeEmail}
+      />
+
+      <ComposeEmailSheet
+        open={composeOpen}
+        onOpenChange={setComposeOpen}
+        onSend={composeEmail}
       />
     </div>
   );

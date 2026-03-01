@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { Shield, ShieldAlert, ChevronRight, Archive, Star, Check } from 'lucide-react';
+import { Shield, ShieldAlert, ChevronRight, Archive, Star, Check, ArrowUp, ArrowRight, ArrowDown } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { motion, useMotionValue, useTransform, PanInfo } from 'framer-motion';
 import { useCallback, useRef } from 'react';
@@ -172,7 +172,13 @@ export function EmailCard({ thread, onSelect, onArchive, onToggleImportant, sele
           </div>
         </div>
 
-        {!selectMode && <ChevronRight className="w-4 h-4 text-muted-foreground mt-2 shrink-0" />}
+        {/* Priority dot */}
+        <div className="flex flex-col items-center gap-1 mt-2 shrink-0">
+          {!selectMode && email.priority_score <= 2 && <ArrowUp className="w-3 h-3 text-destructive" />}
+          {!selectMode && email.priority_score === 3 && <ArrowRight className="w-3 h-3 text-amber-500" />}
+          {!selectMode && email.priority_score >= 5 && <ArrowDown className="w-3 h-3 text-muted-foreground/50" />}
+          {!selectMode && ![1,2,3,5].includes(email.priority_score) && <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+        </div>
       </motion.div>
     </div>
   );

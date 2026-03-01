@@ -55,6 +55,7 @@ export function useEmails() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectMode, setSelectMode] = useState(false);
   const autoSyncDone = useRef(false);
+  const lastArchived = useRef<{ id: string; email: Email } | null>(null);
 
   const fetchEmails = useCallback(async () => {
     if (!user) return;
@@ -127,9 +128,26 @@ export function useEmails() {
   }, [user]);
 
   const archiveEmail = useCallback(async (emailId: string) => {
+    const emailToArchive = emails.find(e => e.id === emailId);
+    if (emailToArchive) lastArchived.current = { id: emailId, email: emailToArchive };
     await updateEmail(emailId, { user_archived: true });
     setEmails(prev => prev.filter(e => e.id !== emailId));
-    toast.success('Email archived');
+    toast.success('Email archived', {
+      action: {
+        label: 'Undo',
+        onClick: () => undoArchive(),
+      },
+      duration: 5000,
+    });
+  }, [updateEmail, emails]);
+
+  const undoArchive = useCallback(async () => {
+    if (!lastArchived.current) return;
+    const { id, email } = lastArchived.current;
+    await updateEmail(id, { user_archived: false });
+    setEmails(prev => [...prev, email].sort((a, b) => new Date(b.received_at).getTime() - new Date(a.received_at).getTime()));
+    lastArchived.current = null;
+    toast.success('Email restored');
   }, [updateEmail]);
 
   const markImportant = useCallback(async (emailId: string) => {
@@ -154,6 +172,40 @@ export function useEmails() {
     toast.success(`Snoozed until ${until.toLocaleDateString()}`);
   }, [updateEmail]);
 
+  const categorizeEmail = useCallback(async (emailId: string, priority: 'high' | 'medium' | 'low' | 'spam') => {
+    if (!user) return;
+    const email = emails.find(e => e.id === emailId);
+    if (!email) return;
+
+    if (priority === 'spam') {
+      await reportSpam(emailId);
+      return;
+    }
+
+    const mapping = {
+      high: { priority_score: 1, category: 'action_required' },
+      medium: { priority_score: 3, category: 'fyi' },
+      low: { priority_score: 5, category: 'newsletter' },
+    };
+
+    const updates = mapping[priority];
+    await updateEmail(emailId, updates);
+
+    // Create sender rule for the domain
+    const domain = email.from_email.split('@')[1];
+    if (domain) {
+      try {
+        await supabase.from('email_sender_rules').upsert(
+          { user_id: user.id, sender_pattern: `*@${domain}`, default_category: updates.category, default_priority: updates.priority_score } as any,
+          { onConflict: 'user_id,sender_pattern' }
+        );
+      } catch (e) {
+        console.error('Sender rule error:', e);
+      }
+    }
+    toast.success(`Marked as ${priority} priority`);
+  }, [user, emails, updateEmail, reportSpam]);
+
   const createSenderRule = useCallback(async (senderPattern: string, rule: { default_category?: string; default_priority?: number; auto_archive?: boolean }) => {
     if (!user) return;
     try {
@@ -166,7 +218,6 @@ export function useEmails() {
     }
   }, [user]);
 
-  // Fetch full email body
   const fetchEmailBody = useCallback(async (gmailMessageId: string): Promise<string | null> => {
     try {
       const { data, error } = await supabase.functions.invoke('gmail-fetch-email', { body: { messageId: gmailMessageId } });
@@ -174,12 +225,10 @@ export function useEmails() {
       return data?.body || null;
     } catch (e) {
       console.error('Fetch body error:', e);
-      toast.error('Failed to load email body');
       return null;
     }
   }, []);
 
-  // Send reply via Gmail
   const sendReply = useCallback(async (email: Email, replyBody: string): Promise<boolean> => {
     try {
       const { data, error } = await supabase.functions.invoke('gmail-send-reply', {
@@ -196,12 +245,26 @@ export function useEmails() {
     }
   }, []);
 
+  const composeEmail = useCallback(async (to: string, subject: string, body: string): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('gmail-send-reply', {
+        body: { to, subject, body },
+      });
+      if (error) throw error;
+      if (data?.error) { toast.error(data.error); return false; }
+      toast.success('Email sent!');
+      return true;
+    } catch (e) {
+      console.error('Compose error:', e);
+      toast.error('Failed to send email');
+      return false;
+    }
+  }, []);
+
   // Batch operations
   const batchArchive = useCallback(async () => {
     const ids = Array.from(selectedIds);
-    for (const id of ids) {
-      await updateEmail(id, { user_archived: true });
-    }
+    for (const id of ids) await updateEmail(id, { user_archived: true });
     setEmails(prev => prev.filter(e => !selectedIds.has(e.id)));
     setSelectedIds(new Set());
     setSelectMode(false);
@@ -210,9 +273,7 @@ export function useEmails() {
 
   const batchMarkRead = useCallback(async () => {
     const ids = Array.from(selectedIds);
-    for (const id of ids) {
-      await updateEmail(id, { is_read: true });
-    }
+    for (const id of ids) await updateEmail(id, { is_read: true });
     setSelectedIds(new Set());
     setSelectMode(false);
     toast.success(`Marked ${ids.length} as read`);
@@ -220,9 +281,7 @@ export function useEmails() {
 
   const batchReportSpam = useCallback(async () => {
     const ids = Array.from(selectedIds);
-    for (const id of ids) {
-      await updateEmail(id, { user_archived: true, is_spam: true });
-    }
+    for (const id of ids) await updateEmail(id, { user_archived: true, is_spam: true });
     setEmails(prev => prev.filter(e => !selectedIds.has(e.id)));
     setSelectedIds(new Set());
     setSelectMode(false);
@@ -246,7 +305,6 @@ export function useEmails() {
     setSelectMode(false);
   }, []);
 
-  // Search filter
   const filterBySearch = useCallback((emailList: Email[]): Email[] => {
     if (!searchQuery.trim()) return emailList;
     const q = searchQuery.toLowerCase();
@@ -259,7 +317,6 @@ export function useEmails() {
     );
   }, [searchQuery]);
 
-  // Filter snoozed
   const activeEmails = useMemo(() => {
     const now = new Date();
     return emails.filter(e => { if (e.user_snoozed_until) return new Date(e.user_snoozed_until) <= now; return true; });
@@ -270,7 +327,6 @@ export function useEmails() {
     return emails.filter(e => e.user_snoozed_until && new Date(e.user_snoozed_until) > now);
   }, [emails]);
 
-  // Thread grouping
   const groupByThread = useCallback((emailList: Email[]): EmailThread[] => {
     const threadMap = new Map<string, Email[]>();
     const noThread: Email[] = [];
@@ -293,7 +349,6 @@ export function useEmails() {
     return threads;
   }, []);
 
-  // Smart grouping with search
   const grouped = useMemo(() => {
     const searched = filterBySearch(activeEmails);
     const clean = searched.filter(e => !e.is_spam && !e.is_phishing);
@@ -324,7 +379,7 @@ export function useEmails() {
   return {
     emails: viewEmails, grouped, allEmails: activeEmails, loading, syncing, view, setView,
     syncEmails, updateEmail, archiveEmail, markImportant, markAsRead, reportSpam, snoozeEmail, createSenderRule,
-    fetchEmailBody, sendReply,
+    fetchEmailBody, sendReply, composeEmail, categorizeEmail,
     searchQuery, setSearchQuery,
     selectMode, setSelectMode, selectedIds, toggleSelect, selectAll, clearSelection,
     batchArchive, batchMarkRead, batchReportSpam,

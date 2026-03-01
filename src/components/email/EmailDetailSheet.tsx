@@ -2,14 +2,16 @@ import { useState, useCallback, useEffect } from 'react';
 import { Drawer, DrawerContent } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Archive, Star, StarOff, X, ExternalLink, ShieldAlert, Sparkles, Flag, Clock, Copy, Loader2, Ban, Send, ChevronDown, ChevronUp } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Archive, Star, StarOff, X, ExternalLink, ShieldAlert, Sparkles, Flag, Clock, Copy, Loader2, Ban, Send, AlertTriangle, ArrowUp, ArrowRight, ArrowDown } from 'lucide-react';
 import { format, addHours, addDays, nextMonday, setHours, setMinutes } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import type { Email } from '@/hooks/useEmails';
+import type { Email, EmailThread } from '@/hooks/useEmails';
 
 interface EmailDetailSheetProps {
+  thread: EmailThread | null;
   email: Email | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -20,6 +22,7 @@ interface EmailDetailSheetProps {
   onCreateSenderRule?: (pattern: string, rule: { default_category?: string; auto_archive?: boolean }) => void;
   onFetchBody?: (gmailMessageId: string) => Promise<string | null>;
   onSendReply?: (email: Email, body: string) => Promise<boolean>;
+  onCategorize?: (emailId: string, priority: 'high' | 'medium' | 'low' | 'spam') => void;
 }
 
 const sentimentLabels: Record<string, { label: string; className: string }> = {
@@ -37,35 +40,86 @@ function getInitials(name: string | null, email: string): string {
   return email.slice(0, 2).toUpperCase();
 }
 
-export function EmailDetailSheet({ email, open, onOpenChange, onArchive, onToggleImportant, onReportSpam, onSnooze, onCreateSenderRule, onFetchBody, onSendReply }: EmailDetailSheetProps) {
+function getPriorityFromScore(score: number): 'high' | 'medium' | 'low' | null {
+  if (score <= 2) return 'high';
+  if (score <= 3) return 'medium';
+  if (score >= 5) return 'low';
+  return null;
+}
+
+const priorityOptions = [
+  { key: 'high' as const, label: 'High', icon: ArrowUp, activeClass: 'bg-destructive/15 text-destructive border-destructive/30', color: 'text-destructive' },
+  { key: 'medium' as const, label: 'Medium', icon: ArrowRight, activeClass: 'bg-amber-500/15 text-amber-600 border-amber-500/30', color: 'text-amber-600' },
+  { key: 'low' as const, label: 'Low', icon: ArrowDown, activeClass: 'bg-muted text-muted-foreground border-muted-foreground/20', color: 'text-muted-foreground' },
+  { key: 'spam' as const, label: 'Spam', icon: AlertTriangle, activeClass: 'bg-destructive/15 text-destructive border-destructive/30', color: 'text-destructive' },
+];
+
+function EmailBodySkeleton() {
+  return (
+    <div className="space-y-3 p-4">
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="h-4 w-[90%]" />
+      <Skeleton className="h-4 w-[75%]" />
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="h-4 w-[60%]" />
+      <Skeleton className="h-20 w-full" />
+    </div>
+  );
+}
+
+function ThreadMessage({ email, body, bodyLoading }: { email: Email; body: string | null; bodyLoading: boolean }) {
+  return (
+    <div className="border border-border rounded-xl overflow-hidden">
+      <div className="flex items-center gap-3 p-3 bg-muted/30">
+        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-[10px] font-semibold bg-muted text-muted-foreground">
+          {getInitials(email.from_name, email.from_email)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium text-foreground truncate">{email.from_name || email.from_email}</p>
+          <p className="text-[10px] text-muted-foreground">{format(new Date(email.received_at), 'MMM d, h:mm a')}</p>
+        </div>
+      </div>
+      <div className="p-3">
+        {bodyLoading ? (
+          <EmailBodySkeleton />
+        ) : body ? (
+          <div className="email-body-scoped text-sm text-foreground leading-relaxed" dangerouslySetInnerHTML={{ __html: body }} />
+        ) : (
+          <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{email.snippet || email.body_preview || 'No content.'}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function EmailDetailSheet({ thread, email, open, onOpenChange, onArchive, onToggleImportant, onReportSpam, onSnooze, onCreateSenderRule, onFetchBody, onSendReply, onCategorize }: EmailDetailSheetProps) {
   const [showSnooze, setShowSnooze] = useState(false);
-  const [draftReply, setDraftReply] = useState<string | null>(null);
   const [draftLoading, setDraftLoading] = useState(false);
-  const [fullBody, setFullBody] = useState<string | null>(null);
-  const [bodyLoading, setBodyLoading] = useState(false);
+  const [fullBodies, setFullBodies] = useState<Record<string, string | null>>({});
+  const [bodiesLoading, setBodiesLoading] = useState<Set<string>>(new Set());
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
-  const [showReplyComposer, setShowReplyComposer] = useState(false);
-  const [showFullBody, setShowFullBody] = useState(false);
 
   // Reset state when email changes
   useEffect(() => {
-    setDraftReply(null);
-    setFullBody(null);
+    setFullBodies({});
+    setBodiesLoading(new Set());
     setReplyText('');
-    setShowReplyComposer(false);
-    setShowFullBody(false);
     setShowSnooze(false);
   }, [email?.id]);
 
-  // Auto-fetch body when opened
+  // Auto-fetch body for all thread messages when opened
   useEffect(() => {
-    if (open && email && onFetchBody && !fullBody && !bodyLoading) {
-      setBodyLoading(true);
-      onFetchBody(email.gmail_message_id).then(body => {
-        setFullBody(body);
-        setBodyLoading(false);
-      });
+    if (!open || !onFetchBody) return;
+    const emails = thread?.allEmails || (email ? [email] : []);
+    for (const e of emails) {
+      if (!fullBodies[e.gmail_message_id] && !bodiesLoading.has(e.gmail_message_id)) {
+        setBodiesLoading(prev => new Set(prev).add(e.gmail_message_id));
+        onFetchBody(e.gmail_message_id).then(body => {
+          setFullBodies(prev => ({ ...prev, [e.gmail_message_id]: body }));
+          setBodiesLoading(prev => { const n = new Set(prev); n.delete(e.gmail_message_id); return n; });
+        });
+      }
     }
   }, [open, email?.id]);
 
@@ -74,7 +128,9 @@ export function EmailDetailSheet({ email, open, onOpenChange, onArchive, onToggl
   const isPriority = email.priority_score <= 2 || email.is_important;
   const isThreat = email.is_spam || email.is_phishing;
   const sentimentInfo = sentimentLabels[email.sentiment || 'neutral'] || sentimentLabels.neutral;
-  const showDraftButton = email.ai_suggested_action === 'Reply needed' || email.ai_suggested_action === 'Urgent action';
+  const currentPriority = email.is_spam ? 'spam' : getPriorityFromScore(email.priority_score);
+  const threadEmails = thread?.allEmails || [email];
+  const isThread = threadEmails.length > 1;
 
   const handleSnooze = (until: Date) => {
     onSnooze?.(email.id, until);
@@ -96,10 +152,7 @@ export function EmailDetailSheet({ email, open, onOpenChange, onArchive, onToggl
         body: { subject: email.subject, from_name: email.from_name, from_email: email.from_email, snippet: email.snippet || email.body_preview, ai_summary: email.ai_summary },
       });
       if (error) throw error;
-      const draft = data?.draft || '';
-      setDraftReply(draft);
-      setReplyText(draft);
-      setShowReplyComposer(true);
+      setReplyText(data?.draft || '');
     } catch (e) {
       console.error('Draft reply error:', e);
       toast.error('Failed to generate draft reply');
@@ -115,7 +168,6 @@ export function EmailDetailSheet({ email, open, onOpenChange, onArchive, onToggl
     setSending(false);
     if (success) {
       setReplyText('');
-      setShowReplyComposer(false);
       onOpenChange(false);
     }
   };
@@ -136,10 +188,10 @@ export function EmailDetailSheet({ email, open, onOpenChange, onArchive, onToggl
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[90vh] bg-background">
+      <DrawerContent className="max-h-[92vh] bg-background">
         <div className="mx-auto w-12 h-1.5 rounded-full bg-muted-foreground/20 my-3" />
 
-        <div className="px-4 pb-8 space-y-3 overflow-y-auto max-h-[82vh]">
+        <div className="px-4 pb-8 space-y-3 overflow-y-auto max-h-[85vh]">
           {/* Threat Warning */}
           {isThreat && (
             <div className="flex items-start gap-3 p-3 rounded-xl bg-destructive/10 border border-destructive/20">
@@ -163,6 +215,32 @@ export function EmailDetailSheet({ email, open, onOpenChange, onArchive, onToggl
                   <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">{email.ai_suggested_action}</span>
                 )}
                 <span className={cn("text-xs font-medium", sentimentInfo.className)}>{sentimentInfo.label}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Priority Categorization */}
+          {onCategorize && !isThreat && (
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Categorize</span>
+              <div className="flex gap-1.5">
+                {priorityOptions.map(opt => {
+                  const isActive = currentPriority === opt.key;
+                  const Icon = opt.icon;
+                  return (
+                    <button
+                      key={opt.key}
+                      onClick={() => onCategorize(email.id, opt.key)}
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-xs font-medium border transition-all",
+                        isActive ? opt.activeClass : "border-border text-muted-foreground hover:bg-muted/50"
+                      )}
+                    >
+                      <Icon className="w-3 h-3" />
+                      {opt.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -223,70 +301,59 @@ export function EmailDetailSheet({ email, open, onOpenChange, onArchive, onToggl
             {isPriority && <span className="text-xs px-2 py-1 rounded-full bg-amber-500/10 text-amber-600 font-medium">Priority</span>}
           </div>
 
-          {/* Email Body */}
-          <div className="bg-muted/50 rounded-xl p-4 space-y-2">
-            {bodyLoading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin" />Loading email...
-              </div>
-            ) : fullBody ? (
-              <>
-                <div
-                  className={cn("text-sm text-foreground leading-relaxed overflow-hidden", !showFullBody && "max-h-[200px]")}
-                  dangerouslySetInnerHTML={{ __html: fullBody }}
+          {/* Email Body / Thread */}
+          {isThread ? (
+            <div className="space-y-2">
+              <span className="text-xs font-semibold text-muted-foreground">{threadEmails.length} messages in thread</span>
+              {threadEmails.map(e => (
+                <ThreadMessage
+                  key={e.id}
+                  email={e}
+                  body={fullBodies[e.gmail_message_id] ?? null}
+                  bodyLoading={bodiesLoading.has(e.gmail_message_id)}
                 />
-                <button
-                  onClick={() => setShowFullBody(!showFullBody)}
-                  className="flex items-center gap-1 text-xs text-primary hover:underline"
-                >
-                  {showFullBody ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                  {showFullBody ? 'Collapse' : 'Show full email'}
-                </button>
-              </>
-            ) : (
-              <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-                {email.snippet || email.body_preview || 'No preview available.'}
-              </p>
-            )}
-          </div>
-
-          {/* Reply Composer */}
-          {showReplyComposer ? (
-            <div className="space-y-2 border border-border rounded-xl p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-muted-foreground">Reply to {email.from_name || email.from_email}</span>
-                <Button variant="ghost" size="sm" onClick={() => setShowReplyComposer(false)}><X className="w-3 h-3" /></Button>
-              </div>
-              <Textarea
-                value={replyText}
-                onChange={e => setReplyText(e.target.value)}
-                placeholder="Type your reply..."
-                className="min-h-[100px] text-sm"
-              />
-              <div className="flex gap-2">
-                <Button size="sm" className="gap-1.5 flex-1" onClick={handleSendReply} disabled={sending || !replyText.trim()}>
-                  {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                  {sending ? 'Sending...' : 'Send Reply'}
-                </Button>
-                <Button variant="outline" size="sm" onClick={copyDraft}><Copy className="w-3.5 h-3.5" /></Button>
-                <Button variant="outline" size="sm" onClick={() => window.open(`https://mail.google.com/mail/u/0/#inbox/${email.gmail_message_id}`, '_blank')}>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </Button>
-              </div>
+              ))}
             </div>
           ) : (
-            <div className="flex gap-2">
-              <Button variant="outline" className="flex-1 gap-1.5" onClick={() => setShowReplyComposer(true)}>
-                <Send className="w-4 h-4" />Reply
-              </Button>
-              {showDraftButton && (
-                <Button variant="outline" className="flex-1 gap-1.5" onClick={handleDraftReply} disabled={draftLoading}>
-                  {draftLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                  {draftLoading ? 'Drafting...' : 'AI Draft'}
-                </Button>
+            <div className="bg-muted/50 rounded-xl p-4">
+              {bodiesLoading.has(email.gmail_message_id) ? (
+                <EmailBodySkeleton />
+              ) : fullBodies[email.gmail_message_id] ? (
+                <div className="email-body-scoped text-sm text-foreground leading-relaxed" dangerouslySetInnerHTML={{ __html: fullBodies[email.gmail_message_id]! }} />
+              ) : (
+                <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                  {email.snippet || email.body_preview || 'No preview available.'}
+                </p>
               )}
             </div>
           )}
+
+          {/* Reply Composer — always visible */}
+          <div className="space-y-2 border border-border rounded-xl p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted-foreground">Reply to {email.from_name || email.from_email}</span>
+              <Button variant="ghost" size="sm" onClick={handleDraftReply} disabled={draftLoading} className="gap-1 text-xs">
+                {draftLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                AI Draft
+              </Button>
+            </div>
+            <Textarea
+              value={replyText}
+              onChange={e => setReplyText(e.target.value)}
+              placeholder="Type your reply..."
+              className="min-h-[80px] text-sm"
+            />
+            <div className="flex gap-2">
+              <Button size="sm" className="gap-1.5 flex-1" onClick={handleSendReply} disabled={sending || !replyText.trim()}>
+                {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                {sending ? 'Sending...' : 'Send Reply'}
+              </Button>
+              <Button variant="outline" size="sm" onClick={copyDraft} disabled={!replyText}><Copy className="w-3.5 h-3.5" /></Button>
+              <Button variant="outline" size="sm" onClick={() => window.open(`https://mail.google.com/mail/u/0/#inbox/${email.gmail_message_id}`, '_blank')}>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
 
           {/* Always-archive rule */}
           {!isThreat && onCreateSenderRule && (
