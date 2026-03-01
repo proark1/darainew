@@ -1,117 +1,119 @@
 
 
-# Gmail Integration: Smart Email Management
+# World-Class Email Hub -- Smart, Personalized, Secure
 
-## Overview
-Connect your Gmail account to DarAI so emails are automatically fetched, prioritized based on your existing contacts, and intelligently categorized over time. You'll get proactive notifications for important emails without having to check your inbox constantly.
+## What Changes
 
-## How It Works
+Your email panel gets a complete redesign with AI-powered intelligence that goes far beyond basic sync. Every email is analyzed for safety, relevance, and required action -- personalized to you, your contacts, and your work context.
 
-1. **Connect Gmail** -- Uses the same Google OAuth system already in place for Calendar, extended with Gmail read permissions
-2. **Auto-Prioritize** -- Emails from people in your contacts are flagged as priority. Known contacts with "family" or "close_friend" tier get highest priority
-3. **Smart Categories** -- AI analyzes email subjects and senders to categorize (Action Required, FYI, Newsletters, Promotions, etc.)
-4. **Learn Over Time** -- When you mark emails as important/dismiss them, the system learns your preferences
-5. **Notifications** -- Priority emails trigger in-app notifications immediately
+## Key Upgrades
 
-## Architecture
+### 1. AI-Powered Email Analysis (Backend)
+Upgrade the `gmail-sync` edge function with a richer AI prompt that analyzes each email for:
+- **Spam detection** -- flags suspicious patterns, unknown bulk senders
+- **Phishing detection** -- checks for spoofed domains, urgency manipulation, suspicious links
+- **Content summary** -- one-line AI summary of what the email actually needs from you
+- **Sentiment** -- is this positive, neutral, urgent, or concerning?
+- **Suggested action** -- "Reply needed", "Just FYI", "Can ignore", "Review attachment"
 
-```text
-Gmail API  -->  [gmail-sync edge function]  -->  emails table
-                                                    |
-                                            [contact matching]
-                                                    |
-                                            [AI categorization]
-                                                    |
-                                            [notifications]
-```
+The AI receives your contact list context and profile info (business roles, company names) so it knows what's relevant to you personally.
 
-## Implementation Plan
+### 2. New Database Fields
+Add columns to `user_emails` for the new AI analysis:
+- `ai_summary` (text) -- one-line AI summary
+- `ai_suggested_action` (text) -- what you should do
+- `is_spam` (boolean) -- AI spam flag
+- `is_phishing` (boolean) -- AI phishing flag  
+- `threat_reason` (text) -- why it was flagged
+- `sentiment` (text) -- positive/neutral/urgent/warning
 
-### 1. Database: Create emails table and preferences
-- `user_emails` table: stores synced emails (sender, subject, snippet, date, labels, is_read, priority_score, category, contact_id if matched)
-- `email_preferences` table: stores learned rules (sender patterns, category overrides, priority overrides)
-- RLS policies so each user only sees their own emails
+### 3. Redesigned Email Panel (UI)
+A clean, minimalist interface with smart grouping:
 
-### 2. Extend Google OAuth for Gmail scope
-- Modify `calendar-oauth-start` to include `gmail.readonly` scope alongside calendar scopes
-- Store the same tokens (they already support multiple scopes)
-- Create a new `gmail-oauth-start` edge function for Gmail-only connections if calendar isn't connected
+**Smart Sections (not just filter tabs):**
+- **Needs Your Attention** -- action required emails from known contacts, sorted by priority
+- **FYI** -- informational emails you should see but don't need to act on
+- **Newsletters & Promotions** -- auto-grouped, collapsed by default
+- **Flagged** -- spam/phishing warnings with clear visual indicators
 
-### 3. Create `gmail-sync` edge function
-- Fetches recent emails from Gmail API using stored OAuth tokens
-- Matches sender email against `user_contacts` table to find known contacts
-- Assigns priority score: contacts get high priority, unknown senders get lower
-- Uses AI (Gemini Flash) to categorize emails into: Action Required, Waiting, FYI, Newsletter, Promotion
-- Stores results in `user_emails` table
-- Creates notifications for high-priority emails
+**Each Email Card shows:**
+- Sender avatar (initials or contact photo)
+- AI-generated one-line summary instead of raw snippet
+- Priority indicator based on contact tier
+- Suggested action chip ("Reply", "Review", "FYI")
+- Threat badge if spam/phishing detected
 
-### 4. Create `EmailPanel` component
-- New panel accessible from the "More" sheet and sidebar
-- Shows emails grouped by priority: Priority (from contacts), Action Required, Other
-- Each email shows: sender name/avatar (linked to contact if matched), subject, snippet, time
-- Tap to expand full email preview
-- Swipe actions: Archive, Snooze, Mark Important
-- Filter tabs: All, Priority, Action Required, FYI
+**Email Detail Sheet upgrades:**
+- AI summary section at top with suggested action
+- Phishing/spam warning banner if flagged (red alert with reason)
+- Contact card link if sender is a known contact
+- "Open in Gmail" button remains for full access
+- Quick actions: Archive, Mark Important, Report Spam
 
-### 5. Contact-Based Priority System
-- When emails sync, sender email is matched against `user_contacts.email`
-- If matched: priority is based on contact tier (family/close_friend = P1, friend = P2, business = P3)
-- If not matched but from same domain as a known contact: medium priority
-- Unknown senders: low priority, AI categorizes
+### 4. Personalization Context
+The AI prompt includes:
+- Your name and roles (Medieval Empires, OYA Play, Eleven Labs)
+- Your contact list with tiers so it knows who matters most
+- Domain matching (emails from company domains get business priority)
 
-### 6. AI Learning System
-- Track user actions (mark important, archive, snooze) in `email_preferences`
-- Over time, build sender-level and pattern-level rules
-- Example: "Emails from *@company.com are always Action Required"
-- Example: "Emails with 'invoice' in subject are always Priority"
-- AI uses these learned preferences when categorizing new emails
+### 5. Filter Tabs Redesign
+Replace current tabs with cleaner segmentation:
+- **Smart Inbox** (default) -- AI-curated view, important first
+- **All** -- everything chronologically
+- **Flagged** -- spam/phishing alerts
 
-### 7. Proactive Notifications
-- High-priority emails (from contacts) trigger immediate in-app notification
-- Morning briefing includes email summary ("You have 3 priority emails")
-- Dashboard shows email count pill in StatPills
-
-## Technical Details
-
-### Files to Create
-- `src/components/email/EmailPanel.tsx` -- Main email management UI
-- `src/components/email/EmailCard.tsx` -- Individual email display component
-- `src/components/email/EmailDetailSheet.tsx` -- Full email view in bottom sheet
-- `src/hooks/useEmails.ts` -- Hook for fetching/managing emails
-- `src/hooks/useGmailConnection.ts` -- Hook for Gmail OAuth connection
-- `supabase/functions/gmail-sync/index.ts` -- Edge function to sync emails from Gmail API
-- `supabase/functions/gmail-oauth-start/index.ts` -- OAuth flow for Gmail scopes
+## Technical Plan
 
 ### Files to Modify
-- `src/components/layout/MoreSheet.tsx` -- Add Email icon to the navigation grid
-- `src/components/layout/Sidebar.tsx` -- Add Email to Business group with unread badge
-- `src/components/layout/MobileLayout.tsx` -- Register email panel
-- `src/components/layout/StandardMode.tsx` -- Register email panel for desktop
-- `src/components/dashboard/StatPills.tsx` -- Add email count pill
-- `src/components/dashboard/DashboardHero.tsx` -- Include email summary in greeting
-- `src/contexts/LanguageContext.tsx` -- Add translation keys for email features
 
-### Database Tables (via migration)
+**`supabase/functions/gmail-sync/index.ts`**
+- Expand AI categorization prompt to include spam/phishing detection, summary generation, sentiment analysis, and suggested actions
+- Pass user profile context (name, companies) and contact names to the AI
+- Add new tool-call schema with fields: category, priority_boost, summary, suggested_action, is_spam, is_phishing, threat_reason, sentiment
+- Store all new fields in the database
 
-**`user_emails`**
-- id, user_id, gmail_message_id (unique), thread_id
-- from_email, from_name, to_email, subject, snippet, body_preview
-- received_at, is_read, is_starred, gmail_labels (text array)
-- matched_contact_id (FK to user_contacts, nullable)
-- priority_score (1-5), category (action_required, waiting, fyi, newsletter, promotion, other)
-- user_archived, user_snoozed_until, is_important (user override)
-- created_at, updated_at
+**`src/hooks/useEmails.ts`**
+- Update Email interface with new fields (ai_summary, ai_suggested_action, is_spam, is_phishing, threat_reason, sentiment)
+- Add `reportSpam` action that archives + marks as spam
+- Update filter logic: "smart" view groups by sections, "flagged" shows threats
+- Add `markAsRead` function
 
-**`email_sender_rules`**
-- id, user_id, sender_pattern (e.g. "*@company.com" or "person@email.com")
-- default_category, default_priority, auto_archive
-- learned_from_count (how many actions informed this rule)
-- created_at, updated_at
+**`src/components/email/EmailPanel.tsx`**
+- Complete redesign with section-based layout (Needs Attention, FYI, Low Priority)
+- New filter tabs: Smart Inbox, All, Flagged
+- Section headers with counts
+- Empty states per section
+- Pull-to-refresh support
 
-### Key Design Decisions
-- Gmail API is read-only (gmail.readonly scope) -- no sending/deleting from DarAI
-- Emails sync on demand + periodic background sync via the existing notification system
-- AI categorization uses Gemini Flash (fast, cheap) for subject/sender analysis
-- Contact matching is done server-side during sync for efficiency
-- Tokens are reused from the existing Google OAuth infrastructure (same client ID/secret)
+**`src/components/email/EmailCard.tsx`**
+- Show AI summary instead of raw snippet
+- Add suggested action chip
+- Threat warning badge for spam/phishing
+- Sender initials avatar with contact-tier color coding
+- Swipe-to-archive gesture support
+
+**`src/components/email/EmailDetailSheet.tsx`**
+- AI analysis section at top (summary + suggested action)
+- Phishing/spam warning banner with threat reason
+- Contact link if matched
+- Report spam button
+- Mark as read on open
+
+### Database Migration
+Add new columns to `user_emails`:
+```text
+ai_summary        TEXT
+ai_suggested_action TEXT
+is_spam           BOOLEAN DEFAULT false
+is_phishing       BOOLEAN DEFAULT false
+threat_reason     TEXT
+sentiment         TEXT DEFAULT 'neutral'
+```
+
+### AI Prompt Design
+The upgraded prompt gives the AI your personal context:
+- "You are analyzing emails for Asad, who runs Medieval Empires, OYA Play, and Eleven Labs"
+- Contact list with tiers so it knows family vs business vs unknown
+- Checks for phishing indicators: mismatched domains, urgency language, suspicious URLs
+- Returns structured data via tool calling for reliable parsing
 
