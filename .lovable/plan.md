@@ -1,99 +1,106 @@
 
+# DarAI Assistant -- Intelligent Context Injection (Token-Efficient)
 
-# Task Feature — World-Class UI/UX Upgrade
+## Problem
 
-## Current State Assessment
+The assistant currently receives tasks, events, and health data every message -- but has zero access to user profile, contacts, contracts, family, emails, notes, or habits. Sending all of this every time would be wasteful. We need a smart pre-filter that only injects what's relevant to the current message.
 
-The task system is functional but has several friction points:
-- **Deleting is destructive** — no undo, no confirmation, instant permanent delete
-- **No task completion animation** beyond confetti — the item just disappears
-- **Completed tasks section is flat** — no clear all, no auto-hide after time
-- **Empty state is minimal** — just text and a link
-- **No progress summary** at the top of the task list
-- **Swipe-to-delete has no undo** — accidentally swiping left permanently deletes
+## Solution: Two-Tier Context Architecture
 
-## What Changes
+### Tier 1: Always Send (Tiny, ~200 tokens)
+These are small and always useful:
+- **User profile** (name, role, businesses, location, goals) -- ~80 tokens
+- **Stats summary** (counts only: "62 contacts, 14 contracts, 5 unread emails, 3 active habits") -- ~30 tokens
+- Already-sent data: tasks, events, health (unchanged)
 
-### 1. Undo Delete with Toast (Critical Safety Net)
+### Tier 2: Smart-Filtered (Only When Relevant)
+Use keyword detection on the user's message to decide what extra context to inject:
 
-When a task is deleted (via swipe, button, or bulk), show a 5-second "Undo" toast instead of permanently deleting immediately. The task is removed from the UI instantly (feels snappy) but can be restored with one tap.
+| Trigger Keywords | Data Injected |
+|---|---|
+| contact names, "who do I know", city names, "investor", "developer" | Filtered contacts (max 10) via existing `useSmartContext` |
+| "contract", "subscription", "cost", "renewal", "how much" | Filtered contracts (max 10) |
+| "email", "inbox", "unread", "mail", sender names | Top 5 unread emails (subject + sender + snippet only) |
+| "note", "notes", "what did I write", "remember" | Top 5 recent notes (title + first 80 chars) |
+| "habit", "streak", "routine", "consistency" | Active habits with streaks (max 10) |
+| "family", "kids", child names, "school", "shopping list" | Full family context (members, events, lists) |
+| "recipe", "meal", "cook", "dinner" | This week's meal plan |
 
-- Soft-delete pattern: mark as `trashed: true` in state, actually delete from DB after 5s
-- Toast shows task title + Undo button
-- Works for both single and bulk delete
+This means a simple "add a task" message sends ~200 extra tokens. A "who do I know in Dubai?" message sends ~400 extra tokens with the 10 relevant contacts. Only "tell me everything" type questions get the full payload.
 
-### 2. Task Completion Animation
+## How It Works
 
-When completing a task, add a satisfying micro-animation:
-- The checkbox morphs to a filled circle with a scale-bounce
-- The task text gets a strikethrough animation (left to right wipe)
-- The row fades and slides down into the "Completed" section after a 600ms delay
-- This makes task completion feel rewarding and tangible
+### New utility: `buildSmartPayload` in Index.tsx
 
-### 3. Smart Task Stats Bar
+A single function that:
+1. Takes the user's message + all available data sources
+2. Runs keyword matching (reuses `INTENT_KEYWORDS` and `LOCATIONS` from `useSmartContext`)
+3. Returns only the relevant slices as a compact context object
+4. Passes it to `streamChat`
 
-Replace the plain "X remaining" text in the header with a compact stats row:
-- Tasks remaining count (with animated counter)
-- Overdue count (red, only if > 0)
-- Completed today count
-- A thin progress bar showing % complete for the day
+### Keyword Detection Categories (new)
 
-### 4. Improved Completed Section
-
-- Auto-collapse completed tasks after 5 items (show "Show all X completed" toggle)
-- Add a "Clear completed" button to bulk-remove done tasks
-- Show completion time relative ("2 hours ago")
-
-### 5. Better Empty State
-
-When no tasks exist, show an encouraging animated illustration:
-- Checkmark animation (reuse existing success-checkmark component)
-- "Nothing on your plate" message
-- Quick-add prompt with category suggestions ("Add a personal task", "Add a work task")
-
-### 6. Inline Quick Edit
-
-- Tap on a task title to edit it inline (no modal needed for simple title changes)
-- Long-press opens the full edit modal
-- This reduces friction for the most common edit: renaming a task
-
-### 7. Swipe Gesture Improvements
-
-- Add haptic feedback threshold indicator (subtle color intensification as you approach the trigger point)
-- Show "Release to delete" / "Release to complete" text labels on the swipe backgrounds
-- Swipe-to-delete triggers the undo toast instead of permanent delete
-
----
+Extend the existing `useSmartContext` keyword system with:
+- **email**: "email", "inbox", "unread", "mail", "message from", "reply to"
+- **notes**: "note", "notes", "wrote", "saved", "remember"
+- **habits**: "habit", "streak", "routine", "consistency", "daily"
+- **family**: "family", "kids", "children", "school", "kindergarten", "wife", "husband", child names (dynamic)
+- **shopping**: "shopping", "groceries", "buy", "shopping list"
 
 ## Technical Plan
 
 ### Files to Modify
 
-**`src/components/tasks/TaskList.tsx`**
-- Add stats bar below the header showing: remaining, overdue, completed today, progress %
-- Implement undo-delete pattern: `trashedTasks` state + timeout-based actual deletion
-- Wrap `onDeleteTask` calls with undo toast logic
-- Collapse completed section to max 5 items with toggle
-- Add "Clear completed" button
-- Show relative time for completed tasks
-- Better empty state with category quick-add buttons
+**`src/pages/Index.tsx`**
+- Import `useUserProfile`, `useFamilyMembers`, `useShoppingLists`, `useHabits`, `useEmails`
+- In `handleSendMessage`, call a new `buildSmartPayload(userText, ...)` function that:
+  - Always includes: userProfile, stats counts
+  - Keyword-scans `userText` to decide which optional data to include
+  - Filters contacts/contracts via `useSmartContext` logic (already exists)
+  - Conditionally includes: emails (top 5 unread), notes (top 5 recent titles), habits (active with streaks), family context
+- Pass the resulting payload fields to `streamChat`
 
-**`src/components/tasks/SwipeableTaskItem.tsx`**
-- Add text labels ("Complete" / "Delete") on swipe action backgrounds
-- Add progressive color intensification as drag approaches threshold
-- Change delete action to trigger undo flow (via callback change)
+**`src/hooks/useAIChat.ts`**
+- Extend `streamChat` params to accept: `emailSummary`, `notesSummary`, `habitsSummary` (all optional lightweight arrays)
+- Pass them through to the edge function
 
-**`src/components/tasks/SortableTaskItem` (inside TaskList.tsx)**
-- Add inline title editing on tap (controlled input that activates on click)
-- Completion animation: framer-motion `AnimatePresence` with exit animation (slide + fade)
+**`supabase/functions/chat/index.ts`**
+- Extend `ChatRequest` interface with `emailSummary`, `notesSummary`, `habitsSummary`
+- Add context sections when these are present:
+  - Emails: "You have X unread emails. Top priorities: [subject from sender]..."
+  - Notes: "Recent notes: [title snippets]..."
+  - Habits: "Active habits: [name - X day streak]..."
+- Add instructions in system prompt so the AI knows it can reference these
 
-**`src/hooks/useUndoDelete.ts`**
-- Already exists but is unused — wire it into TaskList's delete flow
-- Extend to support bulk undo (array of items)
+### Smart Payload Builder Logic (pseudocode)
 
-**`src/components/calendar/CalendarHubPanel.tsx`**
-- Pass undo-delete handler down to TaskList
+```text
+function buildSmartPayload(message, allData):
+  payload = { userProfile, stats: { counts only } }
+  
+  lowerMsg = message.toLowerCase()
+  
+  // Always-on: profile + stats (tiny)
+  // Conditional:
+  if matches(email_keywords):   payload.emails = top5Unread
+  if matches(note_keywords):    payload.notes = top5Recent  
+  if matches(habit_keywords):   payload.habits = activeWithStreaks
+  if matches(family_keywords):  payload.family = fullFamilyContext
+  if matches(contact_keywords): payload.contacts = filteredContacts
+  if matches(contract_keywords): payload.contracts = filteredContracts
+  
+  return payload
+```
+
+### Token Budget Estimates
+
+| Scenario | Extra Tokens |
+|---|---|
+| Simple task command ("add a task") | ~200 (profile + stats only) |
+| Contact query ("who in Dubai?") | ~400 (+ 10 contacts) |
+| Email question ("any important emails?") | ~350 (+ 5 email summaries) |
+| Family question ("what's the kids' schedule?") | ~500 (+ family context) |
+| Everything question ("what's going on?") | ~1200 (all categories) |
 
 ### No database changes needed
-All improvements are UI/UX and hook logic only.
-
+All data sources already exist. This is purely about wiring existing hooks with smart filtering into the chat pipeline.
