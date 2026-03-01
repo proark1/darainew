@@ -23,6 +23,12 @@ import { useAppleHealth } from '@/hooks/useAppleHealth';
 import { useFamilyEvents } from '@/hooks/useFamilyEvents';
 import { useNotes } from '@/hooks/useNotes';
 import { useWakeWordDetection } from '@/hooks/useWakeWordDetection';
+import { useUserProfile } from '@/hooks/useUserProfile';
+import { useFamilyMembers } from '@/hooks/useFamilyMembers';
+import { useShoppingLists } from '@/hooks/useShoppingLists';
+import { useHabits } from '@/hooks/useHabits';
+import { useEmails } from '@/hooks/useEmails';
+import { buildSmartPayload } from '@/lib/smartPayloadBuilder';
 import { StandardMode } from '@/components/layout/StandardMode';
 import { GhostMode } from '@/components/ghost/GhostMode';
 import { ProfileSettingsDialog } from '@/components/settings/ProfileSettingsDialog';
@@ -34,6 +40,7 @@ import { CallProvider } from '@/components/calling/CallProvider';
 import { CalendarEvent, ChatMessage, AppMode, Task } from '@/types/flux';
 import { useToast } from '@/hooks/use-toast';
 import { differenceInCalendarDays, startOfDay, subDays, isAfter, isBefore, addDays } from 'date-fns';
+import { Contract as SmartContract } from '@/hooks/useSmartContext';
 
 const Index = () => {
   const { toast } = useToast();
@@ -173,7 +180,22 @@ const Index = () => {
   const { events: familyEvents, getUpcomingEvents: getUpcomingFamilyEvents } = useFamilyEvents();
 
   // Notes for voice assistant
-  const { createNote } = useNotes(user?.id);
+  const { createNote, notes } = useNotes(user?.id);
+
+  // User profile for AI context
+  const { profile: userProfile } = useUserProfile();
+
+  // Family members for AI context
+  const { members: familyMembers } = useFamilyMembers();
+
+  // Shopping lists for AI context
+  const { lists: shoppingLists } = useShoppingLists();
+
+  // Habits for AI context
+  const { todayHabits } = useHabits(user?.id);
+
+  // Emails for AI context
+  const { allEmails, unreadCount: unreadEmailCount } = useEmails();
 
   // Contract reminders - creates tasks for contracts ending within 3 months
   useContractReminders({
@@ -446,6 +468,48 @@ const Index = () => {
         return taskDate >= startOfToday && taskDate < addDays(startOfToday, 1);
       });
 
+      // Build smart context payload based on message keywords
+      const activeContracts: SmartContract[] = contracts.filter(c => c.isActive !== false).map(c => ({
+        id: c.id,
+        name: c.name,
+        provider: c.provider || undefined,
+        category: c.category,
+        costAmount: c.costAmount || undefined,
+        costFrequency: c.costFrequency || undefined,
+        renewalDate: c.renewalDate ? c.renewalDate.toISOString().split('T')[0] : undefined,
+        endDate: c.endDate ? c.endDate.toISOString().split('T')[0] : undefined,
+        autoRenews: c.autoRenews || undefined,
+        isActive: c.isActive || undefined,
+      }));
+
+      const habitsSummary = todayHabits.map(h => ({
+        name: h.name,
+        streak: h.streak,
+        isCompletedToday: h.isCompleted,
+        frequency: h.frequency,
+      }));
+
+      const pendingTaskCount = tasks.filter(t => !t.completed).length;
+      const smartPayload = buildSmartPayload({
+        message: userText,
+        userProfile: userProfile || undefined,
+        contacts,
+        contracts: activeContracts,
+        emails: allEmails,
+        notes,
+        habits: habitsSummary,
+        familyMembers,
+        shoppingLists,
+        stats: {
+          totalContacts: contacts.length,
+          totalContracts: activeContracts.length,
+          pendingTasks: pendingTaskCount,
+          upcomingEvents: allUpcomingEvents.length,
+          unreadEmails: unreadEmailCount,
+          activeHabits: todayHabits.length,
+        },
+      });
+
       await streamChat({
         messages: conversationMessages,
         tasks,
@@ -453,6 +517,36 @@ const Index = () => {
         overdueTasks,
         todayTasks,
         healthData,
+        // Smart payload context
+        userProfile: smartPayload.userProfile,
+        relevantContacts: smartPayload.relevantContacts
+          ? contacts.filter(c => smartPayload.relevantContacts!.some(rc => rc.name === c.name)).slice(0, 10)
+          : undefined,
+        relevantContracts: smartPayload.relevantContracts,
+        statsSummary: smartPayload.statsSummary,
+        emailSummary: smartPayload.emailSummary,
+        notesSummary: smartPayload.notesSummary,
+        habitsSummary: smartPayload.habitsSummary,
+        familyContext: smartPayload.familyContext ? {
+          members: smartPayload.familyContext.members.map(m => ({
+            id: '',
+            ...m,
+            school: m.school || null,
+            grade: null,
+            teacherName: null,
+            teacherContact: null,
+            kindergarten: null,
+            kindergartenTeacher: null,
+            activities: m.activities.map(a => ({ name: a, schedule: '', location: '' })),
+            allergies: [],
+            medicalNotes: null,
+            livesWithUser: true,
+          })),
+          todayEvents: [],
+          tomorrowEvents: [],
+          upcomingBirthdays: [],
+          shoppingLists: smartPayload.familyContext.shoppingLists,
+        } : undefined,
         onDelta: (delta) => {
           assistantContent += delta;
         },
@@ -607,7 +701,7 @@ const Index = () => {
     } finally {
       sendLockRef.current = false;
     }
-  }, [addMessage, addTask, addEvent, deleteTask, toggleTaskComplete, updateTask, events, messages, settings, streamChat, tasks, toast]);
+  }, [addMessage, addTask, addEvent, deleteTask, toggleTaskComplete, updateTask, events, messages, settings, streamChat, tasks, toast, contacts, contracts, allEmails, notes, todayHabits, familyMembers, shoppingLists, userProfile, unreadEmailCount, createNote]);
 
   const handleGhostCommand = useCallback((command: string) => {
     handleSendMessage(command);

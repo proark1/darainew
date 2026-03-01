@@ -140,6 +140,11 @@ interface ChatRequest {
   healthData?: HealthData;
   // Family context
   familyContext?: FamilyContext;
+  // Smart payload fields
+  statsSummary?: string;
+  emailSummary?: { subject: string; from: string; priority: string; snippet: string }[];
+  notesSummary?: { title: string; snippet: string; tags: string[] }[];
+  habitsSummary?: { name: string; streak: number; isCompletedToday: boolean; frequency: string }[];
 }
 
 const personalityPrompts: Record<string, string> = {
@@ -410,6 +415,11 @@ serve(async (req) => {
       contextSummary,
       healthData,
       familyContext,
+      // Smart payload fields
+      statsSummary,
+      emailSummary,
+      notesSummary,
+      habitsSummary,
     }: ChatRequest = await req.json();
     
     const personalityAddition = personalityPrompts[personality] || personalityPrompts.balanced;
@@ -750,6 +760,40 @@ serve(async (req) => {
         contextMessage += `\n\n### Active Shopping Lists:`;
         contextMessage += familyContext.shoppingLists.map(l => `\n- ${l.name} (${l.itemCount} items)`).join('');
       }
+    }
+
+    // Smart payload: stats summary
+    if (statsSummary) {
+      contextMessage += `\n\n## USER DATA OVERVIEW: ${statsSummary}`;
+    }
+
+    // Smart payload: emails
+    if (emailSummary && emailSummary.length > 0) {
+      contextMessage += `\n\n## RECENT UNREAD EMAILS (${emailSummary.length}):`;
+      for (const e of emailSummary) {
+        contextMessage += `\n- [${e.priority}] "${e.subject}" from ${e.from}${e.snippet ? ` — ${e.snippet}` : ''}`;
+      }
+      contextMessage += `\nYou can help the user triage, summarize, or respond to these emails.`;
+    }
+
+    // Smart payload: notes
+    if (notesSummary && notesSummary.length > 0) {
+      contextMessage += `\n\n## RECENT NOTES (${notesSummary.length}):`;
+      for (const n of notesSummary) {
+        const tags = n.tags.length > 0 ? ` [${n.tags.join(', ')}]` : '';
+        contextMessage += `\n- "${n.title}"${tags}: ${n.snippet}...`;
+      }
+      contextMessage += `\nYou can reference these notes when the user asks about things they've written down.`;
+    }
+
+    // Smart payload: habits
+    if (habitsSummary && habitsSummary.length > 0) {
+      contextMessage += `\n\n## ACTIVE HABITS:`;
+      for (const h of habitsSummary) {
+        const status = h.isCompletedToday ? '✅' : '⬜';
+        contextMessage += `\n- ${status} ${h.name} (${h.frequency}) — ${h.streak} day streak`;
+      }
+      contextMessage += `\nEncourage the user about their streaks and remind about incomplete habits.`;
     }
 
     const fullSystemPrompt = baseSystemPrompt + '\n\nPersonality: ' + personalityAddition + contextMessage;
