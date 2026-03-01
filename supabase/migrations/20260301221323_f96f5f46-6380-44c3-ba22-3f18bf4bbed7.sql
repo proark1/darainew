@@ -1,0 +1,1 @@
+ALTER TABLE external_calendar_connections ADD COLUMN IF NOT EXISTS gmail_history_id text;

@@ -68,7 +68,7 @@ export function useEmails() {
         .eq('user_id', user.id)
         .eq('user_archived', false)
         .order('received_at', { ascending: false })
-        .limit(100);
+        .limit(200);
       if (error) throw error;
       setEmails((data as unknown as Email[]) || []);
     } catch (e) {
@@ -90,7 +90,12 @@ export function useEmails() {
       if (data?.error === 'gmail_scope_missing') { toast.error('Gmail access not authorized.'); return; }
       if (data?.error) { toast.error(data.message || 'Failed to sync emails'); return; }
       localStorage.setItem(SYNC_KEY, Date.now().toString());
-      toast.success(`Synced ${data?.synced || 0} emails`);
+      const newCount = data?.newEmails || 0;
+      if (newCount > 0) {
+        toast.success(`${newCount} new email${newCount !== 1 ? 's' : ''} synced`);
+      } else {
+        toast.success('Inbox up to date');
+      }
       await fetchEmails();
     } catch (e) {
       console.error('Sync error:', e);

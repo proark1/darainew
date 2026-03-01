@@ -1220,6 +1220,7 @@ export type Database = {
           color: string | null
           created_at: string
           external_calendar_id: string | null
+          gmail_history_id: string | null
           id: string
           last_synced_at: string | null
           name: string
@@ -1237,6 +1238,7 @@ export type Database = {
           color?: string | null
           created_at?: string
           external_calendar_id?: string | null
+          gmail_history_id?: string | null
           id?: string
           last_synced_at?: string | null
           name: string
@@ -1254,6 +1256,7 @@ export type Database = {
           color?: string | null
           created_at?: string
           external_calendar_id?: string | null
+          gmail_history_id?: string | null
           id?: string
           last_synced_at?: string | null
           name?: string
