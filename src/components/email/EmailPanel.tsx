@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useEmails, EmailView, Email, EmailThread } from '@/hooks/useEmails';
 import { useGmailConnection } from '@/hooks/useGmailConnection';
 import { EmailCard } from './EmailCard';
@@ -7,9 +7,11 @@ import { ComposeEmailSheet } from './ComposeEmailSheet';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
-import { RefreshCw, Mail, Inbox, ShieldAlert, Loader2, PlugZap, ChevronDown, ChevronRight, Sparkles, Clock, Search, X, CheckSquare, Archive, Eye, Flag, Plus } from 'lucide-react';
+import { RefreshCw, Mail, Inbox, ShieldAlert, Loader2, PlugZap, ChevronDown, ChevronRight, Sparkles, Clock, Search, X, CheckSquare, Archive, Eye, Flag, Plus, PartyPopper, Zap, CheckCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { motion, useMotionValue, useTransform } from 'framer-motion';
+import { AnimatedCounter } from '@/components/ui/animated-counter';
 
 function EmailSection({ title, count, threads, defaultOpen = true, onSelect, onArchive, onToggleImportant, icon: Icon, selectMode, selectedIds, onToggleSelect }: {
   title: string;
@@ -58,6 +60,52 @@ function EmailSection({ title, count, threads, defaultOpen = true, onSelect, onA
   );
 }
 
+function StatsBanner({ unread, priority, handled }: { unread: number; priority: number; handled: number }) {
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 bg-muted/30 rounded-lg text-xs">
+      <div className="flex items-center gap-1.5">
+        <Mail className="w-3 h-3 text-primary" />
+        <span className="text-muted-foreground">Unread</span>
+        <AnimatedCounter value={unread} className="font-semibold text-foreground" />
+      </div>
+      <div className="w-px h-3 bg-border" />
+      <div className="flex items-center gap-1.5">
+        <Zap className="w-3 h-3 text-destructive" />
+        <span className="text-muted-foreground">Priority</span>
+        <AnimatedCounter value={priority} className="font-semibold text-foreground" />
+      </div>
+      <div className="w-px h-3 bg-border" />
+      <div className="flex items-center gap-1.5">
+        <CheckCheck className="w-3 h-3 text-emerald-500" />
+        <span className="text-muted-foreground">Handled</span>
+        <AnimatedCounter value={handled} className="font-semibold text-foreground" />
+      </div>
+    </div>
+  );
+}
+
+function InboxZeroState() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="flex flex-col items-center justify-center py-16 text-center space-y-3"
+    >
+      <motion.div
+        initial={{ rotate: -10 }}
+        animate={{ rotate: [0, -10, 10, -5, 5, 0] }}
+        transition={{ duration: 0.8, delay: 0.2 }}
+      >
+        <PartyPopper className="w-12 h-12 text-primary" />
+      </motion.div>
+      <h3 className="text-lg font-semibold text-foreground">All caught up! 🎉</h3>
+      <p className="text-sm text-muted-foreground max-w-xs">
+        You've handled everything. Enjoy your free time — we'll notify you when something important comes in.
+      </p>
+    </motion.div>
+  );
+}
+
 export function EmailPanel() {
   const { isConnected, loading: connectionLoading, connectGmail } = useGmailConnection();
   const {
@@ -67,14 +115,27 @@ export function EmailPanel() {
     searchQuery, setSearchQuery,
     selectMode, setSelectMode, selectedIds, toggleSelect, clearSelection,
     batchArchive, batchMarkRead, batchReportSpam,
-    unreadCount, priorityCount, flaggedCount, lastSyncTime,
+    unreadCount, priorityCount, flaggedCount, lastSyncTime, handledToday,
   } = useEmails();
   const [selectedThread, setSelectedThread] = useState<EmailThread | null>(null);
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
 
-  // Find thread for an email
+  // Pull-to-refresh
+  const pullY = useMotionValue(0);
+  const pullOpacity = useTransform(pullY, [0, 60], [0, 1]);
+  const pullRotate = useTransform(pullY, [0, 60], [0, 360]);
+  const isPulling = useRef(false);
+
+  const handlePullEnd = useCallback(() => {
+    if (pullY.get() > 50 && !syncing) {
+      syncEmails();
+    }
+    pullY.set(0);
+    isPulling.current = false;
+  }, [pullY, syncing, syncEmails]);
+
   const findThread = (email: Email): EmailThread | null => {
     const allThreads = [...(grouped.attention || []), ...(grouped.fyi || []), ...(grouped.lowPriority || []), ...(grouped.flagged || []), ...(grouped.snoozed || [])];
     return allThreads.find(t => t.latestEmail.id === email.id || t.allEmails.some(e => e.id === email.id)) || null;
@@ -112,6 +173,8 @@ export function EmailPanel() {
       </div>
     );
   }
+
+  const hasEmails = grouped.attention.length > 0 || grouped.fyi.length > 0 || grouped.lowPriority.length > 0;
 
   return (
     <div className="h-full flex flex-col relative">
@@ -160,6 +223,8 @@ export function EmailPanel() {
               </div>
             </div>
 
+            <StatsBanner unread={unreadCount} priority={priorityCount} handled={handledToday} />
+
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <Input
@@ -189,9 +254,26 @@ export function EmailPanel() {
         )}
       </div>
 
+      {/* Pull-to-refresh indicator */}
+      <motion.div
+        className="flex items-center justify-center py-2 overflow-hidden"
+        style={{ opacity: pullOpacity, height: useTransform(pullY, [0, 60], [0, 40]) }}
+      >
+        <motion.div style={{ rotate: pullRotate }}>
+          <RefreshCw className="w-4 h-4 text-primary" />
+        </motion.div>
+      </motion.div>
+
       {/* Content */}
       <ScrollArea className="flex-1">
-        <div className="p-2 space-y-2">
+        <motion.div
+          className="p-2 space-y-2"
+          drag="y"
+          dragConstraints={{ top: 0, bottom: 0 }}
+          dragElastic={{ top: 0.3, bottom: 0 }}
+          style={{ y: pullY }}
+          onDragEnd={handlePullEnd}
+        >
           {loading ? (
             <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
           ) : view === 'smart' ? (
@@ -205,14 +287,21 @@ export function EmailPanel() {
               {grouped.snoozed.length > 0 && (
                 <EmailSection title="Snoozed" count={grouped.snoozed.length} threads={grouped.snoozed} defaultOpen={false} onSelect={handleSelect} icon={Clock} selectMode={selectMode} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
               )}
-              {grouped.attention.length === 0 && grouped.fyi.length === 0 && grouped.lowPriority.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-12 text-center space-y-2">
-                  <Inbox className="w-10 h-10 text-muted-foreground/50" />
-                  <p className="text-sm text-muted-foreground">{searchQuery ? 'No emails match your search.' : 'No emails yet. Tap Sync to fetch.'}</p>
-                  {!searchQuery && (
+              {!hasEmails && grouped.flagged.length === 0 && (
+                searchQuery ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center space-y-2">
+                    <Inbox className="w-10 h-10 text-muted-foreground/50" />
+                    <p className="text-sm text-muted-foreground">No emails match your search.</p>
+                  </div>
+                ) : !loading && unreadCount === 0 ? (
+                  <InboxZeroState />
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 text-center space-y-2">
+                    <Inbox className="w-10 h-10 text-muted-foreground/50" />
+                    <p className="text-sm text-muted-foreground">No emails yet. Pull down or tap Sync to fetch.</p>
                     <Button variant="outline" size="sm" onClick={syncEmails} disabled={syncing}>{syncing ? 'Syncing...' : 'Sync Now'}</Button>
-                  )}
-                </div>
+                  </div>
+                )
               )}
             </>
           ) : emails && emails.length > 0 ? (
@@ -236,7 +325,7 @@ export function EmailPanel() {
               </p>
             </div>
           )}
-        </div>
+        </motion.div>
       </ScrollArea>
 
       {/* Compose FAB */}

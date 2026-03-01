@@ -56,6 +56,7 @@ export function useEmails() {
   const [selectMode, setSelectMode] = useState(false);
   const autoSyncDone = useRef(false);
   const lastArchived = useRef<{ id: string; email: Email } | null>(null);
+  const [handledToday, setHandledToday] = useState(0);
 
   const fetchEmails = useCallback(async () => {
     if (!user) return;
@@ -132,6 +133,7 @@ export function useEmails() {
     if (emailToArchive) lastArchived.current = { id: emailId, email: emailToArchive };
     await updateEmail(emailId, { user_archived: true });
     setEmails(prev => prev.filter(e => e.id !== emailId));
+    setHandledToday(prev => prev + 1);
     toast.success('Email archived', {
       action: {
         label: 'Undo',
@@ -383,6 +385,6 @@ export function useEmails() {
     searchQuery, setSearchQuery,
     selectMode, setSelectMode, selectedIds, toggleSelect, selectAll, clearSelection,
     batchArchive, batchMarkRead, batchReportSpam,
-    unreadCount, priorityCount, flaggedCount, lastSyncTime, refetch: fetchEmails,
+    unreadCount, priorityCount, flaggedCount, lastSyncTime, handledToday, refetch: fetchEmails,
   };
 }
