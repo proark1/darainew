@@ -1,67 +1,34 @@
 
+# Fix Sender Display in Email Overview and Detail View
 
-# Enhance Email-to-Contract Data Extraction and Sender Display
+## Problem
+1. **Email overview list**: Each email shows only the sender's initials in a circle avatar, making it hard to identify senders at a glance. The full name appears next to it but the avatar dominates visually.
+2. **Email detail view**: The sender section shows a large initials circle, then name and email below it -- the layout makes the initials too prominent and the name/email separation unclear.
 
 ## Changes
 
-### 1. Make sender name more visible in email list (`EmailCard.tsx`)
+### 1. Email Overview List (`src/components/email/EmailCard.tsx`)
 
-The sender name already appears, but it can be truncated. Changes:
-- Remove `truncate` from the sender name so the full name is always visible
-- Slightly increase font weight for better readability in the overview
+The initials avatar circle (lines 150-158) is currently a 9x9 circle showing just 1-2 letters. This is what the user sees as "just the first letter." The name does appear next to it (line 168-169) but the avatar circle is the dominant visual element.
 
-### 2. Extract more data when saving an email as a contract (`EmailPanel.tsx`)
+**Fix**: Keep the avatar circle smaller (reduce from w-9 h-9 to w-7 h-7) and ensure the sender name text is more prominent. The sender name on line 168 already shows the full name -- but it may wrap or get cut. Ensure it displays clearly with enough space.
 
-Currently `handleSaveEmailAsContract` only fills: name, provider, cost amount, frequency, category. Enhance it to also extract and pre-fill:
+### 2. Email Detail View (`src/components/email/EmailDetailSheet.tsx`)
 
-- **Renewal date**: Set to the email's `received_at` date (the date of the payment email)
-- **Start date**: Also set to the email's `received_at` date as the earliest known date
-- **Contract number**: Use a regex to search the email subject/snippet for patterns like invoice numbers, contract numbers, order IDs (e.g., "INV-12345", "Contract #98765", "Order 456789", "Ref: ABC123")
-- **Notes**: Auto-generate a note like "Created from email: [subject] (received [date])" so the user has context
-- **Category**: Improve detection -- check for keywords like "insurance", "internet", "phone", "streaming" in the sender/subject to pick a better category than the generic "subscription"
+The sender info section (lines 288-301) currently shows:
+- A large 10x10 initials circle
+- Name on one line, email on the next (both truncated)
 
-### 3. Update prefill handling in `AddEditContractDialog.tsx`
+**Fix**:
+- Reduce the avatar circle size (w-10 h-10 to w-8 h-8) so it doesn't dominate
+- Make sender name clearly bold and larger (text-sm font-semibold)
+- Show email on a separate line with distinct styling (text-xs text-muted-foreground)
+- Remove truncation so both name and email are fully visible
 
-The prefill section already handles most fields. Add support for the new fields being passed:
-- `startDate`
-- `renewalDate`
-- `contractNumber`
-- `notes`
+### 3. Thread Messages (`src/components/email/EmailDetailSheet.tsx`, lines 71-80)
 
-These fields exist in `ContractInput` but were not being set from the prefill. Update the prefill block (lines 89-105) to also populate: `setStartDate`, `setRenewalDate`, `setContractNumber`, `setNotes`.
+Same fix for the thread message sender display -- show name prominently, email below it separately.
 
-## Technical Details
-
-### Contract number extraction regex
-```typescript
-function extractContractNumber(text: string): string | undefined {
-  const patterns = [
-    /(?:contract|vertrag|invoice|rechnung|order|bestellung|ref|reference|nr|number)[#:\s-]*([A-Z0-9-]{4,20})/i,
-    /(?:INV|ORD|REF|CTR|VTR|RG|RE|AB)[- ]?(\d{4,15})/i,
-    /#(\d{5,15})/,
-  ];
-  for (const p of patterns) {
-    const m = text.match(p);
-    if (m) return m[1];
-  }
-  return undefined;
-}
-```
-
-### Category detection from email content
-```typescript
-function detectCategory(text: string): ContractCategory {
-  const lower = text.toLowerCase();
-  if (/insurance|versicherung/.test(lower)) return 'insurance';
-  if (/internet|broadband|fiber/.test(lower)) return 'internet';
-  if (/phone|mobile|telefon/.test(lower)) return 'phone';
-  if (/netflix|spotify|disney|streaming|hulu/.test(lower)) return 'streaming';
-  if (/electricity|gas|water|energy|strom/.test(lower)) return 'utilities';
-  return 'subscription';
-}
-```
-
-### Files modified
-- `src/components/email/EmailCard.tsx` -- Remove truncation on sender name
-- `src/components/email/EmailPanel.tsx` -- Enhance `handleSaveEmailAsContract` with more extraction logic
-- `src/components/contracts/AddEditContractDialog.tsx` -- Apply prefill to all fields (dates, contract number, notes)
+## Files Modified
+- `src/components/email/EmailCard.tsx` -- Reduce avatar size, ensure name is prominent
+- `src/components/email/EmailDetailSheet.tsx` -- Restyle sender info: name on top (bold), email below (lighter), smaller avatar; same for thread messages
