@@ -1,74 +1,44 @@
 
-# Fix Sender Name Parsing and Display
+
+# Fix Sender Names: Database Cleanup + Frontend Robustness
 
 ## Root Cause
-The Gmail sync edge function has a buggy regex for parsing the "From" header. The regex on line 276 of `gmail-sync/index.ts` uses a lazy quantifier (`.+?`) that causes it to capture only the first character of the sender's name in certain email header formats.
+The corrupted records are still in the database (e.g., `from_name: "P"`, `from_email: "aypal <service@paypal.de"`). The `reconstructSender` frontend utility should fix these at display time, but to be absolutely sure, we'll:
 
-**Evidence from database:**
-- `from_name: "L"`, `from_email: "inkedin job alerts <jobalerts-noreply@linkedin.com"`
-- `from_name: "A"`, `from_email: "nthropic, pbc" <invoice+statements@mail.anthropic.com"`
-
-The first character goes into `from_name` and the rest (including the actual email) goes into `from_email`.
+1. **Run a database migration** to permanently fix all corrupted records in `user_emails`
+2. **Strengthen the frontend display** to guarantee full names always show
 
 ## Changes
 
-### 1. Fix the From header parser (`supabase/functions/gmail-sync/index.ts`, line 276)
+### 1. Database Migration: Fix corrupted `from_name` and `from_email` records
 
-Replace the broken regex with a more robust parser:
+Run a SQL migration that finds all records where `from_email` contains `<` (indicating corrupted data), extracts the real name and email, and updates them in place:
 
-```typescript
-const fromRaw = getHeader('From');
-let fromName = '';
-let fromEmail = '';
-const angleMatch = fromRaw.match(/^(.*?)\s*<([^>]+)>$/);
-if (angleMatch) {
-  fromName = angleMatch[1].replace(/^"|"$/g, '').trim();
-  fromEmail = angleMatch[2].toLowerCase().trim();
-} else {
-  // Plain email address, no angle brackets
-  fromEmail = fromRaw.toLowerCase().trim();
-  fromName = '';
-}
+```sql
+UPDATE user_emails
+SET
+  from_name = TRIM(BOTH '"' FROM TRIM(
+    COALESCE(from_name, '') || SUBSTRING(from_email FROM '^(.*?)\s*<')
+  )),
+  from_email = LOWER(TRIM(SUBSTRING(from_email FROM '<([^>]+)>$')))
+WHERE from_email LIKE '%<%';
 ```
 
-This handles the standard formats:
-- `"Name" <email@example.com>` -- quoted name
-- `Name <email@example.com>` -- unquoted name
-- `email@example.com` -- bare email
+This permanently fixes ~20+ corrupted records so the frontend reconstruction is no longer needed for existing data.
 
-### 2. Add frontend fallback for existing corrupted data (`src/components/email/EmailCard.tsx` and `src/components/email/EmailDetailSheet.tsx`)
+### 2. Frontend: Ensure `reconstructSender` is applied everywhere
 
-Since the database already has corrupted records, add a utility function to reconstruct names from the broken data:
+The `reconstructSender` utility is already used in `EmailCard.tsx` and `EmailDetailSheet.tsx`. Also update `EmailPanel.tsx` line 182 where `email.from_name` is used directly (for contract creation) to use `reconstructSender` instead.
 
-```typescript
-function reconstructSender(fromName: string | null, fromEmail: string): { name: string; email: string } {
-  // Detect corrupted data: if fromEmail contains '<', it likely has the name baked in
-  if (fromEmail.includes('<')) {
-    const match = fromEmail.match(/^(.*?)\s*<([^>]+)>$/);
-    if (match) {
-      const fullName = ((fromName || '') + match[1]).replace(/^"|"$/g, '').trim();
-      return { name: fullName, email: match[2].toLowerCase().trim() };
-    }
-  }
-  return { 
-    name: fromName || fromEmail.split('@')[0], 
-    email: fromEmail 
-  };
-}
-```
+### 3. Keep the backend parser fix
 
-This will:
-- Detect when `from_email` contains `<` (sign of corrupted data)
-- Concatenate the single-char `from_name` with the rest to reconstruct the full name
-- Extract the real email from inside the angle brackets
-
-Apply this in both `EmailCard.tsx` (overview) and `EmailDetailSheet.tsx` (detail view) so sender names display correctly for both existing and future data.
-
-### 3. Fix existing data with a one-time cleanup
-
-Run a database migration or use the edge function's next sync to fix existing records. The simplest approach: the frontend fallback handles display immediately, and next time emails sync, they'll be stored correctly.
+The `gmail-sync` edge function was already fixed in the previous iteration, so future emails will be stored correctly.
 
 ## Files Modified
-- `supabase/functions/gmail-sync/index.ts` -- Fix From header regex (lines 275-278)
-- `src/components/email/EmailCard.tsx` -- Add `reconstructSender` utility and use it for display
-- `src/components/email/EmailDetailSheet.tsx` -- Same utility for detail view and thread messages
+- Database migration (SQL) -- fix existing corrupted records
+- `src/components/email/EmailPanel.tsx` -- use `reconstructSender` for contract prefill (line 182)
+
+## Technical Notes
+- The migration handles edge cases like `from_name` being `"s"` with `from_email` being `'ervice@paypal.de" <service@paypal.de'` -- it concatenates and strips quotes
+- After migration, all records will have clean `from_name` (full name) and `from_email` (just the email address)
+- The frontend `reconstructSender` utility remains as a safety net for any future edge cases
