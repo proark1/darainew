@@ -45,7 +45,7 @@ serve(async (req) => {
       .from("user_emails")
       .select("id, subject, from_name, from_email, snippet, received_at")
       .eq("user_id", userId)
-      .eq("is_archived", false)
+      .eq("user_archived", false)
       .gte("received_at", sixMonthsAgo.toISOString())
       .order("received_at", { ascending: false })
       .limit(500);
