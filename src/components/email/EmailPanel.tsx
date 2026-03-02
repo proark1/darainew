@@ -5,6 +5,7 @@ import { EmailCard } from './EmailCard';
 import { EmailDetailSheet } from './EmailDetailSheet';
 import { ComposeEmailSheet } from './ComposeEmailSheet';
 import { RecurringPaymentDetector, DetectedPayment } from './RecurringPaymentDetector';
+import { reconstructSender } from '@/lib/emailSender';
 import { AddEditContractDialog } from '@/components/contracts/AddEditContractDialog';
 import { format } from 'date-fns';
 import { useContracts, ContractInput } from '@/hooks/useContracts';
@@ -179,7 +180,8 @@ export function EmailPanel() {
   };
 
   const handleSaveEmailAsContract = (email: Email) => {
-    const providerName = email.from_name || email.from_email.split('@')[0];
+    const { name: senderName } = reconstructSender(email.from_name, email.from_email);
+    const providerName = senderName;
     const searchText = `${email.subject || ''} ${email.snippet || ''} ${email.body_preview || ''}`;
     const amount = extractAmountFromText(searchText);
     const contractNumber = extractContractNumber(searchText);

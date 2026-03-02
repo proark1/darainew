@@ -5,7 +5,7 @@
  */
 export function reconstructSender(fromName: string | null, fromEmail: string): { name: string; email: string } {
   if (fromEmail.includes('<')) {
-    const match = fromEmail.match(/^(.*?)\s*<([^>]+)>$/);
+    const match = fromEmail.match(/^(.*?)\s*<([^>]+)>?$/);
     if (match) {
       const fullName = ((fromName || '') + match[1]).replace(/^"|"$/g, '').trim();
       return { name: fullName, email: match[2].toLowerCase().trim() };
