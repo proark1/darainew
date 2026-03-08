@@ -531,6 +531,7 @@ const Index = () => {
         emailSummary: smartPayload.emailSummary,
         notesSummary: smartPayload.notesSummary,
         habitsSummary: smartPayload.habitsSummary,
+        memories: smartPayload.memories,
         familyContext: smartPayload.familyContext ? {
           members: smartPayload.familyContext.members.map(m => ({
             id: '',
