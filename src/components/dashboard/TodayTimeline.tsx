@@ -19,10 +19,21 @@ interface TimelineItem {
   id: string;
   title: string;
   time?: Date;
-  type: 'task' | 'event';
+  type: 'task' | 'event' | 'prayer';
   priority?: string;
   completed?: boolean;
   category?: string;
+}
+
+function getPrayerIcon(name: string) {
+  switch (name) {
+    case 'Fajr': return <Sunrise className="w-3.5 h-3.5 text-indigo-500" />;
+    case 'Dhuhr': return <Sun className="w-3.5 h-3.5 text-orange-500" />;
+    case 'Asr': return <Sun className="w-3.5 h-3.5 text-amber-600" />;
+    case 'Maghrib': return <Sunset className="w-3.5 h-3.5 text-rose-500" />;
+    case 'Isha': return <MoonIcon className="w-3.5 h-3.5 text-purple-500" />;
+    default: return null;
+  }
 }
 
 function TimelineRow({ item, index, onNavigate, onCompleteTask, isOverdue = false }: {
