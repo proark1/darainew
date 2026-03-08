@@ -16,6 +16,8 @@ import { ContractAlertsCard } from './ContractAlertsCard';
 import { ContactRemindersCard } from './ContactRemindersCard';
 import { StaggerContainer, StaggerItem } from '@/components/ui/page-transition';
 import { PanelSkeleton } from '@/components/ui/panel-skeleton';
+import { WhatNowCard } from './WhatNowCard';
+import { useSmartTaskSuggestions } from '@/hooks/useSmartTaskSuggestions';
 import { Task, TaskCategory, CalendarEvent } from '@/types/flux';
 import { isSameDay, subDays, startOfDay, endOfDay, isToday } from 'date-fns';
 
