@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useLifeScore } from '@/hooks/useLifeScore';
+import { useCelebration } from '@/hooks/useCelebration';
 import { CheckinPrompt } from '@/components/checkin/CheckinPrompt';
 import { DashboardHero } from './DashboardHero';
 import { FocusCard } from './FocusCard';
@@ -49,6 +50,7 @@ export function DashboardPanel({ userId, onNavigate }: DashboardPanelProps) {
   const { profile } = useAuth();
   const { todayScore } = useLifeScore();
   const { suggestion, loading: sugLoading, refresh: refreshSuggestion } = useSmartTaskSuggestions(tasks, events);
+  const { celebrate, checkStreak } = useCelebration();
 
   const handleStartTask = (taskId: string | null, _title: string) => {
     onNavigate?.('tasks');
@@ -168,6 +170,13 @@ export function DashboardPanel({ userId, onNavigate }: DashboardPanelProps) {
 
     if (!error) {
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: true } : t));
+
+      // Streak celebration check
+      const newStreak = stats.streak + 1;
+      if (!checkStreak(newStreak)) {
+        // Regular task completion confetti
+        celebrate({ type: 'taskComplete' });
+      }
     }
   };
 

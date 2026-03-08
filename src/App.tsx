@@ -12,7 +12,9 @@ import { NetworkStatusBanner } from "@/components/NetworkStatusBanner";
 import { XPBadgeProvider } from "@/components/ui/xp-badge";
 
 import { useMorningAutoPlay } from "@/hooks/useMorningAutoPlay";
+import { TopLoader } from "@/components/ui/top-loader";
 import Index from "@/pages/Index";
+import Landing from "@/pages/Landing";
 import CalendarCallback from "@/pages/CalendarCallback";
 import {
   LazyAuth,
@@ -40,7 +42,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) {
-    return <Navigate to="/auth" replace />;
+    return <Navigate to="/landing" replace />;
   }
 
   return <>{children}</>;
@@ -70,6 +72,7 @@ function AppContent() {
   
   return (
     <>
+      <TopLoader />
       <NetworkStatusBanner />
       <AnimatePresence mode="wait">
         <motion.div
@@ -112,6 +115,14 @@ function AppContent() {
               <ProtectedRoute>
                 <LazyContractsPage />
               </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/landing"
+            element={
+              <PublicRoute>
+                <Landing />
+              </PublicRoute>
             }
           />
           <Route
