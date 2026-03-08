@@ -12,7 +12,7 @@ import { SmartSuggestion, TaskSuggestion } from '@/hooks/useSmartTaskSuggestions
 import { cn } from '@/lib/utils';
 import {
   Sparkles, Play, RefreshCw, Clock, Zap, Lightbulb,
-  ChevronDown, Target,
+  ChevronDown, Target, Settings,
 } from 'lucide-react';
 
 interface DashboardHeroProps {
