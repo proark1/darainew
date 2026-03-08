@@ -3,6 +3,7 @@ import { useContacts, Contact, ContactType, ContactInput, PersonalTier, Business
 import { useContactInteractions } from '@/hooks/useContactInteractions';
 import { useItemSharing } from '@/hooks/useItemSharing';
 import { ContactCardSkeleton } from '@/components/skeletons';
+import { PanelSkeleton } from '@/components/ui/panel-skeleton';
 import { ShareDialog } from '@/components/sharing/ShareDialog';
 import { ContactProfileCard } from '@/components/contacts/ContactProfileCard';
 import { ContactNetworkHealth } from '@/components/contacts/ContactNetworkHealth';
