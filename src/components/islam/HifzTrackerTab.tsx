@@ -687,7 +687,7 @@ export function HifzTrackerTab() {
                     <p className="text-sm text-muted-foreground">
                       Review these surahs to strengthen your memorization using spaced repetition.
                     </p>
-                  </Card>
+                  </GlassCard>
                   
                   {progressData
                     .filter(p => {
