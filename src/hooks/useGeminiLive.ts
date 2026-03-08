@@ -44,6 +44,7 @@ interface UseGeminiLiveOptions {
   personality?: AssistantPersonality;
   userProfile?: UserProfile | null;
   contextData?: ContextData | null;
+  memories?: { type: string; key: string; value: string; category?: string }[];
   onResponse?: (text: string) => void;
   onAction?: (action: VoiceTaskAction) => void;
   onError?: (error: string) => void;
