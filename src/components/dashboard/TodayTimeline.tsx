@@ -64,7 +64,9 @@ export function TodayTimeline({ tasks, events = [], onNavigate, onCompleteTask }
     return { overdue: overdueItems, timed, allDay };
   }, [tasks, events]);
 
-  if (items.length === 0) {
+  const allItems = [...items.overdue, ...items.timed, ...items.allDay];
+  
+  if (allItems.length === 0) {
     return (
       <GlassCard>
         <GlassCardContent className="p-4 text-center">
