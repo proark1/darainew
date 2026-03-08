@@ -258,11 +258,11 @@ export function ContractManager({
   const ContractTable = () => {
     if (filteredContracts.length === 0) {
       return (
-        <GlassCard>
-          <GlassCardContent className="py-8 text-center text-muted-foreground">
-            {search ? t('contracts.noContractsSearch') : t('contracts.noContracts')}
-          </GlassCardContent>
-        </GlassCard>
+        <EmptyState
+          icon={FileText}
+          title={search ? "No contracts found" : "No contracts yet"}
+          description={search ? "Try a different search term" : "Add your first contract to get started"}
+        />
       );
     }
 
