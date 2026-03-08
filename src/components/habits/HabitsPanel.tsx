@@ -192,7 +192,8 @@ export function HabitsPanel({ userId }: HabitsPanelProps) {
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
-                    </Card>
+                    </GlassCard>
+                    </motion.div>
                   ))
                 )}
 
