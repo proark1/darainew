@@ -55,7 +55,7 @@ function TimelineRow({ item, index, onNavigate, onCompleteTask, isOverdue = fals
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 10, height: 0 }}
       transition={{ delay: 0.05 * index }}
-      onClick={() => onNavigate?.(item.type === 'event' ? 'calendar' : 'tasks')}
+      onClick={() => onNavigate?.(item.type === 'event' ? 'calendar' : item.type === 'prayer' ? 'islam' : 'tasks')}
     >
       {item.type === 'task' ? (
         <Checkbox
