@@ -721,7 +721,7 @@ export function HifzTrackerTab() {
                               </Button>
                             </div>
                           </div>
-                        </Card>
+                        </GlassCard>
                       );
                     })}
                 </>
