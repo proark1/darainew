@@ -66,23 +66,23 @@ export function DashboardPanel({ userId, onNavigate }: DashboardPanelProps) {
     const now = new Date();
 
     const [tasksRes, eventsRes, contractsRes, contactsRes, emailsRes] = await Promise.all([
-      supabase.from('tasks').select('*').eq('user_id', userId),
+      supabase.from('tasks').select('id, title, description, category, priority, completed, created_at, due_date').eq('user_id', userId),
       supabase.from('events').select('*').eq('user_id', userId)
         .gte('start_time', startOfDay(now).toISOString())
         .lte('start_time', endOfDay(now).toISOString()),
-      supabase.from('contracts').select('*').eq('user_id', userId)
+      supabase.from('contracts').select('id, name, renewal_date, cancellation_notice_days, auto_renews').eq('user_id', userId)
         .eq('is_active', true).not('renewal_date', 'is', null),
       supabase.from('user_contacts').select('id, name, last_contacted_at')
         .eq('user_id', userId)
         .lt('last_contacted_at', subDays(now, 30).toISOString())
         .order('last_contacted_at', { ascending: true })
         .limit(3),
-      supabase.from('user_emails').select('id, from_name, from_email, subject, priority_score, is_read, user_archived, category')
+      supabase.from('user_emails').select('id, from_name, from_email, subject, priority_score, category')
         .eq('user_id', userId)
         .eq('is_read', false)
         .eq('user_archived', false)
         .order('priority_score')
-        .limit(20),
+        .limit(10),
     ]);
 
     if (tasksRes.data) {

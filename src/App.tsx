@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import { useAuth } from "@/hooks/useAuth";
 import { AnimatePresence, motion } from "framer-motion";
 import { LanguageProvider } from "@/contexts/LanguageContext";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NetworkStatusBanner } from "@/components/NetworkStatusBanner";
 import { XPBadgeProvider } from "@/components/ui/xp-badge";
@@ -28,7 +29,15 @@ import {
   PageFallback,
 } from "@/components/lazy";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      gcTime: 10 * 60 * 1000,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -172,19 +181,21 @@ function AppContent() {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <LanguageProvider>
-      <TooltipProvider>
-        <XPBadgeProvider>
-          <Toaster />
-          <Sonner position="top-center" />
-          <ErrorBoundary fallbackTitle="DarAI couldn't load">
-            <BrowserRouter>
-              <AppContent />
-            </BrowserRouter>
-          </ErrorBoundary>
-        </XPBadgeProvider>
-      </TooltipProvider>
-    </LanguageProvider>
+    <AuthProvider>
+      <LanguageProvider>
+        <TooltipProvider>
+          <XPBadgeProvider>
+            <Toaster />
+            <Sonner position="top-center" />
+            <ErrorBoundary fallbackTitle="DarAI couldn't load">
+              <BrowserRouter>
+                <AppContent />
+              </BrowserRouter>
+            </ErrorBoundary>
+          </XPBadgeProvider>
+        </TooltipProvider>
+      </LanguageProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 

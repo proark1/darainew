@@ -36,7 +36,7 @@ import { TaskCategory } from '@/types/flux';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useEmails } from '@/hooks/useEmails';
+import { useUnreadEmailCount } from '@/hooks/useUnreadEmailCount';
 
 
 export type SidebarFilter = TaskCategory | 'all' | 'shared';
@@ -144,7 +144,7 @@ export function Sidebar({
   const [isAdmin, setIsAdmin] = useState(false);
   const { user } = useAuth();
   const { t } = useLanguage();
-  const { unreadCount } = useEmails();
+  const { unreadCount } = useUnreadEmailCount();
 
   useEffect(() => {
     const checkAdmin = async () => {
