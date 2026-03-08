@@ -154,8 +154,8 @@ export function BrainDumpFAB({ className, collapsed = false }: BrainDumpFABProps
     <div className={cn("fixed bottom-20 right-4 z-40", className)}>
       {/* Expanded Input */}
       {isExpanded && (
-        <Card className="mb-2 shadow-lg animate-in slide-in-from-bottom-2 duration-200">
-          <CardContent className="p-3">
+        <GlassCard className="mb-2 shadow-lg animate-in slide-in-from-bottom-2 duration-200">
+          <GlassCardContent className="p-3">
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
