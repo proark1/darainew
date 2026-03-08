@@ -323,16 +323,19 @@ export function MobileLayout({
                 )}
               >
                 {tab.isCenter ? (
-                  <div className={cn(
-                    "w-14 h-14 -mt-6 rounded-full",
-                    "bg-gradient-to-br from-primary to-accent",
-                    "flex items-center justify-center",
-                    "shadow-lg shadow-primary/30 border-4 border-background",
-                    "transition-all duration-200 ease-out",
-                    "active:scale-95 active:shadow-primary/50",
-                    "animate-pulse-glow overflow-hidden"
-                  )}>
-                    <img src={doriFish} alt="Dori" className="w-9 h-9 object-contain" />
+                  <div className="flex flex-col items-center gap-0.5">
+                    <div className={cn(
+                      "w-14 h-14 -mt-6 rounded-full",
+                      "bg-gradient-to-br from-primary to-accent",
+                      "flex items-center justify-center",
+                      "shadow-lg shadow-primary/30 border-4 border-background",
+                      "transition-all duration-200 ease-out",
+                      "active:scale-95 active:shadow-primary/50",
+                      "animate-pulse-glow overflow-hidden"
+                    )}>
+                      <img src={doriFish} alt="Dori" className="w-9 h-9 object-contain" />
+                    </div>
+                    <span className="text-[10px] leading-none font-medium text-muted-foreground">Dori</span>
                   </div>
                 ) : (
                   <>
