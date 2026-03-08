@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
@@ -70,18 +71,59 @@ export default function Auth() {
   };
 
   return (
-    <main className="min-h-screen bg-background flex items-center justify-center p-4">
+    <main className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Floating gradient orbs */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <motion.div
+          className="absolute w-72 h-72 rounded-full opacity-20 blur-3xl"
+          style={{ background: 'radial-gradient(circle, hsl(var(--primary)), transparent)' }}
+          animate={{ x: [0, 30, -20, 0], y: [0, -40, 20, 0] }}
+          transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }}
+          initial={{ top: '10%', left: '15%' }}
+        />
+        <motion.div
+          className="absolute w-64 h-64 rounded-full opacity-15 blur-3xl"
+          style={{ background: 'radial-gradient(circle, hsl(var(--accent)), transparent)' }}
+          animate={{ x: [0, -25, 35, 0], y: [0, 30, -25, 0] }}
+          transition={{ duration: 15, repeat: Infinity, ease: 'easeInOut' }}
+          initial={{ bottom: '15%', right: '10%' }}
+        />
+      </div>
+
       <h1 className="sr-only">Sign in to DarAI</h1>
-      <div className="w-full max-w-md">
+      <motion.div
+        className="w-full max-w-md relative z-10"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+      >
         {/* Logo */}
-        <div className="flex justify-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent">
+        <div className="flex flex-col items-center mb-8">
+          <motion.div
+            className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent shadow-glow"
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.1, duration: 0.4, type: 'spring' }}
+          >
             <Sparkles className="w-8 h-8 text-primary-foreground" />
-          </div>
+          </motion.div>
+          <motion.p
+            className="mt-3 text-sm text-muted-foreground"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+          >
+            Your AI-powered life dashboard
+          </motion.p>
         </div>
 
         {/* Auth Card */}
-        <div className="glass-panel-solid p-8">
+        <motion.div
+          className="glass-panel-solid p-8"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.4 }}
+        >
           <form onSubmit={handleSubmit} className="space-y-6">
             {!isLogin && (
               <div className="space-y-3">
@@ -168,8 +210,8 @@ export default function Auth() {
               {isLogin ? t('auth.dontHaveAccount') : t('auth.alreadyHaveAccount')}
             </button>
           </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     </main>
   );
 }

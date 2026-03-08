@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
 import { DoriPanel } from '../assistant/DoriPanel';
 import { ChatPanel } from '../chat/ChatPanel';
 import { TeamChatPanel } from '../chat/TeamChatPanel';
@@ -89,6 +90,13 @@ const tabTitles: Record<string, string> = {
   email: 'Email',
 };
 
+const panelTransition = {
+  initial: { opacity: 0, y: 6 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -6 },
+  transition: { duration: 0.2, ease: 'easeOut' },
+};
+
 export function MobileLayout({
   userId,
   tasks,
@@ -160,6 +168,80 @@ export function MobileLayout({
   // Determine header title
   const headerTitle = t(`nav.${activeTab}`) || tabTitles[activeTab] || 'DarAI';
 
+  const renderPanel = () => {
+    switch (activeTab) {
+      case 'chat':
+        return (
+          <DoriPanel
+            messages={messages}
+            onSendMessage={onSendMessage}
+            isProcessing={isProcessing}
+            onVoiceMode={onVoiceMode}
+          />
+        );
+      case 'social':
+        return userId ? <TeamChatPanel userId={userId} /> : null;
+      case 'calendar':
+      case 'tasks':
+        return (
+          <CalendarHubPanel
+            userId={userId}
+            tasks={displayTasks}
+            events={displayEvents}
+            filter={filter}
+            projects={projects}
+            onFilterChange={setFilter}
+            onAddTask={onAddTask}
+            onToggleTaskComplete={onToggleTaskComplete}
+            onDeleteTask={onDeleteTask}
+            onDeleteTasks={onDeleteTasks}
+            onUpdateTask={onUpdateTask}
+            onReorderTasks={onReorderTasks}
+            onAddEvent={onAddEvent}
+            onUpdateEvent={onUpdateEvent}
+            onDeleteEvent={onDeleteEvent}
+            onImportEvents={onImportEvents}
+            onShareTask={onShareTask}
+            onShareEvent={onShareEvent}
+          />
+        );
+      case 'settings':
+        return settings && onUpdateSettings && onUpdateNotifications ? (
+          <SettingsPanelContent
+            settings={settings}
+            onUpdateSettings={onUpdateSettings}
+            onUpdateNotifications={onUpdateNotifications}
+          />
+        ) : null;
+      case 'family':
+        return <CookingPanel />;
+      case 'dashboard':
+        return <DashboardPanel userId={userId} />;
+      case 'health':
+        return <HealthHubPanel />;
+      case 'contacts':
+        return <ContactsPanel userId={userId} />;
+      case 'contracts':
+        return <ContractsPanel userId={userId} />;
+      case 'notes':
+        return <NotesPanel userId={userId} />;
+      case 'habits':
+        return <HabitsPanel userId={userId} />;
+      case 'islam':
+        return <IslamEnhancedPanel />;
+      case 'properties':
+        return <PropertyPanel />;
+      case 'startups':
+        return <StartupWorkspacePanel />;
+      case 'news':
+        return <TechNewsPanel />;
+      case 'email':
+        return <EmailPanel />;
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="flex flex-col h-[100dvh] w-full bg-background overflow-hidden safe-area-top">
       {/* Contextual Header */}
@@ -173,108 +255,17 @@ export function MobileLayout({
         onClearAll={clearAll}
       />
 
-      {/* Content */}
+      {/* Content with AnimatePresence transitions */}
       <main className="flex-1 overflow-hidden relative">
-        <div className={cn("h-full", activeTab === 'chat' ? 'block' : 'hidden')}>
-          <DoriPanel
-            messages={messages}
-            onSendMessage={onSendMessage}
-            isProcessing={isProcessing}
-            onVoiceMode={onVoiceMode}
-          />
-        </div>
-        <div className={cn("h-full", activeTab === 'social' ? 'block' : 'hidden')}>
-          {userId && <TeamChatPanel userId={userId} />}
-        </div>
-        <div className={cn("h-full", activeTab === 'calendar' ? 'block' : 'hidden')}>
-          <CalendarHubPanel
-            userId={userId}
-            tasks={displayTasks}
-            events={displayEvents}
-            filter={filter}
-            projects={projects}
-            onFilterChange={setFilter}
-            onAddTask={onAddTask}
-            onToggleTaskComplete={onToggleTaskComplete}
-            onDeleteTask={onDeleteTask}
-            onDeleteTasks={onDeleteTasks}
-            onUpdateTask={onUpdateTask}
-            onReorderTasks={onReorderTasks}
-            onAddEvent={onAddEvent}
-            onUpdateEvent={onUpdateEvent}
-            onDeleteEvent={onDeleteEvent}
-            onImportEvents={onImportEvents}
-            onShareTask={onShareTask}
-            onShareEvent={onShareEvent}
-          />
-        </div>
-        <div className={cn("h-full", activeTab === 'tasks' ? 'block' : 'hidden')}>
-          <CalendarHubPanel
-            userId={userId}
-            tasks={displayTasks}
-            events={displayEvents}
-            filter={filter}
-            projects={projects}
-            onFilterChange={setFilter}
-            onAddTask={onAddTask}
-            onToggleTaskComplete={onToggleTaskComplete}
-            onDeleteTask={onDeleteTask}
-            onDeleteTasks={onDeleteTasks}
-            onUpdateTask={onUpdateTask}
-            onReorderTasks={onReorderTasks}
-            onAddEvent={onAddEvent}
-            onUpdateEvent={onUpdateEvent}
-            onDeleteEvent={onDeleteEvent}
-            onImportEvents={onImportEvents}
-            onShareTask={onShareTask}
-            onShareEvent={onShareEvent}
-          />
-        </div>
-        {activeTab === 'settings' && settings && onUpdateSettings && onUpdateNotifications && (
-          <div className="h-full">
-            <SettingsPanelContent
-              settings={settings}
-              onUpdateSettings={onUpdateSettings}
-              onUpdateNotifications={onUpdateNotifications}
-            />
-          </div>
-        )}
-        <div className={cn("h-full", activeTab === 'family' ? 'block' : 'hidden')}>
-          <CookingPanel />
-        </div>
-        <div className={cn("h-full overflow-y-auto", activeTab === 'dashboard' ? 'block' : 'hidden')}>
-          <DashboardPanel userId={userId} />
-        </div>
-        <div className={cn("h-full", activeTab === 'health' ? 'block' : 'hidden')}>
-          <HealthHubPanel />
-        </div>
-        <div className={cn("h-full overflow-y-auto", activeTab === 'contacts' ? 'block' : 'hidden')}>
-          <ContactsPanel userId={userId} />
-        </div>
-        <div className={cn("h-full overflow-y-auto", activeTab === 'contracts' ? 'block' : 'hidden')}>
-          <ContractsPanel userId={userId} />
-        </div>
-        <div className={cn("h-full overflow-y-auto", activeTab === 'notes' ? 'block' : 'hidden')}>
-          <NotesPanel userId={userId} />
-        </div>
-        <div className={cn("h-full overflow-y-auto", activeTab === 'habits' ? 'block' : 'hidden')}>
-          <HabitsPanel userId={userId} />
-        </div>
-        <div className={cn("h-full overflow-y-auto", activeTab === 'islam' ? 'block' : 'hidden')}>
-          <IslamEnhancedPanel />
-        </div>
-        <div className={cn("h-full overflow-y-auto", activeTab === 'properties' ? 'block' : 'hidden')}>
-          <PropertyPanel />
-        </div>
-        <div className={cn("h-full overflow-y-auto", activeTab === 'startups' ? 'block' : 'hidden')}>
-          <StartupWorkspacePanel />
-        </div>
-        <div className={cn("h-full overflow-y-auto", activeTab === 'news' ? 'block' : 'hidden')}>
-          <TechNewsPanel />
-        </div>
-        <div className={cn("h-full overflow-y-auto", activeTab === 'email' ? 'block' : 'hidden')}>
-          <EmailPanel />
-        </div>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={activeTab}
+            {...panelTransition}
+            className="h-full overflow-y-auto"
+          >
+            {renderPanel()}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
       {/* Bottom Tab Bar - 5 items */}
@@ -315,16 +306,17 @@ export function MobileLayout({
                     <Sparkles className="w-6 h-6 text-primary-foreground" />
                   </div>
                 ) : (
-                  <div className={cn(
-                    "relative p-1.5 rounded-lg transition-all duration-200",
-                    isActive && "bg-primary/10"
-                  )}>
+                  <div className="relative p-1.5 rounded-lg transition-all duration-200">
                     <tab.icon className={cn(
                       "w-5 h-5 transition-transform duration-200",
                       isActive && "scale-110"
                     )} />
                     {isActive && (
-                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />
+                      <motion.div
+                        layoutId="mobile-tab-indicator"
+                        className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-full bg-primary"
+                        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                      />
                     )}
                   </div>
                 )}

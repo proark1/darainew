@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
+import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
@@ -67,12 +68,19 @@ function NavItem({ icon: Icon, label, panel, activePanel, collapsed, onClick, ba
     <Button
       variant={isActive ? 'secondary' : 'ghost'}
       className={cn(
-        "w-full h-9 gap-3",
+        "w-full h-9 gap-3 relative",
         collapsed ? "justify-center px-0" : "justify-start",
         isActive && "bg-sidebar-accent text-sidebar-primary font-medium"
       )}
       onClick={() => onClick(panel)}
     >
+      {isActive && (
+        <motion.div
+          layoutId="sidebar-active-indicator"
+          className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full bg-primary"
+          transition={{ type: "spring", stiffness: 500, damping: 30 }}
+        />
+      )}
       <Icon className="w-4 h-4 shrink-0" />
       {!collapsed && <span className="text-sm">{label}</span>}
       {!collapsed && badge && badge > 0 ? (

@@ -813,6 +813,24 @@ body::before {
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
   }
 
+  /* Scroll fade masks for long content areas */
+  .scroll-fade {
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      black 12px,
+      black calc(100% - 12px),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      black 12px,
+      black calc(100% - 12px),
+      transparent 100%
+    );
+  }
+
   /* WhatsApp-style chat background pattern */
   .chat-wallpaper {
     background-color: hsl(var(--chat-bg));

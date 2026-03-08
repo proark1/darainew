@@ -97,7 +97,7 @@ export function PanelShell({
           initial="hidden"
           animate="show"
           className={cn(
-            "flex-1 overflow-y-auto",
+            "flex-1 overflow-y-auto scroll-fade",
             !noPadding && "p-3 md:p-4",
             contentClassName
           )}

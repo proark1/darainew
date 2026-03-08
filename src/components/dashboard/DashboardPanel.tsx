@@ -15,6 +15,7 @@ import { WeatherCard } from './WeatherCard';
 import { ContractAlertsCard } from './ContractAlertsCard';
 import { ContactRemindersCard } from './ContactRemindersCard';
 import { StaggerContainer, StaggerItem } from '@/components/ui/page-transition';
+import { PanelSkeleton } from '@/components/ui/panel-skeleton';
 import { Task, TaskCategory, CalendarEvent } from '@/types/flux';
 import { isSameDay, subDays, startOfDay, endOfDay, isToday } from 'date-fns';
 
@@ -52,7 +53,6 @@ export function DashboardPanel({ userId, onNavigate }: DashboardPanelProps) {
     const fetchAll = async () => {
       const now = new Date();
 
-      // Fetch tasks, events, contracts, contacts in parallel
       const [tasksRes, eventsRes, contractsRes, contactsRes, emailsRes] = await Promise.all([
         supabase.from('tasks').select('*').eq('user_id', userId),
         supabase.from('events').select('*').eq('user_id', userId)
@@ -134,7 +134,6 @@ export function DashboardPanel({ userId, onNavigate }: DashboardPanelProps) {
       return daysDiff < 7;
     }).length;
 
-    // Streak
     let streak = 0;
     let checkDate = startOfDay(now);
     for (let i = 0; i < 365; i++) {
@@ -165,8 +164,8 @@ export function DashboardPanel({ userId, onNavigate }: DashboardPanelProps) {
 
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <div className="animate-pulse text-primary">{t('common.loading')}</div>
+      <div className="h-full p-3 md:p-4">
+        <PanelSkeleton variant="grid" />
       </div>
     );
   }

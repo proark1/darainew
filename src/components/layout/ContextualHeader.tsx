@@ -3,6 +3,7 @@ import { Search, Bell, Menu } from 'lucide-react';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
 import { DoriNotificationIcon } from '@/components/assistant/DoriNotificationIcon';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface ContextualHeaderProps {
   title: string;
@@ -35,7 +36,18 @@ export function ContextualHeader({
             <Menu className="w-5 h-5" />
           </Button>
         )}
-        <h1 className="text-lg font-semibold text-foreground truncate">{title}</h1>
+        <AnimatePresence mode="wait">
+          <motion.h1
+            key={title}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.15 }}
+            className="text-lg font-semibold text-foreground truncate"
+          >
+            {title}
+          </motion.h1>
+        </AnimatePresence>
       </div>
       <div className="flex items-center gap-1">
         {onOpenSearch && (
