@@ -319,7 +319,7 @@ export function HabitsPanel({ userId }: HabitsPanelProps) {
                                 </p>
                               </div>
                             </div>
-                          </Card>
+                          </GlassCard>
                         ))}
                       </>
                     )}
