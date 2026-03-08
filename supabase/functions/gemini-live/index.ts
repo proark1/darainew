@@ -512,6 +512,14 @@ serve(async (req) => {
     const userContext = buildUserContext(userProfile);
     const dataContext = buildDataContext(contextData);
     
+    let memoryContext = '';
+    if (memories && memories.length > 0) {
+      memoryContext = `\n\n## LONG-TERM MEMORY (Things you know about this user)\n`;
+      for (const mem of memories) {
+        memoryContext += `- [${mem.type}]${mem.category ? ` (${mem.category})` : ''} ${mem.key}: "${mem.value}"\n`;
+      }
+    }
+    
     const systemPrompt = `## CRITICAL RULES
 1. NEVER INVENT OR FABRICATE any names, companies, tasks, or facts
 2. ONLY USE the exact data provided below
