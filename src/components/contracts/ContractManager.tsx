@@ -255,11 +255,11 @@ export function ContractManager({
   const ContractTable = () => {
     if (filteredContracts.length === 0) {
       return (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
+        <GlassCard>
+          <GlassCardContent className="py-8 text-center text-muted-foreground">
             {search ? t('contracts.noContractsSearch') : t('contracts.noContracts')}
-          </CardContent>
-        </Card>
+          </GlassCardContent>
+        </GlassCard>
       );
     }
 
