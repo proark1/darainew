@@ -53,20 +53,20 @@ export function ProactiveRemindersCard({ onNavigate }: ProactiveRemindersCardPro
 
   if (reminders.length === 0) {
     return (
-      <Card className="glass-panel-solid">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
+      <GlassCard>
+        <GlassCardHeader className="pb-2">
+          <div className="flex items-center gap-2 text-sm font-semibold">
             <Brain className="w-4 h-4 text-primary" />
             {t('proactiveReminders.title')}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+          </div>
+        </GlassCardHeader>
+        <GlassCardContent>
           <div className="text-center py-6 text-muted-foreground">
             <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
             <p className="text-sm">{t('proactiveReminders.allCaughtUp')}</p>
           </div>
-        </CardContent>
-      </Card>
+        </GlassCardContent>
+      </GlassCard>
     );
   }
 
