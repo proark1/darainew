@@ -338,7 +338,7 @@ export function ContactsPanel({ userId }: ContactsPanelProps) {
     const isFamily = contact.personalTier === 'family';
     
     return (
-      <Card 
+      <GlassCard 
         className={`group hover:bg-accent/50 transition-colors cursor-pointer relative ${isDue ? 'border-destructive/50' : ''}`}
         onClick={() => setSelectedContact(contact)}
       >
