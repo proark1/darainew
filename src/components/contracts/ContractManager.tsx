@@ -446,7 +446,7 @@ export function ContractManager({
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <GlassCard>
+        <GlassCard pressable haptic="light">
           <GlassCardContent className="pt-4 p-4">
             <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
               <DollarSign className="h-4 w-4" />
@@ -455,7 +455,7 @@ export function ContractManager({
             <p className="text-2xl font-bold">€{monthlyCost.toFixed(2)}</p>
           </GlassCardContent>
         </GlassCard>
-        <GlassCard>
+        <GlassCard pressable haptic="light">
           <GlassCardContent className="pt-4 p-4">
             <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
               <DollarSign className="h-4 w-4" />
@@ -464,7 +464,7 @@ export function ContractManager({
             <p className="text-2xl font-bold">€{yearlyCost.toFixed(2)}</p>
           </GlassCardContent>
         </GlassCard>
-        <GlassCard>
+        <GlassCard pressable haptic="light">
           <GlassCardContent className="pt-4 p-4">
             <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
               {t('contracts.activeContracts')}
@@ -472,7 +472,7 @@ export function ContractManager({
             <p className="text-2xl font-bold">{activeContracts.length}</p>
           </GlassCardContent>
         </GlassCard>
-        <GlassCard>
+        <GlassCard pressable haptic="light">
           <GlassCardContent className="pt-4 p-4">
             <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
               <AlertTriangle className="h-4 w-4" />
