@@ -564,10 +564,12 @@ export function HifzTrackerTab() {
                   differenceInDays(new Date(), new Date(progress.last_revised_at)) >= 7;
                 
                 return (
-                  <Card 
+                  <GlassCard 
                     key={surah.number}
+                    pressable
+                    haptic="light"
                     className={cn(
-                      "p-3 cursor-pointer transition-all hover:shadow-md",
+                      "p-3",
                       isMemorized && !needsReview && "border-emerald-500/30 bg-emerald-500/5",
                       needsReview && "border-amber-500/50 bg-amber-500/10"
                     )}
@@ -605,7 +607,7 @@ export function HifzTrackerTab() {
                         <ArrowRight className="w-4 h-4 text-muted-foreground" />
                       </div>
                     </div>
-                  </Card>
+                  </GlassCard>
                 );
               })}
             </div>
