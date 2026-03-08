@@ -951,6 +951,7 @@ const Index = () => {
         .replace(/<tool>[\s\S]*?<\/email>/g, '')
         .replace(/<tool>[\s\S]*?<\/item>/g, '')
         .replace(/<tool>get_summary<\/tool>\s*<type>\w+<\/type>/g, '')
+        .replace(/<tool>set_reminder<\/tool>\s*<reminder>\{[\s\S]*?\}<\/reminder>/g, '')
         .trim();
 
       if (cleanContent) {
