@@ -417,14 +417,14 @@ export function ContractManager({
 
       {/* Alerts */}
       {cancellationDeadlines.length > 0 && (
-        <Card className="border-destructive/50 bg-destructive/5">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2 text-destructive">
+        <GlassCard className="border-destructive/50 bg-destructive/5">
+          <GlassCardHeader className="pb-2">
+            <GlassCardTitle className="text-sm font-medium flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-4 w-4" />
               {t('contracts.cancellationDeadlines')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+            </GlassCardTitle>
+          </GlassCardHeader>
+          <GlassCardContent>
             <div className="space-y-1">
               {cancellationDeadlines.map(c => (
                 <div key={c.id} className="flex items-center justify-between text-sm">
@@ -445,8 +445,8 @@ export function ContractManager({
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          </GlassCardContent>
+        </GlassCard>
       )}
 
       {/* Stats */}
