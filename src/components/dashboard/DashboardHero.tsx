@@ -107,10 +107,7 @@ export function DashboardHero({
         </div>
 
         {sugLoading && !rec && (
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-3 w-full" />
-          </div>
+          <p className="text-sm text-muted-foreground animate-pulse">Thinking…</p>
         )}
 
         {!sugLoading && !rec && (
