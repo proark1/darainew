@@ -1,148 +1,112 @@
 
-# Deep Module Interconnection + AI Daily Voice Briefing
 
-## Vision
-Transform DarAI from siloed modules into a deeply interconnected intelligent system where email, calendar, contacts, contracts, and the AI assistant all feed into each other -- with a new AI-generated daily voice briefing as the centerpiece.
+# Round 5: Top 10 UI/UX Improvements
 
----
-
-## Feature 1: AI Daily Voice Briefing on Dashboard
-
-A new dashboard card where the AI generates a personalized daily summary and reads it aloud using text-to-speech. The briefing aggregates data from ALL modules.
-
-### New Edge Function: `daily-voice-briefing`
-- Accepts user_id and fetches cross-module data server-side:
-  - Pending tasks (count, top 3 by priority)
-  - Today's calendar events
-  - Unread email count + priority emails
-  - Contract alerts (upcoming renewals/cancellations)
-  - Contacts overdue for follow-up
-  - Habit completion status
-  - Yesterday's check-in mood/energy
-- Sends all context to Gemini 3 Flash (via Lovable AI gateway) with a prompt like: "Generate a warm, concise 30-second daily briefing script for this user. Be specific, mention names and times."
-- Returns: `{ briefingText: string, highlights: [...] }`
-
-### New Component: `DailyBriefingCard`
-- Displayed prominently on the dashboard (below the hero)
-- Shows a text summary with key highlights as chips/badges
-- Play button that reads the briefing aloud via Web Speech API (existing `useTextToSpeech` hook)
-- Auto-play option (respects existing morning auto-play setting)
-- Cached per day so it doesn't re-generate on every page load
-
-### Files
-- `supabase/functions/daily-voice-briefing/index.ts` (new)
-- `src/components/dashboard/DailyBriefingCard.tsx` (new)
-- `src/hooks/useDailyBriefing.ts` (new)
-- `src/components/dashboard/DashboardPanel.tsx` (add card)
+After reviewing the live app and code post-Rounds 1-4.
 
 ---
 
-## Feature 2: Email-to-Calendar Integration
+## 1. Hero Summary Text Breaks Into 6 Lines on Mobile
+The summary text "18 overdue · 21 total to do" renders as separate words stacked vertically: "18", "overdue", "·", "21", "total", "to", "do" — taking 7 lines instead of 1. This is because the XP display (`Level 1` badge + streak + progress bar) on the same row pushes the text container too narrow.
 
-When an email contains dates, times, or meeting references, surface a one-tap "Add to Calendar" action.
+**Fix:** Move the XP display below the greeting line or onto its own row. Give the summary text `whitespace-nowrap` or increase its minimum width. The greeting + summary should never wrap beyond 2 lines.
 
-### Changes
-- Update the `extract-contract-from-email` edge function (or create a shared extraction endpoint) to also detect event-like data: dates, times, locations, meeting links
-- Add an "Add to Calendar" button in `EmailDetailSheet.tsx` that pre-fills an event creation dialog with AI-extracted data (title from subject, time from email body, description from snippet)
-- Show a small calendar icon badge on `EmailCard.tsx` when the email contains detected dates
-
-### Files
-- `supabase/functions/extract-contract-from-email/index.ts` (extend to also return `detectedEvent` data)
-- `src/components/email/EmailDetailSheet.tsx` (add "Add to Calendar" action)
-- `src/components/email/EmailCard.tsx` (date detection badge)
+**Files:** `src/components/dashboard/DashboardHero.tsx` — restructure the top section layout.
 
 ---
 
-## Feature 3: Email-to-Contact Linking
+## 2. "G." Instead of User Name
+The greeting shows "G." (a single initial with period) instead of the full name. The `profile?.display_name` is likely just an initial. This looks like a data display bug — the greeting should either show the full name or no initial at all.
 
-Automatically link emails to existing contacts and surface contact context when reading emails.
+**Fix:** If `display_name` is 2 characters or less, treat it as missing and skip the name portion. Show just "Good evening" instead of "Good evening, G.".
 
-### Changes
-- In `EmailDetailSheet.tsx`, match the sender email against `user_contacts` table
-- If a match is found, show a mini contact card (name, tier, last contacted, relationship) inline in the email detail view
-- Add a "Save as Contact" button when no match exists, pre-filling name and email
-- When viewing a contact profile, show their recent emails in the timeline
-
-### Files
-- `src/components/email/EmailDetailSheet.tsx` (contact context card)
-- `src/components/contacts/ContactTimeline.tsx` (add email history section)
+**Files:** `src/components/dashboard/DashboardHero.tsx` — adjust the greeting logic.
 
 ---
 
-## Feature 4: Smart Dashboard Insight Card (Cross-Module)
+## 3. XP Display Takes Too Much Horizontal Space in Hero
+The `XPDisplay compact` variant renders `Level 1` badge + `🔥 1` streak + progress bar + "15 XP" all on one row. Combined with the settings icon, this leaves almost no room for the greeting text, causing the word-wrapping issue in #1.
 
-Upgrade the existing `SmartInsightCard` to pull insights from ALL modules instead of just tasks.
+**Fix:** Simplify the compact XP display to just show the level badge and XP count. Move streak to StatPills (which already shows streak). Remove the progress bar from the compact variant — it's too small to be meaningful at 16px wide.
 
-### Changes
-- Add email-based insights: "You have 3 unread priority emails from key contacts"
-- Add contract insights: "Insurance contract renews in 5 days -- review or cancel?"
-- Add contact insights: "You haven't spoken to [Name] in 45 days"
-- Add calendar-email correlation: "Meeting with [Contact] tomorrow -- check their latest email"
-- Rotate through these insights automatically
-
-### Files
-- `src/components/dashboard/SmartInsightCard.tsx` (accept emails, contracts, contacts props)
-- `src/components/dashboard/DashboardPanel.tsx` (pass new data to SmartInsightCard)
+**Files:** `src/components/gamification/XPDisplay.tsx` — simplify compact variant.
 
 ---
 
-## Feature 5: Contextual Quick Actions (Cross-Module)
+## 4. "Start first task!" Stat Pill Has No Progress Bar Context
+The "Start first task!" zero-state pill shows text + an empty progress bar, but the text doesn't tell the user what the goal is. It should say something like "0/5 today" or just show the encouraging message without the progress bar.
 
-Enhance the existing `useContextualActions` hook to suggest actions based on cross-module data.
+**Fix:** Hide the `MiniProgress` bar when the zero-label is shown. The empty bar adds visual noise without information.
 
-### Changes
-- Add email-aware actions: "Reply to [Contact]'s email" when there are priority unread emails from known contacts
-- Add contract-aware actions: "Review [Contract] renewal" when a deadline is within 3 days
-- Add calendar-contact actions: "Prepare for meeting with [Name]" when a calendar event matches a contact
-- These actions appear in the QuickActionsBar on the dashboard
-
-### Files
-- `src/hooks/useContextualActions.ts` (add email, contract, calendar-contact cross-references)
-- `src/components/dashboard/DashboardPanel.tsx` (pass onNavigate to QuickActionsBar)
+**Files:** `src/components/dashboard/StatPills.tsx` — conditionally hide progress bar on zero-state.
 
 ---
 
-## Technical Details
+## 5. Weather Card and StatPills Layout Is Awkward
+On mobile, the Weather card and StatPills are wrapped in a `md:col-span-1` container, but on mobile it's `col-span-full` (default). The Weather card appears full-width, then StatPills appear full-width below it, then the Timeline appears below that. The Weather card takes significant vertical space for minimal information.
 
-### Daily Voice Briefing Edge Function
-```text
-POST /daily-voice-briefing
-Body: { user_id }
-Response: {
-  briefingText: "Good morning, Dar! You have 4 tasks today, including...",
-  highlights: [
-    { type: "task", label: "4 tasks, 1 overdue" },
-    { type: "email", label: "3 unread priority" },
-    { type: "contract", label: "Insurance renews in 5 days" },
-    { type: "contact", label: "Follow up with Ahmed" }
-  ]
-}
-```
+**Fix:** Make Weather + StatPills share a single horizontal row. Weather on the left (compact: icon + temp), StatPills scrolling on the right. Or move Weather into the Hero card as a small weather chip next to the greeting.
 
-Uses Lovable AI gateway with `google/gemini-3-flash-preview` model. Queries tasks, events, user_emails, contracts, user_contacts, daily_checkins tables server-side using the service role key.
+**Files:** `src/components/dashboard/DashboardPanel.tsx`, `src/components/dashboard/WeatherCard.tsx`
 
-### Data Flow for Cross-Module Features
-```text
-Email sender --> match against user_contacts.email
-Email body --> AI extract --> calendar event / contract data
-Contact profile --> query user_emails WHERE from_email = contact.email
-Calendar event title --> fuzzy match against contact names
-Contract provider --> match against email senders
-```
+---
 
-### Caching Strategy
-- Daily briefing: cached in localStorage with date key, regenerated once per day
-- Cross-module matches (email-contact): computed on render, lightweight DB queries
-- Smart insights: refreshed every 5 minutes (existing pattern)
+## 6. Timeline Tasks All Show "16:00" or "All day" — No Time Grouping
+All tasks display with individual time labels but there's no visual grouping. The timeline shows "16:00 Write to 10 investors", "All day Paper Trash", "All day House trash", "All day Plastic trash" — the "All day" items should be grouped separately from timed items.
 
-## Summary of Files Modified/Created
-- `supabase/functions/daily-voice-briefing/index.ts` (new)
-- `src/components/dashboard/DailyBriefingCard.tsx` (new)
-- `src/hooks/useDailyBriefing.ts` (new)
-- `src/components/dashboard/DashboardPanel.tsx` (add briefing card + pass data to SmartInsightCard)
-- `src/components/dashboard/SmartInsightCard.tsx` (cross-module insights)
-- `src/components/email/EmailDetailSheet.tsx` (contact card + calendar action)
-- `src/components/email/EmailCard.tsx` (date badge)
-- `src/components/contacts/ContactTimeline.tsx` (email history)
-- `src/hooks/useContextualActions.ts` (cross-module actions)
-- `supabase/functions/extract-contract-from-email/index.ts` (extend for calendar detection)
+**Fix:** Add section headers: "Overdue", "Timed", "All Day". Or at minimum, sort timed items first, then all-day items last, with a subtle divider.
+
+**Files:** `src/components/dashboard/TodayTimeline.tsx` — add grouping logic.
+
+---
+
+## 7. Contract Alert in Timeline Has No Context
+The timeline shows "⚠ Contract: YouTu..." truncated with a red dot. Users can't tell what the alert is about. The warning icon + truncation makes it feel alarming but uninformative.
+
+**Fix:** Show the full contract name (or at least more characters). Add a subtitle like "Renews Mar 15" so users know why it's flagged. Increase the title's max width or allow 2-line wrapping for important alerts.
+
+**Files:** `src/components/dashboard/TodayTimeline.tsx` — increase truncation threshold or add subtitle for contract-type items.
+
+---
+
+## 8. "Thinking..." Text Has No Timeout Fallback
+The "Next up" section shows "Thinking…" indefinitely when the AI suggestion hook fails or times out. In Round 4 we changed skeletons to text, but there's still no timeout to show a fallback.
+
+**Fix:** Add a 5-second timeout in `useSmartTaskSuggestions`. After timeout, return the highest-priority overdue task as the suggestion instead of leaving "Thinking..." forever.
+
+**Files:** `src/hooks/useSmartTaskSuggestions.ts` — add timeout with local fallback.
+
+---
+
+## 9. Bottom Nav Dori Button Active State Is Missing
+When the Dori/chat tab is active, the center Dori button looks identical to its inactive state. All other tabs get a blue highlight + underline indicator, but the Dori button has no visual "selected" state.
+
+**Fix:** Add a ring or glow effect to the Dori button when `activeTab === 'chat'`. E.g., `ring-2 ring-primary` or increase the shadow intensity.
+
+**Files:** `src/components/layout/MobileLayout.tsx` — add active state to center button.
+
+---
+
+## 10. Pull-to-Refresh Only Increments a Key — Doesn't Re-fetch
+The `PullToRefresh` handler does `setRefreshKey(k => k + 1)` which re-mounts the `DashboardPanel`. But the panel's `fetchAll` runs on mount, so it does technically re-fetch. However, on other tabs (Calendar, Email, Health), pull-to-refresh does nothing meaningful since those panels don't use the refresh key.
+
+**Fix:** Pass a refresh callback to each panel or at minimum show a brief "Refreshed" toast after pull-to-refresh completes. Currently there's no feedback that the refresh actually happened.
+
+**Files:** `src/components/layout/MobileLayout.tsx` — add toast feedback after refresh.
+
+---
+
+## Implementation Priority
+
+| # | Item | Effort | Impact |
+|---|------|--------|--------|
+| 1 | Fix Hero text wrapping (#1, #3) | Medium | High |
+| 2 | Fix "G." display name (#2) | Small | High |
+| 3 | Add suggestion timeout fallback (#8) | Medium | High |
+| 4 | Timeline grouping (#6) | Medium | Medium |
+| 5 | Weather + StatPills layout (#5) | Medium | Medium |
+| 6 | Hide progress bar on zero-state (#4) | Small | Small |
+| 7 | Dori button active state (#9) | Small | Medium |
+| 8 | Contract alert context (#7) | Small | Medium |
+| 9 | Pull-to-refresh feedback (#10) | Small | Low |
+
