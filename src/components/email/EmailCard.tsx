@@ -179,7 +179,7 @@ export function EmailCard({ thread, onSelect, onArchive, onToggleImportant, onSn
           <p className={cn("text-sm truncate mt-0.5", !email.is_read ? "text-foreground" : "text-muted-foreground")}>
             {email.subject || '(No subject)'}
           </p>
-          <p className="text-xs text-muted-foreground truncate mt-0.5">{email.ai_summary || email.snippet}</p>
+          <p className="text-xs text-muted-foreground truncate mt-0.5">{decodeHtmlEntities(email.ai_summary || email.snippet)}</p>
 
           {/* Tags row: AI action + priority badge + category chip + threat */}
           <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
