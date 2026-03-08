@@ -564,11 +564,11 @@ export function ContractManager({
           <TabsContent value={activeCategory} className="mt-4">
             {viewMode === 'cards' ? (
               filteredContracts.length === 0 ? (
-                <Card>
-                  <CardContent className="py-8 text-center text-muted-foreground">
+              <GlassCard>
+                  <GlassCardContent className="py-8 text-center text-muted-foreground">
                     {search ? t('contracts.noContractsSearch') : t('contracts.noContracts')}
-                  </CardContent>
-                </Card>
+                  </GlassCardContent>
+                </GlassCard>
               ) : (
                 <div className="grid gap-3 md:grid-cols-2">
                   {filteredContracts.map(contract => (

@@ -13,6 +13,7 @@ import { AddGoalDialog } from './AddGoalDialog';
 import { StreakDisplay } from './StreakDisplay';
 import { PanelShell, staggerItem } from '@/components/ui/panel-shell';
 import { motion } from 'framer-motion';
+import { EmptyState } from '@/components/ui/empty-state';
 import { 
   Plus, 
   Check, 

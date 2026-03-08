@@ -206,8 +206,8 @@ export function BrainDumpFAB({ className, collapsed = false }: BrainDumpFABProps
             <p className="text-xs text-muted-foreground mt-2 px-1">
               AI will categorize this for you 🧠
             </p>
-          </CardContent>
-        </Card>
+          </GlassCardContent>
+        </GlassCard>
       )}
 
       {/* FAB Buttons */}
