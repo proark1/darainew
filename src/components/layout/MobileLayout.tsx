@@ -281,6 +281,8 @@ export function MobileLayout({
         <PullToRefresh
           onRefresh={async () => {
             setRefreshKey(k => k + 1);
+            const { toast } = await import('sonner');
+            toast.success('Refreshed', { duration: 1500 });
           }}
           className="h-full"
         >
@@ -330,10 +332,13 @@ export function MobileLayout({
                       "w-14 h-14 -mt-6 rounded-full",
                       "bg-gradient-to-br from-primary to-accent",
                       "flex items-center justify-center",
-                      "shadow-lg shadow-primary/30 border-4 border-background",
+                      "shadow-lg border-4 border-background",
                       "transition-all duration-200 ease-out",
-                      "active:scale-95 active:shadow-primary/50",
-                      "animate-pulse-glow overflow-hidden"
+                      "active:scale-95",
+                      "overflow-hidden",
+                      activeTab === 'chat'
+                        ? "ring-2 ring-primary ring-offset-2 ring-offset-background shadow-primary/50"
+                        : "shadow-primary/30 animate-pulse-glow"
                     )}>
                       <img src={doriFish} alt="Dori" className="w-9 h-9 object-contain" />
                     </div>
