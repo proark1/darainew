@@ -1,148 +1,74 @@
 
-# Deep Module Interconnection + AI Daily Voice Briefing
 
-## Vision
-Transform DarAI from siloed modules into a deeply interconnected intelligent system where email, calendar, contacts, contracts, and the AI assistant all feed into each other -- with a new AI-generated daily voice briefing as the centerpiece.
+# Properties Feature — UI/UX Overhaul
 
----
-
-## Feature 1: AI Daily Voice Briefing on Dashboard
-
-A new dashboard card where the AI generates a personalized daily summary and reads it aloud using text-to-speech. The briefing aggregates data from ALL modules.
-
-### New Edge Function: `daily-voice-briefing`
-- Accepts user_id and fetches cross-module data server-side:
-  - Pending tasks (count, top 3 by priority)
-  - Today's calendar events
-  - Unread email count + priority emails
-  - Contract alerts (upcoming renewals/cancellations)
-  - Contacts overdue for follow-up
-  - Habit completion status
-  - Yesterday's check-in mood/energy
-- Sends all context to Gemini 3 Flash (via Lovable AI gateway) with a prompt like: "Generate a warm, concise 30-second daily briefing script for this user. Be specific, mention names and times."
-- Returns: `{ briefingText: string, highlights: [...] }`
-
-### New Component: `DailyBriefingCard`
-- Displayed prominently on the dashboard (below the hero)
-- Shows a text summary with key highlights as chips/badges
-- Play button that reads the briefing aloud via Web Speech API (existing `useTextToSpeech` hook)
-- Auto-play option (respects existing morning auto-play setting)
-- Cached per day so it doesn't re-generate on every page load
-
-### Files
-- `supabase/functions/daily-voice-briefing/index.ts` (new)
-- `src/components/dashboard/DailyBriefingCard.tsx` (new)
-- `src/hooks/useDailyBriefing.ts` (new)
-- `src/components/dashboard/DashboardPanel.tsx` (add card)
+The property feature is a single 233-line file with basic functionality but significant gaps in both design system usage and feature completeness.
 
 ---
 
-## Feature 2: Email-to-Calendar Integration
+## Issues Found
 
-When an email contains dates, times, or meeting references, surface a one-tap "Add to Calendar" action.
-
-### Changes
-- Update the `extract-contract-from-email` edge function (or create a shared extraction endpoint) to also detect event-like data: dates, times, locations, meeting links
-- Add an "Add to Calendar" button in `EmailDetailSheet.tsx` that pre-fills an event creation dialog with AI-extracted data (title from subject, time from email body, description from snippet)
-- Show a small calendar icon badge on `EmailCard.tsx` when the email contains detected dates
-
-### Files
-- `supabase/functions/extract-contract-from-email/index.ts` (extend to also return `detectedEvent` data)
-- `src/components/email/EmailDetailSheet.tsx` (add "Add to Calendar" action)
-- `src/components/email/EmailCard.tsx` (date detection badge)
-
----
-
-## Feature 3: Email-to-Contact Linking
-
-Automatically link emails to existing contacts and surface contact context when reading emails.
-
-### Changes
-- In `EmailDetailSheet.tsx`, match the sender email against `user_contacts` table
-- If a match is found, show a mini contact card (name, tier, last contacted, relationship) inline in the email detail view
-- Add a "Save as Contact" button when no match exists, pre-filling name and email
-- When viewing a contact profile, show their recent emails in the timeline
-
-### Files
-- `src/components/email/EmailDetailSheet.tsx` (contact context card)
-- `src/components/contacts/ContactTimeline.tsx` (add email history section)
+1. **Property list cards missing `pressable` and `haptic`** — GlassCard used but no tactile feedback or stagger animations.
+2. **Empty states are plain text** — "No properties yet", "No maintenance tasks", "No checklists" are inline `<p>` tags instead of `EmptyState`.
+3. **No stagger animations** — Property list and detail cards render without motion.
+4. **Documents tab is a placeholder** — Just says "Document storage coming soon" with no functionality.
+5. **No way to edit or delete properties** — Only add is supported. No edit dialog, no delete confirmation.
+6. **No way to add maintenance tasks or checklists from the UI** — The hook supports `addMaintenance` and `addChecklist` but the panel doesn't expose these.
+7. **Overview tab is sparse** — Missing purchase_price, current_value, address fields. No value change indicator.
+8. **Add property dialog is minimal** — Missing address, size, purchase date, purchase price, notes, current value fields.
+9. **Sidebar doesn't work well on mobile** — Fixed 256px sidebar with no responsive collapse.
+10. **Select property empty state** — Uses raw div instead of `EmptyState`.
 
 ---
 
-## Feature 4: Smart Dashboard Insight Card (Cross-Module)
+## Plan
 
-Upgrade the existing `SmartInsightCard` to pull insights from ALL modules instead of just tasks.
+### 1. Property list cards — pressable + haptic + stagger
+Add `pressable haptic="light"` to property GlassCards. Wrap each in `motion.div variants={staggerItem}` and the list in `staggerContainer`.
 
-### Changes
-- Add email-based insights: "You have 3 unread priority emails from key contacts"
-- Add contract insights: "Insurance contract renews in 5 days -- review or cancel?"
-- Add contact insights: "You haven't spoken to [Name] in 45 days"
-- Add calendar-email correlation: "Meeting with [Contact] tomorrow -- check their latest email"
-- Rotate through these insights automatically
+### 2. All empty states → EmptyState component
+Replace all 4 inline empty texts (no properties, no maintenance, no checklists, select property) with `EmptyState` component with appropriate icons and CTAs.
 
-### Files
-- `src/components/dashboard/SmartInsightCard.tsx` (accept emails, contracts, contacts props)
-- `src/components/dashboard/DashboardPanel.tsx` (pass new data to SmartInsightCard)
+### 3. Add property dialog — complete form
+Add fields: address, size_sqm, purchase_date, purchase_price, current_value, notes. Group into logical sections.
 
----
+### 4. Edit and delete property
+Add edit button (opens same dialog pre-filled) and delete button with confirmation on the overview tab. Wire to existing `updateProperty` and `deleteProperty` from the hook.
 
-## Feature 5: Contextual Quick Actions (Cross-Module)
+### 5. Add maintenance task UI
+Add a button + dialog on the maintenance tab to create tasks with title, description, category, cost, scheduled_date, is_recurring fields. Wire to existing `addMaintenance`.
 
-Enhance the existing `useContextualActions` hook to suggest actions based on cross-module data.
+### 6. Add checklist UI
+Add a button + dialog on the checklists tab to create checklists with name, type, and dynamic item list. Wire to existing `addChecklist`.
 
-### Changes
-- Add email-aware actions: "Reply to [Contact]'s email" when there are priority unread emails from known contacts
-- Add contract-aware actions: "Review [Contract] renewal" when a deadline is within 3 days
-- Add calendar-contact actions: "Prepare for meeting with [Name]" when a calendar event matches a contact
-- These actions appear in the QuickActionsBar on the dashboard
+### 7. Overview tab — richer detail card
+Show all available fields (address, purchase_price, current_value with gain/loss indicator, size). Add edit/delete actions.
 
-### Files
-- `src/hooks/useContextualActions.ts` (add email, contract, calendar-contact cross-references)
-- `src/components/dashboard/DashboardPanel.tsx` (pass onNavigate to QuickActionsBar)
+### 8. Mobile responsive sidebar
+On small screens, show property list as a horizontal scrollable strip or a select dropdown instead of the 256px sidebar.
+
+### 9. Maintenance task status toggle
+Add ability to mark maintenance tasks as completed (click to toggle status). Wire to existing `updateMaintenance`.
 
 ---
 
-## Technical Details
+## Files Modified
 
-### Daily Voice Briefing Edge Function
-```text
-POST /daily-voice-briefing
-Body: { user_id }
-Response: {
-  briefingText: "Good morning, Dar! You have 4 tasks today, including...",
-  highlights: [
-    { type: "task", label: "4 tasks, 1 overdue" },
-    { type: "email", label: "3 unread priority" },
-    { type: "contract", label: "Insurance renews in 5 days" },
-    { type: "contact", label: "Follow up with Ahmed" }
-  ]
-}
-```
+| File | Changes |
+|------|---------|
+| `src/components/property/PropertyPanel.tsx` | Full rewrite: stagger, haptic, EmptyState, responsive sidebar, edit/delete, add maintenance/checklist dialogs, richer overview |
 
-Uses Lovable AI gateway with `google/gemini-3-flash-preview` model. Queries tasks, events, user_emails, contracts, user_contacts, daily_checkins tables server-side using the service role key.
+## Summary
 
-### Data Flow for Cross-Module Features
-```text
-Email sender --> match against user_contacts.email
-Email body --> AI extract --> calendar event / contract data
-Contact profile --> query user_emails WHERE from_email = contact.email
-Calendar event title --> fuzzy match against contact names
-Contract provider --> match against email senders
-```
+| # | Item | Effort | Impact |
+|---|------|--------|--------|
+| 1 | Pressable + haptic + stagger | Tiny | Medium |
+| 2 | EmptyState components | Tiny | Medium |
+| 3 | Complete add property form | Small | High |
+| 4 | Edit and delete property | Small | High |
+| 5 | Add maintenance UI | Small | High |
+| 6 | Add checklist UI | Small | High |
+| 7 | Richer overview | Small | Medium |
+| 8 | Mobile responsive | Small | High |
+| 9 | Maintenance status toggle | Tiny | Medium |
 
-### Caching Strategy
-- Daily briefing: cached in localStorage with date key, regenerated once per day
-- Cross-module matches (email-contact): computed on render, lightweight DB queries
-- Smart insights: refreshed every 5 minutes (existing pattern)
-
-## Summary of Files Modified/Created
-- `supabase/functions/daily-voice-briefing/index.ts` (new)
-- `src/components/dashboard/DailyBriefingCard.tsx` (new)
-- `src/hooks/useDailyBriefing.ts` (new)
-- `src/components/dashboard/DashboardPanel.tsx` (add briefing card + pass data to SmartInsightCard)
-- `src/components/dashboard/SmartInsightCard.tsx` (cross-module insights)
-- `src/components/email/EmailDetailSheet.tsx` (contact card + calendar action)
-- `src/components/email/EmailCard.tsx` (date badge)
-- `src/components/contacts/ContactTimeline.tsx` (email history)
-- `src/hooks/useContextualActions.ts` (cross-module actions)
-- `supabase/functions/extract-contract-from-email/index.ts` (extend for calendar detection)
