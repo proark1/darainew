@@ -864,8 +864,8 @@ export default function Contacts() {
                 className="pl-10"
               />
             </div>
-          </CardContent>
-        </Card>
+          </GlassCardContent>
+        </GlassCard>
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
