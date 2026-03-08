@@ -24,10 +24,11 @@ interface TimelineItem {
   category?: string;
 }
 
-function TimelineRow({ item, index, onNavigate, onCompleteTask }: {
+function TimelineRow({ item, index, onNavigate, onCompleteTask, isOverdue = false }: {
   item: TimelineItem; index: number;
   onNavigate?: (panel: string) => void;
   onCompleteTask?: (taskId: string) => void;
+  isOverdue?: boolean;
 }) {
   return (
     <motion.div
