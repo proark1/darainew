@@ -406,6 +406,6 @@ function HabitSuggestions({ userId, existingHabitNames, onHabitAdded }: HabitSug
           </Button>
         ))}
       </div>
-    </Card>
+    </GlassCard>
   );
 }
