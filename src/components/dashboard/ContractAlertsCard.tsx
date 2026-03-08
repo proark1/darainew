@@ -37,7 +37,7 @@ export function ContractAlertsCard({ contracts, onNavigate }: ContractAlertsCard
   if (alerts.length === 0) return null;
 
   return (
-    <GlassCard>
+    <GlassCard pressable haptic="light">
       <GlassCardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <GlassCardTitle className="text-base flex items-center gap-2">

@@ -8,7 +8,7 @@ export function WeatherCard() {
   if (loading || error || !weather) return null;
 
   return (
-    <GlassCard>
+    <GlassCard pressable haptic="light">
       <GlassCardContent className="p-3">
         <div className="flex items-center gap-3">
           <span className="text-2xl">{weather.icon}</span>
