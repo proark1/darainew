@@ -58,6 +58,13 @@ function getInitials(name: string | null, email: string): string {
 
 const SWIPE_THRESHOLD = 80;
 
+function decodeHtmlEntities(text: string | null): string {
+  if (!text) return '';
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = text;
+  return textarea.value;
+}
+
 export function EmailCard({ thread, onSelect, onArchive, onToggleImportant, onSnooze, selectMode, isSelected, onToggleSelect }: EmailCardProps) {
   const email = thread.latestEmail;
   const sender = reconstructSender(email.from_name, email.from_email);

@@ -267,7 +267,7 @@ export function MobileLayout({
       {showHeader && (
         <ContextualHeader
           title={headerTitle}
-          onOpenMenu={() => setMoreOpen(true)}
+          onOpenMenu={isPrimaryTab ? undefined : () => setMoreOpen(true)}
           notifications={notifications}
           onMarkRead={markRead}
           onMarkAllRead={markAllRead}

@@ -749,6 +749,10 @@ const translations: Record<Language, Record<string, string>> = {
     'checkin.mood': 'Mood',
     'checkin.skipForNow': 'Skip for now',
     'checkin.submit': 'Submit',
+    'checkin.startCheckin': 'Check in',
+    'checkin.startReflection': 'Reflect',
+    'checkin.morningPrompt': 'Start your day with a quick check-in to set your goals',
+    'checkin.eveningPrompt': 'Take a moment to reflect on your day and prepare for tomorrow',
 
     // Automation Rules
     'automation.title': 'Automation Rules',
