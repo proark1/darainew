@@ -77,9 +77,9 @@ export function DayPredictionCard() {
           <Badge variant="outline" className={config.color}>
             {prediction.score}/10
           </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
+        </div>
+      </GlassCardHeader>
+      <GlassCardContent className="space-y-3">
         {/* Score progress */}
         <Progress value={prediction.score * 10} className="h-2" />
         
