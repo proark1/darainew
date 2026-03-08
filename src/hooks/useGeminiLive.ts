@@ -164,7 +164,7 @@ export function useGeminiLive({
     } finally {
       setIsProcessing(false);
     }
-  }, [personality, userProfile, contextData, onResponse, onError, onSpeakingChange]);
+  }, [personality, userProfile, contextData, memories, onResponse, onError, onSpeakingChange]);
 
   return {
     isProcessing,
