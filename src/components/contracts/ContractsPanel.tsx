@@ -3,7 +3,8 @@ import { useContracts } from '@/hooks/useContracts';
 import { useItemSharing } from '@/hooks/useItemSharing';
 import { ContractManager } from './ContractManager';
 import { ShareDialog } from '@/components/sharing/ShareDialog';
-import { PanelSkeleton } from '@/components/ui/panel-skeleton';
+import { PanelShell } from '@/components/ui/panel-shell';
+import { FileText } from 'lucide-react';
 
 interface ContractsPanelProps {
   userId: string;
@@ -29,16 +30,16 @@ export function ContractsPanel({ userId }: ContractsPanelProps) {
 
   const [shareDialog, setShareDialog] = useState<{ id: string; name: string } | null>(null);
 
-  if (loading) {
-    return (
-      <div className="h-full p-4">
-        <PanelSkeleton variant="cards" count={4} />
-      </div>
-    );
-  }
-
   return (
-    <div className="h-full overflow-y-auto p-3 md:p-4">
+    <PanelShell
+      icon={FileText}
+      title="Contracts"
+      subtitle={`${activeContracts.length} active · €${monthlyCost.toFixed(0)}/mo`}
+      loading={loading}
+      loadingVariant="cards"
+      noPadding
+    >
+      <div className="p-3 md:p-4">
       <ContractManager
         contracts={contracts}
         activeContracts={activeContracts}
@@ -66,6 +67,7 @@ export function ContractsPanel({ userId }: ContractsPanelProps) {
           onClose={() => setShareDialog(null)}
         />
       )}
-    </div>
+      </div>
+    </PanelShell>
   );
 }

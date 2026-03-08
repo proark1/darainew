@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { GlassCard, GlassCardContent, GlassCardHeader, GlassCardTitle } from '@/components/ui/glass-card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useDayPrediction } from '@/hooks/useDayPrediction';
@@ -48,14 +48,14 @@ export function DayPredictionCard() {
 
   if (loading) {
     return (
-      <Card className="glass-panel-solid">
-        <CardContent className="p-4">
+      <GlassCard>
+        <GlassCardContent className="p-4">
           <div className="animate-pulse space-y-3">
             <div className="h-4 bg-muted rounded w-1/3" />
             <div className="h-8 bg-muted rounded" />
           </div>
-        </CardContent>
-      </Card>
+        </GlassCardContent>
+      </GlassCard>
     );
   }
 
@@ -67,9 +67,9 @@ export function DayPredictionCard() {
   const Icon = config.icon;
 
   return (
-    <Card className={cn("glass-panel-solid", config.bgColor)}>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center justify-between text-sm">
+    <GlassCard className={config.bgColor}>
+      <GlassCardHeader className="pb-2">
+        <div className="flex items-center justify-between text-sm font-semibold">
           <div className="flex items-center gap-2">
             <Icon className={cn("w-4 h-4", config.color)} />
             <span>{config.label}</span>
@@ -77,9 +77,9 @@ export function DayPredictionCard() {
           <Badge variant="outline" className={config.color}>
             {prediction.score}/10
           </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
+        </div>
+      </GlassCardHeader>
+      <GlassCardContent className="space-y-3">
         {/* Score progress */}
         <Progress value={prediction.score * 10} className="h-2" />
         
@@ -113,7 +113,7 @@ export function DayPredictionCard() {
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </GlassCardContent>
+    </GlassCard>
   );
 }

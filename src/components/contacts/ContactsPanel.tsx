@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent } from '@/components/ui/card';
+import { GlassCard, GlassCardContent } from '@/components/ui/glass-card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -338,7 +338,7 @@ export function ContactsPanel({ userId }: ContactsPanelProps) {
     const isFamily = contact.personalTier === 'family';
     
     return (
-      <Card 
+      <GlassCard 
         className={`group hover:bg-accent/50 transition-colors cursor-pointer relative ${isDue ? 'border-destructive/50' : ''}`}
         onClick={() => setSelectedContact(contact)}
       >
@@ -349,7 +349,7 @@ export function ContactsPanel({ userId }: ContactsPanelProps) {
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-destructive" />
           </span>
         )}
-        <CardContent className="p-3">
+        <GlassCardContent className="p-3">
           <div className="flex items-start gap-2.5">
             <Avatar className="h-9 w-9 shrink-0">
               <AvatarFallback className="bg-primary/10 text-primary text-xs">
@@ -428,8 +428,8 @@ export function ContactsPanel({ userId }: ContactsPanelProps) {
               </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </GlassCardContent>
+      </GlassCard>
     );
   };
 

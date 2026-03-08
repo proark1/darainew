@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { GlassCard, GlassCardContent, GlassCardHeader, GlassCardTitle } from '@/components/ui/glass-card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useSmartScheduling, SchedulingSuggestion } from '@/hooks/useSmartScheduling';
@@ -39,14 +39,14 @@ export function SmartSchedulingCard() {
 
   if (loading) {
     return (
-      <Card className="glass-panel-solid">
-        <CardContent className="p-4">
+      <GlassCard>
+        <GlassCardContent className="p-4">
           <div className="animate-pulse space-y-3">
             <div className="h-4 bg-muted rounded w-1/3" />
             <div className="h-16 bg-muted rounded" />
           </div>
-        </CardContent>
-      </Card>
+        </GlassCardContent>
+      </GlassCard>
     );
   }
 
@@ -59,9 +59,9 @@ export function SmartSchedulingCard() {
     : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   return (
-    <Card className="glass-panel-solid border-accent/20">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
+    <GlassCard className="border-accent/20">
+      <GlassCardHeader className="pb-2">
+        <div className="flex items-center gap-2 text-sm font-semibold">
           <Lightbulb className="w-4 h-4 text-accent" />
           {t('smartScheduling.title')}
           {suggestions.length > 0 && (
@@ -69,9 +69,9 @@ export function SmartSchedulingCard() {
               {suggestions.length} {t('smartScheduling.tips')}
             </Badge>
           )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
+        </div>
+      </GlassCardHeader>
+      <GlassCardContent className="space-y-3">
         {/* Pattern Summary */}
         {patterns && patterns.peakHours.length > 0 && (
           <div className="p-3 rounded-lg bg-muted/50 space-y-2">
@@ -138,7 +138,7 @@ export function SmartSchedulingCard() {
             {t('smartScheduling.keepCompleting')}
           </p>
         )}
-      </CardContent>
-    </Card>
+      </GlassCardContent>
+    </GlassCard>
   );
 }

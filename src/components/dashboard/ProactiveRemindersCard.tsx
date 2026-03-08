@@ -1,6 +1,6 @@
 import { useProactiveReminders, ProactiveReminder } from '@/hooks/useProactiveReminders';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { GlassCard, GlassCardContent, GlassCardHeader } from '@/components/ui/glass-card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -37,44 +37,44 @@ export function ProactiveRemindersCard({ onNavigate }: ProactiveRemindersCardPro
 
   if (loading) {
     return (
-      <Card className="glass-panel-solid animate-pulse">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
+      <GlassCard className="animate-pulse">
+        <GlassCardHeader className="pb-2">
+          <div className="flex items-center gap-2 text-sm font-semibold">
             <Brain className="w-4 h-4 text-primary" />
             {t('proactiveReminders.title')}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+          </div>
+        </GlassCardHeader>
+        <GlassCardContent>
           <div className="h-24 bg-muted/50 rounded-lg" />
-        </CardContent>
-      </Card>
+        </GlassCardContent>
+      </GlassCard>
     );
   }
 
   if (reminders.length === 0) {
     return (
-      <Card className="glass-panel-solid">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
+      <GlassCard>
+        <GlassCardHeader className="pb-2">
+          <div className="flex items-center gap-2 text-sm font-semibold">
             <Brain className="w-4 h-4 text-primary" />
             {t('proactiveReminders.title')}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+          </div>
+        </GlassCardHeader>
+        <GlassCardContent>
           <div className="text-center py-6 text-muted-foreground">
             <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
             <p className="text-sm">{t('proactiveReminders.allCaughtUp')}</p>
           </div>
-        </CardContent>
-      </Card>
+        </GlassCardContent>
+      </GlassCard>
     );
   }
 
   return (
-    <Card className="glass-panel-solid">
-      <CardHeader className="pb-2">
+    <GlassCard>
+      <GlassCardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-sm">
+          <div className="flex items-center gap-2 text-sm font-semibold">
             <Brain className="w-4 h-4 text-primary" />
             {t('proactiveReminders.title')}
             {unreadCount > 0 && (
@@ -82,10 +82,10 @@ export function ProactiveRemindersCard({ onNavigate }: ProactiveRemindersCardPro
                 {unreadCount}
               </Badge>
             )}
-          </CardTitle>
+          </div>
         </div>
-      </CardHeader>
-      <CardContent>
+      </GlassCardHeader>
+      <GlassCardContent>
         <ScrollArea className="max-h-64">
           <div className="space-y-2">
             {reminders.slice(0, 5).map((reminder) => (
@@ -106,8 +106,8 @@ export function ProactiveRemindersCard({ onNavigate }: ProactiveRemindersCardPro
             +{reminders.length - 5} {t('proactiveReminders.more')}
           </p>
         )}
-      </CardContent>
-    </Card>
+      </GlassCardContent>
+    </GlassCard>
   );
 }
 

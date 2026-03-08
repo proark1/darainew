@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { GlassCard, GlassCardContent, GlassCardHeader } from '@/components/ui/glass-card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useFollowUpQueue } from '@/hooks/useFollowUpQueue';
@@ -43,14 +43,14 @@ export function FollowUpCard() {
 
   if (loading) {
     return (
-      <Card className="glass-panel-solid">
-        <CardContent className="p-4">
+      <GlassCard>
+        <GlassCardContent className="p-4">
           <div className="animate-pulse space-y-3">
             <div className="h-4 bg-muted rounded w-1/3" />
             <div className="h-12 bg-muted rounded" />
           </div>
-        </CardContent>
-      </Card>
+        </GlassCardContent>
+      </GlassCard>
     );
   }
 
@@ -59,17 +59,17 @@ export function FollowUpCard() {
   }
 
   return (
-    <Card className="glass-panel-solid border-primary/20">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
+    <GlassCard className="border-primary/20">
+      <GlassCardHeader className="pb-2">
+        <div className="flex items-center gap-2 text-sm font-semibold">
           <MessageSquare className="w-4 h-4 text-primary" />
           {t('followUp.quick')}
           <Badge variant="secondary" className="ml-auto">
             {dueFollowUps.length}
           </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
+        </div>
+      </GlassCardHeader>
+      <GlassCardContent className="space-y-2">
         {dueFollowUps.slice(0, 3).map((followUp) => (
           <div
             key={followUp.id}
@@ -157,7 +157,7 @@ export function FollowUpCard() {
             +{dueFollowUps.length - 3} {t('followUp.more')}
           </p>
         )}
-      </CardContent>
-    </Card>
+      </GlassCardContent>
+    </GlassCard>
   );
 }

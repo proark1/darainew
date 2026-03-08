@@ -1,5 +1,5 @@
 import { Contract, CONTRACT_CATEGORIES } from '@/hooks/useContracts';
-import { Card, CardContent } from '@/components/ui/card';
+import { GlassCard, GlassCardContent } from '@/components/ui/glass-card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -114,13 +114,13 @@ export function ContractCard({
   };
 
   return (
-    <Card className={cn(
+    <GlassCard className={cn(
       "group relative transition-all hover:shadow-md",
       !contract.isActive && "opacity-60",
       isCancellationSoon && "border-destructive/50 bg-destructive/5",
       isSelected && "ring-2 ring-primary"
     )}>
-      <CardContent className="p-4">
+      <GlassCardContent className="p-4">
         <div className="flex items-start gap-3">
           {/* Bulk select checkbox */}
           {showBulkSelect && (
@@ -280,7 +280,7 @@ export function ContractCard({
             </DropdownMenu>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </GlassCardContent>
+    </GlassCard>
   );
 }
