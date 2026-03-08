@@ -492,6 +492,7 @@ const Index = () => {
       }));
 
       const pendingTaskCount = tasks.filter(t => !t.completed).length;
+      const memoriesForContext = getMemoriesForContext();
       const smartPayload = buildSmartPayload({
         message: userText,
         userProfile: userProfile || undefined,
@@ -510,6 +511,7 @@ const Index = () => {
           unreadEmails: unreadEmailCount,
           activeHabits: todayHabits.length,
         },
+        memories: memoriesForContext,
       });
 
       await streamChat({
