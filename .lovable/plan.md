@@ -1,148 +1,72 @@
 
-# Deep Module Interconnection + AI Daily Voice Briefing
 
-## Vision
-Transform DarAI from siloed modules into a deeply interconnected intelligent system where email, calendar, contacts, contracts, and the AI assistant all feed into each other -- with a new AI-generated daily voice briefing as the centerpiece.
+# Contacts Feature — UI/UX Overhaul
 
----
-
-## Feature 1: AI Daily Voice Briefing on Dashboard
-
-A new dashboard card where the AI generates a personalized daily summary and reads it aloud using text-to-speech. The briefing aggregates data from ALL modules.
-
-### New Edge Function: `daily-voice-briefing`
-- Accepts user_id and fetches cross-module data server-side:
-  - Pending tasks (count, top 3 by priority)
-  - Today's calendar events
-  - Unread email count + priority emails
-  - Contract alerts (upcoming renewals/cancellations)
-  - Contacts overdue for follow-up
-  - Habit completion status
-  - Yesterday's check-in mood/energy
-- Sends all context to Gemini 3 Flash (via Lovable AI gateway) with a prompt like: "Generate a warm, concise 30-second daily briefing script for this user. Be specific, mention names and times."
-- Returns: `{ briefingText: string, highlights: [...] }`
-
-### New Component: `DailyBriefingCard`
-- Displayed prominently on the dashboard (below the hero)
-- Shows a text summary with key highlights as chips/badges
-- Play button that reads the briefing aloud via Web Speech API (existing `useTextToSpeech` hook)
-- Auto-play option (respects existing morning auto-play setting)
-- Cached per day so it doesn't re-generate on every page load
-
-### Files
-- `supabase/functions/daily-voice-briefing/index.ts` (new)
-- `src/components/dashboard/DailyBriefingCard.tsx` (new)
-- `src/hooks/useDailyBriefing.ts` (new)
-- `src/components/dashboard/DashboardPanel.tsx` (add card)
+The contacts feature is functionally rich (tiered relationships, AI insights, interaction history, network health, timeline, import/export, email templates) but has significant design system inconsistencies and UX gaps.
 
 ---
 
-## Feature 2: Email-to-Calendar Integration
+## Issues Found
 
-When an email contains dates, times, or meeting references, surface a one-tap "Add to Calendar" action.
-
-### Changes
-- Update the `extract-contract-from-email` edge function (or create a shared extraction endpoint) to also detect event-like data: dates, times, locations, meeting links
-- Add an "Add to Calendar" button in `EmailDetailSheet.tsx` that pre-fills an event creation dialog with AI-extracted data (title from subject, time from email body, description from snippet)
-- Show a small calendar icon badge on `EmailCard.tsx` when the email contains detected dates
-
-### Files
-- `supabase/functions/extract-contract-from-email/index.ts` (extend to also return `detectedEvent` data)
-- `src/components/email/EmailDetailSheet.tsx` (add "Add to Calendar" action)
-- `src/components/email/EmailCard.tsx` (date detection badge)
+1. **No PanelShell in ContactsPanel** — Custom header instead of standardized `PanelShell`. No stagger animations.
+2. **ContactProfileCard uses raw `Card`** — All internal cards (Details, Tags, Notes, Stats, History, AI Insights, Quick Actions) use `Card` instead of `GlassCard`.
+3. **ContactNetworkHealth uses raw `Card`** — 225 lines, all `Card` imports.
+4. **ContactTimeline uses raw `Card`** — 242 lines, all `Card` imports.
+5. **ContactsPage uses raw `Card`** — The full-page view (1060 lines) uses `Card` everywhere, no `GlassCard`, no motion animations.
+6. **Empty states are plain text** — "No contacts found" / "No contacts yet" are inline text instead of the `EmptyState` component.
+7. **ContactsPage table row click opens edit form** — Should open profile card (like the sidebar does), consistent with the design principle that clicking opens profile first.
+8. **No haptic feedback** — ContactsPanel uses `GlassCard` but without `pressable` or `haptic` props.
 
 ---
 
-## Feature 3: Email-to-Contact Linking
+## Plan
 
-Automatically link emails to existing contacts and surface contact context when reading emails.
+### 1. ContactsPanel → PanelShell wrapper
+Replace custom header with `PanelShell` (icon: `Users`, title: "Contacts", subtitle: count + due). Move Add button and Import/Export into `actions`. Move search + view toggle into `headerExtra`.
 
-### Changes
-- In `EmailDetailSheet.tsx`, match the sender email against `user_contacts` table
-- If a match is found, show a mini contact card (name, tier, last contacted, relationship) inline in the email detail view
-- Add a "Save as Contact" button when no match exists, pre-filling name and email
-- When viewing a contact profile, show their recent emails in the timeline
+**File:** `src/components/contacts/ContactsPanel.tsx`
 
-### Files
-- `src/components/email/EmailDetailSheet.tsx` (contact context card)
-- `src/components/contacts/ContactTimeline.tsx` (add email history section)
+### 2. ContactsPanel cards → pressable + haptic
+Add `pressable haptic="light"` to the existing `GlassCard` usage in `ContactCard`. Add `staggerItem` motion wrapper.
 
----
+**File:** `src/components/contacts/ContactsPanel.tsx`
 
-## Feature 4: Smart Dashboard Insight Card (Cross-Module)
+### 3. Empty states → EmptyState component
+Replace inline "No contacts" text with `EmptyState` (icon: `Users`/`Bell`, proper title/description). Apply in both panel and page views.
 
-Upgrade the existing `SmartInsightCard` to pull insights from ALL modules instead of just tasks.
+**Files:** `src/components/contacts/ContactsPanel.tsx`, `src/pages/ContactsPage.tsx`
 
-### Changes
-- Add email-based insights: "You have 3 unread priority emails from key contacts"
-- Add contract insights: "Insurance contract renews in 5 days -- review or cancel?"
-- Add contact insights: "You haven't spoken to [Name] in 45 days"
-- Add calendar-email correlation: "Meeting with [Contact] tomorrow -- check their latest email"
-- Rotate through these insights automatically
+### 4. ContactProfileCard → GlassCard
+Replace all `Card`/`CardContent`/`CardHeader` with `GlassCard`/`GlassCardContent`. This covers: Contact Details, Tags, Notes, Stats, Log Interaction, History, AI Insights, Quick Actions.
 
-### Files
-- `src/components/dashboard/SmartInsightCard.tsx` (accept emails, contracts, contacts props)
-- `src/components/dashboard/DashboardPanel.tsx` (pass new data to SmartInsightCard)
+**File:** `src/components/contacts/ContactProfileCard.tsx`
 
----
+### 5. ContactNetworkHealth → GlassCard
+Replace `Card` imports with `GlassCard`. Add motion animations.
 
-## Feature 5: Contextual Quick Actions (Cross-Module)
+**File:** `src/components/contacts/ContactNetworkHealth.tsx`
 
-Enhance the existing `useContextualActions` hook to suggest actions based on cross-module data.
+### 6. ContactTimeline → GlassCard
+Replace `Card` imports with `GlassCard`. Add motion animations.
 
-### Changes
-- Add email-aware actions: "Reply to [Contact]'s email" when there are priority unread emails from known contacts
-- Add contract-aware actions: "Review [Contract] renewal" when a deadline is within 3 days
-- Add calendar-contact actions: "Prepare for meeting with [Name]" when a calendar event matches a contact
-- These actions appear in the QuickActionsBar on the dashboard
+**File:** `src/components/contacts/ContactTimeline.tsx`
 
-### Files
-- `src/hooks/useContextualActions.ts` (add email, contract, calendar-contact cross-references)
-- `src/components/dashboard/DashboardPanel.tsx` (pass onNavigate to QuickActionsBar)
+### 7. ContactsPage → GlassCard + design polish
+Replace all `Card` usage with `GlassCard` in the full-page contact cards and table view. Fix table row click to open profile card instead of edit form. Add `pressable haptic="light"` to card items.
+
+**File:** `src/pages/ContactsPage.tsx`
 
 ---
 
-## Technical Details
+## Summary
 
-### Daily Voice Briefing Edge Function
-```text
-POST /daily-voice-briefing
-Body: { user_id }
-Response: {
-  briefingText: "Good morning, Dar! You have 4 tasks today, including...",
-  highlights: [
-    { type: "task", label: "4 tasks, 1 overdue" },
-    { type: "email", label: "3 unread priority" },
-    { type: "contract", label: "Insurance renews in 5 days" },
-    { type: "contact", label: "Follow up with Ahmed" }
-  ]
-}
-```
+| # | Item | Effort | Impact |
+|---|------|--------|--------|
+| 1 | PanelShell wrapper | Small | High |
+| 2 | Pressable + haptic cards | Tiny | Medium |
+| 3 | EmptyState components | Tiny | Medium |
+| 4 | ProfileCard → GlassCard | Small | High |
+| 5 | NetworkHealth → GlassCard | Tiny | Medium |
+| 6 | Timeline → GlassCard | Tiny | Medium |
+| 7 | ContactsPage → GlassCard | Medium | High |
 
-Uses Lovable AI gateway with `google/gemini-3-flash-preview` model. Queries tasks, events, user_emails, contracts, user_contacts, daily_checkins tables server-side using the service role key.
-
-### Data Flow for Cross-Module Features
-```text
-Email sender --> match against user_contacts.email
-Email body --> AI extract --> calendar event / contract data
-Contact profile --> query user_emails WHERE from_email = contact.email
-Calendar event title --> fuzzy match against contact names
-Contract provider --> match against email senders
-```
-
-### Caching Strategy
-- Daily briefing: cached in localStorage with date key, regenerated once per day
-- Cross-module matches (email-contact): computed on render, lightweight DB queries
-- Smart insights: refreshed every 5 minutes (existing pattern)
-
-## Summary of Files Modified/Created
-- `supabase/functions/daily-voice-briefing/index.ts` (new)
-- `src/components/dashboard/DailyBriefingCard.tsx` (new)
-- `src/hooks/useDailyBriefing.ts` (new)
-- `src/components/dashboard/DashboardPanel.tsx` (add briefing card + pass data to SmartInsightCard)
-- `src/components/dashboard/SmartInsightCard.tsx` (cross-module insights)
-- `src/components/email/EmailDetailSheet.tsx` (contact card + calendar action)
-- `src/components/email/EmailCard.tsx` (date badge)
-- `src/components/contacts/ContactTimeline.tsx` (email history)
-- `src/hooks/useContextualActions.ts` (cross-module actions)
-- `supabase/functions/extract-contract-from-email/index.ts` (extend for calendar detection)
