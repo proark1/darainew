@@ -71,10 +71,10 @@ export function ProactiveRemindersCard({ onNavigate }: ProactiveRemindersCardPro
   }
 
   return (
-    <Card className="glass-panel-solid">
-      <CardHeader className="pb-2">
+    <GlassCard>
+      <GlassCardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-sm">
+          <div className="flex items-center gap-2 text-sm font-semibold">
             <Brain className="w-4 h-4 text-primary" />
             {t('proactiveReminders.title')}
             {unreadCount > 0 && (
@@ -82,10 +82,10 @@ export function ProactiveRemindersCard({ onNavigate }: ProactiveRemindersCardPro
                 {unreadCount}
               </Badge>
             )}
-          </CardTitle>
+          </div>
         </div>
-      </CardHeader>
-      <CardContent>
+      </GlassCardHeader>
+      <GlassCardContent>
         <ScrollArea className="max-h-64">
           <div className="space-y-2">
             {reminders.slice(0, 5).map((reminder) => (
