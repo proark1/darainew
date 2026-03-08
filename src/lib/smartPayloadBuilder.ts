@@ -89,6 +89,7 @@ export function buildSmartPayload({
   familyMembers?: FamilyMember[];
   shoppingLists?: ShoppingList[];
   stats?: { totalContacts: number; totalContracts: number; pendingTasks: number; upcomingEvents: number; unreadEmails: number; activeHabits: number };
+  memories?: { type: string; key: string; value: string; category?: string }[];
 }): SmartPayload {
   const lowerMsg = message.toLowerCase();
   const payload: SmartPayload = {};
