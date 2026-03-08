@@ -553,6 +553,35 @@ export function IslamEnhancedPanel() {
                       </div>
                     </div>
                   </Card>
+
+                  {/* Resume reading card */}
+                  {(() => {
+                    const lastRead = localStorage.getItem('quran-last-read');
+                    if (!lastRead) return null;
+                    try {
+                      const { surahNumber, surahName, englishName, ayah } = JSON.parse(lastRead);
+                      return (
+                        <Card
+                          pressable
+                          haptic="light"
+                          className="p-3 border-primary/20"
+                          onClick={() => fetchSurah(surahNumber)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <BookOpen className="w-4 h-4 text-primary" />
+                              <div>
+                                <span className="text-sm font-medium">Continue Reading</span>
+                                <p className="text-xs text-muted-foreground">{englishName} · Ayah {ayah}</p>
+                              </div>
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                          </div>
+                        </Card>
+                      );
+                    } catch { return null; }
+                  })()}
+
                   <div className="flex gap-2">
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -580,7 +609,6 @@ export function IslamEnhancedPanel() {
                       </SelectContent>
                     </Select>
                     <Button variant="outline" size="sm" className="gap-1 h-9" onClick={() => {
-                      // Show Hifz tracker inline
                       setActiveTab('quran');
                       setShowSurahList(false);
                       setSelectedSurah(null);
@@ -595,8 +623,17 @@ export function IslamEnhancedPanel() {
                     {filteredSurahs.map(surah => {
                       const progress = getSurahProgress(surah.number, surah.numberOfAyahs);
                       return (
-                        <Card key={surah.number} className="p-3 cursor-pointer hover:bg-accent transition-colors"
-                          onClick={() => fetchSurah(surah.number)}>
+                        <Card key={surah.number} pressable haptic="light" className="p-3"
+                          onClick={() => {
+                            fetchSurah(surah.number);
+                            // Save last read position
+                            localStorage.setItem('quran-last-read', JSON.stringify({
+                              surahNumber: surah.number,
+                              surahName: surah.name,
+                              englishName: surah.englishName,
+                              ayah: 1,
+                            }));
+                          }}>
                           <div className="flex items-center gap-3">
                             <div className={cn(
                               "w-10 h-10 rounded-full flex items-center justify-center",
@@ -778,10 +815,10 @@ export function IslamEnhancedPanel() {
                 {/* Floating audio indicator */}
                 {currentPlayingAyah !== null && (
                   <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50">
-                    <Card className="px-4 py-2 bg-primary text-primary-foreground shadow-lg flex items-center gap-2">
+                    <Card className="px-4 py-2 shadow-glow flex items-center gap-3 bg-primary text-primary-foreground rounded-full">
                       <Volume2 className="w-4 h-4 animate-pulse" />
-                      <span className="text-sm font-medium">Playing Ayah {currentPlayingAyah}</span>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-primary-foreground hover:text-primary-foreground/80"
+                      <span className="text-sm font-medium">Ayah {currentPlayingAyah}</span>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-primary-foreground hover:text-primary-foreground/80 hover:bg-primary-foreground/10"
                         onClick={stopAudio}>
                         <X className="w-4 h-4" />
                       </Button>

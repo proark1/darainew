@@ -1,53 +1,148 @@
 
+# Deep Module Interconnection + AI Daily Voice Briefing
 
-# Islam Feature — Final Polish
-
-After the major overhaul, here are the remaining issues I found:
-
----
-
-## 1. HifzTrackerTab Still Uses Raw `Card` (880 lines, no GlassCard)
-The Hifz tracker is the last component not using the design system. It imports `Card` from `@/components/ui/card` and has no `GlassCard`, `staggerItem`, or `motion` animations. This makes it visually inconsistent when accessed from the Quran tab.
-
-**File:** `src/components/islam/HifzTrackerTab.tsx` — replace `Card` imports with `GlassCard`, add motion animations.
+## Vision
+Transform DarAI from siloed modules into a deeply interconnected intelligent system where email, calendar, contacts, contracts, and the AI assistant all feed into each other -- with a new AI-generated daily voice briefing as the centerpiece.
 
 ---
 
-## 2. Quran Reader Still Uses Raw `Card` in Several Places
-Lines 485, 520, 542, 555, 598, 620, 669, 716, 756, 781 in `IslamEnhancedPanel.tsx` use `Card` (which is aliased to `GlassCard` at import but the surah list items at line 598 and ayah cards at line 716 don't use `pressable` or `haptic` props). The floating audio indicator at line 781 also uses `Card` without the glass styling.
+## Feature 1: AI Daily Voice Briefing on Dashboard
 
-**File:** `src/components/islam/IslamEnhancedPanel.tsx` — add `pressable` to surah list cards, style the floating audio bar better.
+A new dashboard card where the AI generates a personalized daily summary and reads it aloud using text-to-speech. The briefing aggregates data from ALL modules.
+
+### New Edge Function: `daily-voice-briefing`
+- Accepts user_id and fetches cross-module data server-side:
+  - Pending tasks (count, top 3 by priority)
+  - Today's calendar events
+  - Unread email count + priority emails
+  - Contract alerts (upcoming renewals/cancellations)
+  - Contacts overdue for follow-up
+  - Habit completion status
+  - Yesterday's check-in mood/energy
+- Sends all context to Gemini 3 Flash (via Lovable AI gateway) with a prompt like: "Generate a warm, concise 30-second daily briefing script for this user. Be specific, mention names and times."
+- Returns: `{ briefingText: string, highlights: [...] }`
+
+### New Component: `DailyBriefingCard`
+- Displayed prominently on the dashboard (below the hero)
+- Shows a text summary with key highlights as chips/badges
+- Play button that reads the briefing aloud via Web Speech API (existing `useTextToSpeech` hook)
+- Auto-play option (respects existing morning auto-play setting)
+- Cached per day so it doesn't re-generate on every page load
+
+### Files
+- `supabase/functions/daily-voice-briefing/index.ts` (new)
+- `src/components/dashboard/DailyBriefingCard.tsx` (new)
+- `src/hooks/useDailyBriefing.ts` (new)
+- `src/components/dashboard/DashboardPanel.tsx` (add card)
 
 ---
 
-## 3. Quran "Resume Reading" Feature Missing
-When users return to the Quran tab, they always see the surah list. There's no "Continue where you left off" card showing their last-read surah and ayah. The reading progress data is already tracked via `useQuranReadingProgress`.
+## Feature 2: Email-to-Calendar Integration
 
-**File:** `src/components/islam/IslamEnhancedPanel.tsx` — add a "Continue Reading" card above the surah search, showing the last-read surah + ayah with a tap-to-resume action. Store last position in localStorage.
+When an email contains dates, times, or meeting references, surface a one-tap "Add to Calendar" action.
 
----
+### Changes
+- Update the `extract-contract-from-email` edge function (or create a shared extraction endpoint) to also detect event-like data: dates, times, locations, meeting links
+- Add an "Add to Calendar" button in `EmailDetailSheet.tsx` that pre-fills an event creation dialog with AI-extracted data (title from subject, time from email body, description from snippet)
+- Show a small calendar icon badge on `EmailCard.tsx` when the email contains detected dates
 
-## 4. Overview Tab Missing Daily Hadith
-The Home/Overview tab shows prayer, Quran, dhikr, and calendar — but no daily hadith preview. The `HadithTab` component exists in the "More" section but a short hadith snippet on the home tab would be valuable.
-
-**File:** `src/components/islam/IslamOverviewTab.tsx` — add a compact hadith card that shows one random hadith from the API, tappable to navigate to the "More" tab.
-
----
-
-## 5. Prayer Completion Not Shown on Overview
-The PrayerTimesTab now has a completion tracker (X/5 prayed), but this data isn't surfaced on the Home tab's next-prayer card. Users should see their daily prayer progress at a glance.
-
-**File:** `src/components/islam/IslamOverviewTab.tsx` — read the same localStorage key used by PrayerTimesTab (`completed-prayers-YYYY-MM-DD`) and show a small "3/5 prayed" badge on the prayer card.
+### Files
+- `supabase/functions/extract-contract-from-email/index.ts` (extend to also return `detectedEvent` data)
+- `src/components/email/EmailDetailSheet.tsx` (add "Add to Calendar" action)
+- `src/components/email/EmailCard.tsx` (date detection badge)
 
 ---
 
-## Summary
+## Feature 3: Email-to-Contact Linking
 
-| # | Item | Effort | Impact |
-|---|------|--------|--------|
-| 1 | HifzTrackerTab design system | Medium | High |
-| 2 | Quran reader card polish | Small | Medium |
-| 3 | Resume reading feature | Small | High |
-| 4 | Daily hadith on overview | Small | Medium |
-| 5 | Prayer completion on overview | Tiny | Medium |
+Automatically link emails to existing contacts and surface contact context when reading emails.
 
+### Changes
+- In `EmailDetailSheet.tsx`, match the sender email against `user_contacts` table
+- If a match is found, show a mini contact card (name, tier, last contacted, relationship) inline in the email detail view
+- Add a "Save as Contact" button when no match exists, pre-filling name and email
+- When viewing a contact profile, show their recent emails in the timeline
+
+### Files
+- `src/components/email/EmailDetailSheet.tsx` (contact context card)
+- `src/components/contacts/ContactTimeline.tsx` (add email history section)
+
+---
+
+## Feature 4: Smart Dashboard Insight Card (Cross-Module)
+
+Upgrade the existing `SmartInsightCard` to pull insights from ALL modules instead of just tasks.
+
+### Changes
+- Add email-based insights: "You have 3 unread priority emails from key contacts"
+- Add contract insights: "Insurance contract renews in 5 days -- review or cancel?"
+- Add contact insights: "You haven't spoken to [Name] in 45 days"
+- Add calendar-email correlation: "Meeting with [Contact] tomorrow -- check their latest email"
+- Rotate through these insights automatically
+
+### Files
+- `src/components/dashboard/SmartInsightCard.tsx` (accept emails, contracts, contacts props)
+- `src/components/dashboard/DashboardPanel.tsx` (pass new data to SmartInsightCard)
+
+---
+
+## Feature 5: Contextual Quick Actions (Cross-Module)
+
+Enhance the existing `useContextualActions` hook to suggest actions based on cross-module data.
+
+### Changes
+- Add email-aware actions: "Reply to [Contact]'s email" when there are priority unread emails from known contacts
+- Add contract-aware actions: "Review [Contract] renewal" when a deadline is within 3 days
+- Add calendar-contact actions: "Prepare for meeting with [Name]" when a calendar event matches a contact
+- These actions appear in the QuickActionsBar on the dashboard
+
+### Files
+- `src/hooks/useContextualActions.ts` (add email, contract, calendar-contact cross-references)
+- `src/components/dashboard/DashboardPanel.tsx` (pass onNavigate to QuickActionsBar)
+
+---
+
+## Technical Details
+
+### Daily Voice Briefing Edge Function
+```text
+POST /daily-voice-briefing
+Body: { user_id }
+Response: {
+  briefingText: "Good morning, Dar! You have 4 tasks today, including...",
+  highlights: [
+    { type: "task", label: "4 tasks, 1 overdue" },
+    { type: "email", label: "3 unread priority" },
+    { type: "contract", label: "Insurance renews in 5 days" },
+    { type: "contact", label: "Follow up with Ahmed" }
+  ]
+}
+```
+
+Uses Lovable AI gateway with `google/gemini-3-flash-preview` model. Queries tasks, events, user_emails, contracts, user_contacts, daily_checkins tables server-side using the service role key.
+
+### Data Flow for Cross-Module Features
+```text
+Email sender --> match against user_contacts.email
+Email body --> AI extract --> calendar event / contract data
+Contact profile --> query user_emails WHERE from_email = contact.email
+Calendar event title --> fuzzy match against contact names
+Contract provider --> match against email senders
+```
+
+### Caching Strategy
+- Daily briefing: cached in localStorage with date key, regenerated once per day
+- Cross-module matches (email-contact): computed on render, lightweight DB queries
+- Smart insights: refreshed every 5 minutes (existing pattern)
+
+## Summary of Files Modified/Created
+- `supabase/functions/daily-voice-briefing/index.ts` (new)
+- `src/components/dashboard/DailyBriefingCard.tsx` (new)
+- `src/hooks/useDailyBriefing.ts` (new)
+- `src/components/dashboard/DashboardPanel.tsx` (add briefing card + pass data to SmartInsightCard)
+- `src/components/dashboard/SmartInsightCard.tsx` (cross-module insights)
+- `src/components/email/EmailDetailSheet.tsx` (contact card + calendar action)
+- `src/components/email/EmailCard.tsx` (date badge)
+- `src/components/contacts/ContactTimeline.tsx` (email history)
+- `src/hooks/useContextualActions.ts` (cross-module actions)
+- `supabase/functions/extract-contract-from-email/index.ts` (extend for calendar detection)

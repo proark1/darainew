@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Card } from '@/components/ui/card';
+import { motion } from 'framer-motion';
+import { GlassCard } from '@/components/ui/glass-card';
+import { staggerItem, staggerContainer } from '@/components/ui/panel-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -475,21 +477,21 @@ export function HifzTrackerTab() {
       {/* Statistics Header */}
       <div className="p-4 border-b border-border space-y-4">
         <div className="grid grid-cols-3 gap-2">
-          <Card className="p-3 text-center bg-gradient-to-br from-emerald-500/20 to-teal-500/20">
+          <GlassCard className="p-3 text-center bg-gradient-to-br from-emerald-500/20 to-teal-500/20">
             <Trophy className="w-5 h-5 mx-auto text-emerald-600 mb-1" />
             <p className="text-xl font-bold text-emerald-600">{stats.memorizedSurahs}</p>
             <p className="text-[10px] text-muted-foreground">Surahs</p>
-          </Card>
-          <Card className="p-3 text-center bg-gradient-to-br from-primary/20 to-primary/10">
+          </GlassCard>
+          <GlassCard className="p-3 text-center bg-gradient-to-br from-primary/20 to-primary/10">
             <Target className="w-5 h-5 mx-auto text-primary mb-1" />
             <p className="text-xl font-bold text-primary">{stats.totalPercentage}%</p>
             <p className="text-[10px] text-muted-foreground">{stats.memorizedAyahs} Ayahs</p>
-          </Card>
-          <Card className="p-3 text-center bg-gradient-to-br from-amber-500/20 to-orange-500/20">
+          </GlassCard>
+          <GlassCard className="p-3 text-center bg-gradient-to-br from-amber-500/20 to-orange-500/20">
             <Repeat className="w-5 h-5 mx-auto text-amber-600 mb-1" />
             <p className="text-xl font-bold text-amber-600">{stats.dueForReview}</p>
             <p className="text-[10px] text-muted-foreground">Due Review</p>
-          </Card>
+          </GlassCard>
         </div>
 
         {/* Quick Actions */}
@@ -562,10 +564,12 @@ export function HifzTrackerTab() {
                   differenceInDays(new Date(), new Date(progress.last_revised_at)) >= 7;
                 
                 return (
-                  <Card 
+                  <GlassCard 
                     key={surah.number}
+                    pressable
+                    haptic="light"
                     className={cn(
-                      "p-3 cursor-pointer transition-all hover:shadow-md",
+                      "p-3",
                       isMemorized && !needsReview && "border-emerald-500/30 bg-emerald-500/5",
                       needsReview && "border-amber-500/50 bg-amber-500/10"
                     )}
@@ -603,7 +607,7 @@ export function HifzTrackerTab() {
                         <ArrowRight className="w-4 h-4 text-muted-foreground" />
                       </div>
                     </div>
-                  </Card>
+                  </GlassCard>
                 );
               })}
             </div>
@@ -614,7 +618,7 @@ export function HifzTrackerTab() {
         <TabsContent value="practice" className="flex-1 mt-0">
           <ScrollArea className="h-full">
             <div className="p-4 space-y-4">
-              <Card className="p-4 bg-gradient-to-br from-primary/10 to-primary/5">
+              <GlassCard className="p-4 bg-gradient-to-br from-primary/10 to-primary/5">
                 <h3 className="font-semibold flex items-center gap-2 mb-2">
                   <Star className="w-4 h-4 text-amber-500" />
                   Recommended for Beginners
@@ -650,9 +654,9 @@ export function HifzTrackerTab() {
                     );
                   })}
                 </div>
-              </Card>
+              </GlassCard>
 
-              <Card className="p-4">
+              <GlassCard className="p-4">
                 <h3 className="font-semibold flex items-center gap-2 mb-3">
                   <Brain className="w-4 h-4 text-primary" />
                   Memorization Tips
@@ -664,7 +668,7 @@ export function HifzTrackerTab() {
                   <p>• <strong>Daily review:</strong> Revise what you memorized yesterday</p>
                   <p>• <strong>Pray with it:</strong> Use memorized surahs in your prayers</p>
                 </div>
-              </Card>
+              </GlassCard>
             </div>
           </ScrollArea>
         </TabsContent>
@@ -675,7 +679,7 @@ export function HifzTrackerTab() {
             <div className="p-4 space-y-4">
               {stats.dueForReview > 0 ? (
                 <>
-                  <Card className="p-4 bg-amber-500/10 border-amber-500/30">
+                  <GlassCard className="p-4 bg-amber-500/10 border-amber-500/30">
                     <h3 className="font-semibold flex items-center gap-2 mb-2">
                       <AlertCircle className="w-4 h-4 text-amber-600" />
                       {stats.dueForReview} Surah{stats.dueForReview > 1 ? 's' : ''} Due for Review
@@ -683,7 +687,7 @@ export function HifzTrackerTab() {
                     <p className="text-sm text-muted-foreground">
                       Review these surahs to strengthen your memorization using spaced repetition.
                     </p>
-                  </Card>
+                  </GlassCard>
                   
                   {progressData
                     .filter(p => {
@@ -695,7 +699,7 @@ export function HifzTrackerTab() {
                       const daysSince = differenceInDays(new Date(), new Date(p.last_revised_at!));
                       
                       return (
-                        <Card key={p.id} className="p-3">
+                        <GlassCard key={p.id} className="p-3">
                           <div className="flex items-center justify-between">
                             <div>
                               <div className="flex items-center gap-2">
@@ -717,18 +721,18 @@ export function HifzTrackerTab() {
                               </Button>
                             </div>
                           </div>
-                        </Card>
+                        </GlassCard>
                       );
                     })}
                 </>
               ) : (
-                <Card className="p-8 text-center">
+                <GlassCard className="p-8 text-center">
                   <Check className="w-12 h-12 mx-auto text-emerald-500 mb-3" />
                   <h3 className="font-semibold mb-1">All Caught Up!</h3>
                   <p className="text-sm text-muted-foreground">
                     No surahs need reviewing right now. Keep memorizing!
                   </p>
-                </Card>
+                </GlassCard>
               )}
             </div>
           </ScrollArea>
