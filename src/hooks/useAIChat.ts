@@ -413,6 +413,21 @@ export function useAIChat() {
       cleanContent = cleanContent.replace(match[0], '');
     }
 
+    // Parse set_reminder tool calls
+    const reminderMatches = content.matchAll(
+      /<tool>set_reminder<\/tool>\s*<reminder>(\{[\s\S]*?\})<\/reminder>/g
+    );
+    for (const match of reminderMatches) {
+      try {
+        const reminderData = JSON.parse(match[1]);
+        console.log('[useAIChat] Parsed reminder data:', reminderData);
+        toolCalls.push({ tool: 'set_reminder', reminder: reminderData });
+        cleanContent = cleanContent.replace(match[0], '');
+      } catch (e) {
+        console.error('Failed to parse set_reminder tool call:', e);
+      }
+    }
+
     // Strip save_memory tool calls from displayed content (handled server-side)
     cleanContent = cleanContent.replace(/<tool>save_memory<\/tool>\s*<memory>\{[\s\S]*?\}<\/memory>/g, '');
 

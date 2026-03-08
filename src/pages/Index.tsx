@@ -50,6 +50,36 @@ const Index = () => {
   const { settings, updateSettings, updateNotifications } = useSettings();
   const { streamChat, isStreaming } = useAIChat();
   const { memories, getMemoriesForContext } = useAIMemory();
+  const { fetchMessages: fetchConversationMessages, fetchConversations, conversations } = useAssistantConversations();
+  const previousContextLoadedRef = useRef(false);
+  const [previousConversationMessages, setPreviousConversationMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+
+  // Load last conversation's recent messages for cross-session context
+  useEffect(() => {
+    if (!user?.id || previousContextLoadedRef.current) return;
+    previousContextLoadedRef.current = true;
+    
+    (async () => {
+      await fetchConversations();
+    })();
+  }, [user?.id, fetchConversations]);
+
+  // When conversations load, fetch last 10 messages from most recent
+  useEffect(() => {
+    if (conversations.length === 0) return;
+    
+    const mostRecent = conversations[0];
+    if (!mostRecent) return;
+
+    (async () => {
+      const msgs = await fetchConversationMessages(mostRecent.id);
+      const last10 = msgs.slice(-10).map(m => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
+      setPreviousConversationMessages(last10);
+    })();
+  }, [conversations, fetchConversationMessages]);
   
   const {
     tasks,
