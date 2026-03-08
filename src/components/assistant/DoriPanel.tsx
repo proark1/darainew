@@ -269,7 +269,7 @@ export function DoriPanel({
       )}
 
       {/* Input — expandable textarea */}
-      <form onSubmit={handleSubmit} className="p-2 border-t border-border pb-1">
+      <form onSubmit={handleSubmit} className="p-2 border-t border-border pb-safe">
         <div className="relative flex items-end gap-2 bg-muted rounded-xl px-3 py-2">
           <textarea
             ref={textareaRef}
