@@ -121,7 +121,7 @@ export function DoriNotificationIcon() {
             )} />
           </motion.div>
           
-          {unreadCount > 0 && (
+          {!loading && unreadCount > 0 && reminders.length > 0 && (
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
