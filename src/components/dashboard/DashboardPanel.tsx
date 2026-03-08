@@ -169,6 +169,13 @@ export function DashboardPanel({ userId, onNavigate }: DashboardPanelProps) {
 
     if (!error) {
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: true } : t));
+
+      // Streak celebration check
+      const newStreak = stats.streak + 1;
+      if (!checkStreak(newStreak)) {
+        // Regular task completion confetti
+        celebrate({ type: 'taskComplete' });
+      }
     }
   };
 

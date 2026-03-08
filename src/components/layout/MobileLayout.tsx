@@ -262,18 +262,29 @@ export function MobileLayout({
         onClearAll={clearAll}
       />
 
-      {/* Content with AnimatePresence transitions */}
+      {/* Content with AnimatePresence transitions + Pull to Refresh */}
       <main className="flex-1 overflow-hidden relative">
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={activeTab}
-            {...panelTransition}
-            ref={scrollRef}
-            className="h-full overflow-y-auto"
-          >
-            {renderPanel()}
-          </motion.div>
-        </AnimatePresence>
+        <PullToRefresh
+          onRefresh={async () => {
+            // Trigger a re-render by toggling the active tab
+            const current = activeTab;
+            setActiveTab('dashboard');
+            await new Promise(r => setTimeout(r, 50));
+            setActiveTab(current);
+          }}
+          className="h-full"
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={activeTab}
+              {...panelTransition}
+              ref={scrollRef}
+              className="h-full overflow-y-auto"
+            >
+              {renderPanel()}
+            </motion.div>
+          </AnimatePresence>
+        </PullToRefresh>
       </main>
 
       {/* Bottom Tab Bar - 5 items */}

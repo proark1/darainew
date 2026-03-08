@@ -118,6 +118,14 @@ function AppContent() {
             }
           />
           <Route
+            path="/landing"
+            element={
+              <PublicRoute>
+                <Landing />
+              </PublicRoute>
+            }
+          />
+          <Route
             path="/auth"
             element={
               <PublicRoute>
