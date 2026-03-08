@@ -205,7 +205,9 @@ export function DashboardPanel({ userId, onNavigate }: DashboardPanelProps) {
               <ChevronDown className={cn("w-4 h-4 transition-transform", moreOpen && "rotate-180")} />
               <span className="font-medium">Insights & Alerts</span>
               {(contractAlerts.length > 0 || overdueContacts.length > 0) && (
-                <span className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
+                <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4 min-w-[18px] justify-center">
+                  {contractAlerts.length + overdueContacts.length}
+                </Badge>
               )}
             </CollapsibleTrigger>
             <CollapsibleContent>
