@@ -686,6 +686,8 @@ export function StandardMode({
                 </div>
               )}
             </Suspense>
+            </motion.div>
+            </AnimatePresence>
           </div>
         </div>
       </main>
