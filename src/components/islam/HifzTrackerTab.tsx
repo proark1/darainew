@@ -679,7 +679,7 @@ export function HifzTrackerTab() {
             <div className="p-4 space-y-4">
               {stats.dueForReview > 0 ? (
                 <>
-                  <Card className="p-4 bg-amber-500/10 border-amber-500/30">
+                  <GlassCard className="p-4 bg-amber-500/10 border-amber-500/30">
                     <h3 className="font-semibold flex items-center gap-2 mb-2">
                       <AlertCircle className="w-4 h-4 text-amber-600" />
                       {stats.dueForReview} Surah{stats.dueForReview > 1 ? 's' : ''} Due for Review
