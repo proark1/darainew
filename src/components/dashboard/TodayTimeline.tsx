@@ -1,11 +1,12 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GlassCard, GlassCardContent, GlassCardHeader, GlassCardTitle } from '@/components/ui/glass-card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Task, CalendarEvent } from '@/types/flux';
-import { Clock, ChevronRight } from 'lucide-react';
+import { Clock, ChevronRight, Sunrise, Sun, Sunset, Moon as MoonIcon } from 'lucide-react';
 import { format, isToday, startOfDay, endOfDay, isPast } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { fetchPrayerTimesForTimeline } from './DashboardPrayerCard';
 
 interface TodayTimelineProps {
   tasks: Task[];
