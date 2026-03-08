@@ -145,6 +145,8 @@ interface ChatRequest {
   emailSummary?: { subject: string; from: string; priority: string; snippet: string }[];
   notesSummary?: { title: string; snippet: string; tags: string[] }[];
   habitsSummary?: { name: string; streak: number; isCompletedToday: boolean; frequency: string }[];
+  // AI Memory
+  memories?: { type: string; key: string; value: string; category?: string }[];
 }
 
 const personalityPrompts: Record<string, string> = {
