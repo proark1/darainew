@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { GlassCard, GlassCardContent, GlassCardHeader, GlassCardTitle, GlassCardDescription } from '@/components/ui/glass-card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -299,11 +300,13 @@ export default function Contacts() {
     const isDue = contact.nextContactDue && isPast(contact.nextContactDue);
     
     return (
-      <Card 
-        className={`hover:bg-accent/50 transition-colors cursor-pointer ${isDue ? 'border-orange-500/50' : ''}`}
+      <GlassCard 
+        pressable
+        haptic="light"
+        className={`transition-colors ${isDue ? 'border-destructive/50' : ''}`}
         onClick={() => setSelectedContact(contact)}
       >
-        <CardContent className="p-4">
+        <GlassCardContent className="p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3 flex-1 min-w-0">
               <Avatar className="shrink-0">
@@ -446,17 +449,15 @@ export default function Contacts() {
               </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </GlassCardContent>
+      </GlassCard>
     );
   };
 
   const ContactTable = ({ contacts }: { contacts: Contact[] }) => {
     if (contacts.length === 0) {
       return (
-        <div className="text-center py-8 text-muted-foreground">
-          No contacts found.
-        </div>
+        <EmptyState icon={Users} title="No contacts found" description="Try a different search term" />
       );
     }
 
@@ -482,7 +483,7 @@ export default function Contacts() {
                 <TableRow 
                   key={contact.id} 
                   className="cursor-pointer"
-                  onClick={() => openEditDialog(contact)}
+                  onClick={() => setSelectedContact(contact)}
                 >
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -841,17 +842,17 @@ export default function Contacts() {
           </Dialog>
           </div>
         </div>
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <GlassCard className="mb-6">
+          <GlassCardHeader>
+            <GlassCardTitle className="flex items-center gap-2">
               <Users className="w-5 h-5" />
               Contact Relationship Manager
-            </CardTitle>
-            <CardDescription>
+            </GlassCardTitle>
+            <p className="text-sm text-muted-foreground">
               Manage your personal and business network with smart follow-up reminders
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+            </p>
+          </GlassCardHeader>
+          <GlassCardContent>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
@@ -861,8 +862,8 @@ export default function Contacts() {
                 className="pl-10"
               />
             </div>
-          </CardContent>
-        </Card>
+          </GlassCardContent>
+        </GlassCard>
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
@@ -910,8 +911,8 @@ export default function Contacts() {
                   <ScrollArea className="h-[calc(100vh-400px)]">
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 pr-4">
                       {filterContacts(personalContacts).length === 0 ? (
-                        <div className="col-span-full text-center py-8 text-muted-foreground">
-                          No personal contacts yet. Add family, friends, or acquaintances!
+                        <div className="col-span-full">
+                          <EmptyState icon={Heart} title="No personal contacts" description="Add family, friends, or acquaintances" />
                         </div>
                       ) : (
                         filterContacts(personalContacts).map(contact => (
@@ -930,8 +931,8 @@ export default function Contacts() {
                   <ScrollArea className="h-[calc(100vh-400px)]">
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 pr-4">
                       {filterContacts(businessContacts).length === 0 ? (
-                        <div className="col-span-full text-center py-8 text-muted-foreground">
-                          No business contacts yet. Build your professional network!
+                        <div className="col-span-full">
+                          <EmptyState icon={Briefcase} title="No business contacts" description="Build your professional network" />
                         </div>
                       ) : (
                         filterContacts(businessContacts).map(contact => (
@@ -950,8 +951,8 @@ export default function Contacts() {
                   <ScrollArea className="h-[calc(100vh-400px)]">
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 pr-4">
                       {contactsDue.length === 0 ? (
-                        <div className="col-span-full text-center py-8 text-muted-foreground">
-                          You're all caught up! No contacts due for follow-up.
+                        <div className="col-span-full">
+                          <EmptyState icon={Bell} title="All caught up! 🎉" description="No contacts due for follow-up" />
                         </div>
                       ) : (
                         contactsDue.map(contact => (
@@ -971,14 +972,14 @@ export default function Contacts() {
                   
                   {/* Recent Contacts */}
                   {recentContacts.length > 0 && (
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-lg flex items-center gap-2">
+                    <GlassCard>
+                      <GlassCardHeader className="pb-2">
+                        <GlassCardTitle className="text-lg flex items-center gap-2">
                           <Clock className="w-5 h-5" />
                           Recently Contacted
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
+                        </GlassCardTitle>
+                      </GlassCardHeader>
+                      <GlassCardContent>
                         <div className="space-y-2">
                           {recentContacts.map(contact => (
                             <div 
@@ -1000,8 +1001,8 @@ export default function Contacts() {
                             </div>
                           ))}
                         </div>
-                      </CardContent>
-                    </Card>
+                      </GlassCardContent>
+                    </GlassCard>
                   )}
                 </div>
               </TabsContent>
