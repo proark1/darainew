@@ -300,11 +300,13 @@ export default function Contacts() {
     const isDue = contact.nextContactDue && isPast(contact.nextContactDue);
     
     return (
-      <Card 
-        className={`hover:bg-accent/50 transition-colors cursor-pointer ${isDue ? 'border-orange-500/50' : ''}`}
+      <GlassCard 
+        pressable
+        haptic="light"
+        className={`transition-colors ${isDue ? 'border-destructive/50' : ''}`}
         onClick={() => setSelectedContact(contact)}
       >
-        <CardContent className="p-4">
+        <GlassCardContent className="p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3 flex-1 min-w-0">
               <Avatar className="shrink-0">
