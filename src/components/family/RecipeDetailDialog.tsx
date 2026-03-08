@@ -21,6 +21,7 @@ export function RecipeDetailDialog({ open, onOpenChange, recipeId }: RecipeDetai
   const [isLoading, setIsLoading] = useState(false);
   const [cookingMode, setCookingMode] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const [checkedIngredients, setCheckedIngredients] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (open && recipeId) {
