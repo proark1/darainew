@@ -170,7 +170,7 @@ export function DoriPanel({
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col justify-end text-center relative pb-4">
+          <div className="h-full flex flex-col justify-end text-center relative pb-2">
             <div className="absolute inset-0 flex items-center justify-center opacity-30">
               <AudioVisualizer isActive={true} isSpeaking={false} isListening={false} />
             </div>
