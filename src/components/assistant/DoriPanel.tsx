@@ -95,7 +95,7 @@ export function DoriPanel({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastFinalTranscriptRef = useRef<string>('');
 
-  const timeSuggestions = useMemo(() => getTimeSuggestions(), []);
+  const timeSuggestions = useMemo(() => getTimeSuggestions(messages, contacts), [messages.length, contacts.length]);
 
   const { isListening, isSupported, transcript, startListening, stopListening } = useVoiceRecognition({ continuous: false });
 
