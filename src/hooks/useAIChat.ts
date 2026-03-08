@@ -70,8 +70,13 @@ interface EmailData {
   body?: string;
 }
 
+interface ReminderData {
+  message: string;
+  triggerAt: string;
+}
+
 interface ToolCall {
-  tool: 'manage_task' | 'schedule_event' | 'suggest_contacts' | 'create_meeting_plan' | 'create_note' | 'add_shopping_item' | 'manage_contact' | 'manage_contract' | 'manage_project' | 'manage_habit' | 'manage_note' | 'compose_email' | 'get_summary';
+  tool: 'manage_task' | 'schedule_event' | 'suggest_contacts' | 'create_meeting_plan' | 'create_note' | 'add_shopping_item' | 'manage_contact' | 'manage_contract' | 'manage_project' | 'manage_habit' | 'manage_note' | 'compose_email' | 'get_summary' | 'set_reminder';
   action?: string;
   task?: Partial<Task>;
   event?: Partial<CalendarEvent>;
@@ -85,6 +90,7 @@ interface ToolCall {
   habit?: HabitData;
   email?: EmailData;
   summaryType?: string;
+  reminder?: ReminderData;
 }
 
 interface RelevantContact {
@@ -405,6 +411,21 @@ export function useAIChat() {
     for (const match of summaryMatches) {
       toolCalls.push({ tool: 'get_summary', summaryType: match[1] });
       cleanContent = cleanContent.replace(match[0], '');
+    }
+
+    // Parse set_reminder tool calls
+    const reminderMatches = content.matchAll(
+      /<tool>set_reminder<\/tool>\s*<reminder>(\{[\s\S]*?\})<\/reminder>/g
+    );
+    for (const match of reminderMatches) {
+      try {
+        const reminderData = JSON.parse(match[1]);
+        console.log('[useAIChat] Parsed reminder data:', reminderData);
+        toolCalls.push({ tool: 'set_reminder', reminder: reminderData });
+        cleanContent = cleanContent.replace(match[0], '');
+      } catch (e) {
+        console.error('Failed to parse set_reminder tool call:', e);
+      }
     }
 
     // Strip save_memory tool calls from displayed content (handled server-side)

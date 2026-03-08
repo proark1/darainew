@@ -1,8 +1,10 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useDatabase } from '@/hooks/useDatabase';
+import { supabase } from '@/integrations/supabase/client';
 import { useSettings } from '@/hooks/useSettings';
 import { useAIChat } from '@/hooks/useAIChat';
+import { useAssistantConversations } from '@/hooks/useAssistantConversations';
 import { useTaskNotifications } from '@/hooks/useTaskNotifications';
 import { useEventNotifications } from '@/hooks/useEventNotifications';
 import { useSharedItemsRealtime } from '@/hooks/useSharedItemsRealtime';
@@ -49,6 +51,36 @@ const Index = () => {
   const { settings, updateSettings, updateNotifications } = useSettings();
   const { streamChat, isStreaming } = useAIChat();
   const { memories, getMemoriesForContext } = useAIMemory();
+  const { fetchMessages: fetchConversationMessages, fetchConversations, conversations } = useAssistantConversations();
+  const previousContextLoadedRef = useRef(false);
+  const [previousConversationMessages, setPreviousConversationMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+
+  // Load last conversation's recent messages for cross-session context
+  useEffect(() => {
+    if (!user?.id || previousContextLoadedRef.current) return;
+    previousContextLoadedRef.current = true;
+    
+    (async () => {
+      await fetchConversations();
+    })();
+  }, [user?.id, fetchConversations]);
+
+  // When conversations load, fetch last 10 messages from most recent
+  useEffect(() => {
+    if (conversations.length === 0) return;
+    
+    const mostRecent = conversations[0];
+    if (!mostRecent) return;
+
+    (async () => {
+      const msgs = await fetchConversationMessages(mostRecent.id);
+      const last10 = msgs.slice(-10).map(m => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
+      setPreviousConversationMessages(last10);
+    })();
+  }, [conversations, fetchConversationMessages]);
   
   const {
     tasks,
@@ -341,12 +373,21 @@ const Index = () => {
 
     // Keep prompts small and avoid runaway token usage
     const conversationMessages = (() => {
+      // Prepend previous conversation context for cross-session memory
+      const prevContext: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+      if (previousConversationMessages.length > 0 && messages.length === 0) {
+        // Only inject previous context at the start of a new session
+        prevContext.push({ role: 'user', content: '[Previous conversation context — use for continuity]' });
+        prevContext.push(...previousConversationMessages);
+        prevContext.push({ role: 'assistant', content: '[End of previous context — new conversation starts below]' });
+      }
+
       const recent = messages
         .slice(-20)
         .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
       const deduped: Array<{ role: 'user' | 'assistant'; content: string }> = [];
-      for (const m of recent) {
+      for (const m of [...prevContext, ...recent]) {
         const last = deduped[deduped.length - 1];
         if (last && last.role === m.role && last.content === m.content) continue;
         deduped.push(m);
@@ -824,6 +865,73 @@ const Index = () => {
             toast({ title: 'Email Draft Ready', description: `To: ${emailData.to} — "${emailData.subject}"` });
             // The compose sheet will be opened via a custom event
             window.dispatchEvent(new CustomEvent('compose-email', { detail: emailData }));
+          } else if (toolCall.tool === 'set_reminder' && toolCall.reminder) {
+            // Schedule a reminder notification
+            const { message, triggerAt } = toolCall.reminder;
+            const triggerTime = new Date(triggerAt).getTime();
+            const now = Date.now();
+            const delayMs = Math.max(triggerTime - now, 1000);
+
+            // Schedule via setTimeout for in-app notification
+            setTimeout(() => {
+              toast({ title: '⏰ Reminder', description: message });
+              // Also try browser notification
+              if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification('⏰ Reminder', { body: message, icon: '/favicon.png' });
+              }
+            }, delayMs);
+
+            // Also store in user_notifications for persistence
+            if (user?.id) {
+              supabase.from('user_notifications').insert({
+                user_id: user.id,
+                type: 'reminder',
+                title: '⏰ Reminder',
+                message,
+                data: { triggerAt, scheduled: true },
+                read: false,
+              }).then(() => {});
+            }
+
+            toast({ title: 'Reminder Set', description: `"${message}" at ${new Date(triggerAt).toLocaleTimeString()}` });
+          } else if (toolCall.tool === 'get_summary' && toolCall.summaryType === 'contract_costs') {
+            // Compute financial summary from contracts
+            let monthlyTotal = 0;
+            let yearlyTotal = 0;
+            const activeContracts2 = contracts.filter(c => c.isActive !== false);
+            for (const c of activeContracts2) {
+              if (!c.costAmount) continue;
+              const amount = c.costAmount;
+              const freq = c.costFrequency || 'monthly';
+              if (freq === 'monthly') {
+                monthlyTotal += amount;
+                yearlyTotal += amount * 12;
+              } else if (freq === 'yearly') {
+                monthlyTotal += amount / 12;
+                yearlyTotal += amount;
+              } else if (freq === 'quarterly') {
+                monthlyTotal += amount / 3;
+                yearlyTotal += amount * 4;
+              } else if (freq === 'one_time') {
+                yearlyTotal += amount;
+              } else {
+                // fallback: treat as monthly
+                monthlyTotal += amount;
+                yearlyTotal += amount * 12;
+              }
+            }
+            // Feed back as assistant context
+            const costSummary = `📊 **Financial Summary**\n\n` +
+              `**Monthly costs:** €${monthlyTotal.toFixed(2)}\n` +
+              `**Yearly costs:** €${yearlyTotal.toFixed(2)}\n` +
+              `**Active contracts:** ${activeContracts2.length}\n\n` +
+              activeContracts2
+                .filter(c => c.costAmount)
+                .sort((a, b) => (b.costAmount || 0) - (a.costAmount || 0))
+                .slice(0, 10)
+                .map(c => `- ${c.name}${c.provider ? ` (${c.provider})` : ''}: €${c.costAmount}/${c.costFrequency || 'month'}`)
+                .join('\n');
+            assistantContent += '\n\n' + costSummary;
           }
         },
         onDone: () => {
@@ -843,6 +951,7 @@ const Index = () => {
         .replace(/<tool>[\s\S]*?<\/email>/g, '')
         .replace(/<tool>[\s\S]*?<\/item>/g, '')
         .replace(/<tool>get_summary<\/tool>\s*<type>\w+<\/type>/g, '')
+        .replace(/<tool>set_reminder<\/tool>\s*<reminder>\{[\s\S]*?\}<\/reminder>/g, '')
         .trim();
 
       if (cleanContent) {
@@ -864,7 +973,7 @@ const Index = () => {
     } finally {
       sendLockRef.current = false;
     }
-  }, [addMessage, addTask, addEvent, deleteTask, toggleTaskComplete, updateTask, events, messages, settings, streamChat, tasks, toast, contacts, contracts, allEmails, notes, todayHabits, familyMembers, shoppingLists, userProfile, unreadEmailCount, createNote, deleteNote, searchNotes, addContact, updateContact, deleteContact, markContacted, addContract, updateContract, deleteContract, addProject, updateProject, deleteProject, projects, createHabit, logHabit, deleteHabit]);
+  }, [addMessage, addTask, addEvent, deleteTask, toggleTaskComplete, updateTask, events, messages, settings, streamChat, tasks, toast, contacts, contracts, allEmails, notes, todayHabits, familyMembers, shoppingLists, userProfile, unreadEmailCount, createNote, deleteNote, searchNotes, addContact, updateContact, deleteContact, markContacted, addContract, updateContract, deleteContract, addProject, updateProject, deleteProject, projects, createHabit, logHabit, deleteHabit, previousConversationMessages, user?.id]);
 
   const handleGhostCommand = useCallback((command: string) => {
     handleSendMessage(command);
