@@ -444,7 +444,22 @@ WHEN TO USE save_memory:
 - User sets or achieves a goal
 - User corrects you about something — save the correction
 
-IMPORTANT: Use save_memory naturally without telling the user you're saving it. Just acknowledge what they said and silently save it. Do NOT say "I'll remember that" — just do it.`;
+IMPORTANT: Use save_memory naturally without telling the user you're saving it. Just acknowledge what they said and silently save it. Do NOT say "I'll remember that" — just do it.
+
+TOOL: web_search
+Use this to search the web for real-time information, current events, recommendations, how-to guides, or any question outside the user's personal data.
+Format: <tool>web_search</tool><query>{"q": "the search query"}</query>
+
+WHEN TO USE web_search:
+- User asks a general knowledge question ("What is...", "How do I...", "Why does...")
+- User asks about current events, news, weather, sports scores
+- User asks for recommendations ("Best restaurant near...", "Top rated...")
+- User asks about prices, products, or services
+- User asks how to do something you're not confident about
+- User asks about specific companies, people, or places
+- ANY question that is NOT about their personal tasks, events, contacts, contracts, family, or health data
+
+IMPORTANT: When you need real-time or factual information, ALWAYS use web_search. Do NOT make up facts or give outdated information. After receiving search results, synthesize a clear answer with the sources cited as [1], [2], etc.`;
 
 async function logAIUsage(
   supabase: any,
@@ -932,70 +947,140 @@ serve(async (req) => {
     });
 
     const model = 'google/gemini-2.5-flash';
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: fullSystemPrompt },
-          ...messages
-        ],
-        stream: true,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Lovable AI error:", response.status, errorText);
-      
-      // Log failed request
-      await logAIUsage(supabaseAdmin, userId, 'chat', model, 0, 0, 0, 'error', { error: errorText, personality });
-      
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      
-      return new Response(JSON.stringify({ error: "AI service error" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    
+    // Helper: call Lovable AI
+    async function callAI(msgs: { role: string; content: string }[], stream: boolean) {
+      return fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ model, messages: msgs, stream }),
       });
     }
 
-    // For streaming, we estimate tokens based on message length (rough approximation)
-    // A more accurate approach would be to parse the final SSE event
-    const inputText = fullSystemPrompt + messages.map(m => m.content).join(' ');
-    const estimatedPromptTokens = Math.ceil(inputText.length / 4);
+    // Helper: call Perplexity web search
+    async function webSearch(query: string): Promise<{ answer: string; citations: string[] }> {
+      const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
+      if (!PERPLEXITY_API_KEY) {
+        return { answer: 'Web search is not configured.', citations: [] };
+      }
+      try {
+        const res = await fetch('https://api.perplexity.ai/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'sonar',
+            messages: [
+              { role: 'system', content: 'Be precise and concise. Provide factual, up-to-date information.' },
+              { role: 'user', content: query },
+            ],
+          }),
+        });
+        if (!res.ok) {
+          console.error('Perplexity error:', res.status, await res.text());
+          return { answer: 'Web search failed.', citations: [] };
+        }
+        const data = await res.json();
+        return {
+          answer: data.choices?.[0]?.message?.content || 'No results found.',
+          citations: data.citations || [],
+        };
+      } catch (e) {
+        console.error('Web search error:', e);
+        return { answer: 'Web search failed.', citations: [] };
+      }
+    }
+
+    const allMessages = [
+      { role: 'system', content: fullSystemPrompt },
+      ...messages,
+    ];
+
+    // First pass: non-streaming to detect web_search tool calls
+    const firstResponse = await callAI(allMessages, false);
+
+    if (!firstResponse.ok) {
+      const errorText = await firstResponse.text();
+      console.error("Lovable AI error:", firstResponse.status, errorText);
+      await logAIUsage(supabaseAdmin, userId, 'chat', model, 0, 0, 0, 'error', { error: errorText, personality });
+      
+      if (firstResponse.status === 429) {
+        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (firstResponse.status === 402) {
+        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }), {
+          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ error: "AI service error" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const firstData = await firstResponse.json();
+    const firstContent = firstData.choices?.[0]?.message?.content || '';
+
+    // Check for web_search tool call
+    const webSearchMatch = firstContent.match(/<tool>web_search<\/tool>\s*<query>(\{[\s\S]*?\})<\/query>/);
     
-    // Log the request (we'll estimate completion tokens based on typical response)
-    // In production, you'd parse the stream to get actual token counts
-    await logAIUsage(
-      supabaseAdmin, 
-      userId, 
-      'chat', 
-      model, 
-      estimatedPromptTokens, 
-      500, // Estimated completion tokens for streaming
-      estimatedPromptTokens + 500, 
-      'success',
-      { personality, messageCount: messages.length }
+    let finalMessages = allMessages;
+    if (webSearchMatch) {
+      try {
+        const queryData = JSON.parse(webSearchMatch[1]);
+        const searchQuery = queryData.q || queryData.query || '';
+        console.log('Executing web search:', searchQuery);
+        
+        const searchResult = await webSearch(searchQuery);
+        
+        let citationText = '';
+        if (searchResult.citations.length > 0) {
+          citationText = '\n\nSources:\n' + searchResult.citations.map((c, i) => `[${i + 1}] ${c}`).join('\n');
+        }
+        
+        // Add the first AI response and search results, then ask for a final synthesis
+        finalMessages = [
+          ...allMessages,
+          { role: 'assistant', content: firstContent },
+          { role: 'system', content: `Web search results for "${searchQuery}":\n\n${searchResult.answer}${citationText}\n\nNow synthesize a clear, helpful answer based on these search results. Cite sources as [1], [2], etc. Do NOT use the web_search tool again.` },
+        ];
+      } catch (e) {
+        console.error('Failed to parse web search query:', e);
+        // Fall through to stream the original response
+      }
+    }
+
+    // If no web search was needed, stream the original; if web search was done, stream the synthesis
+    const streamResponse = await callAI(
+      webSearchMatch ? finalMessages : allMessages,
+      true,
     );
 
-    // Stream the response, but also collect it to parse save_memory tool calls
-    const reader = response.body!.getReader();
+    if (!streamResponse.ok) {
+      const errorText = await streamResponse.text();
+      console.error("Lovable AI stream error:", streamResponse.status, errorText);
+      return new Response(JSON.stringify({ error: "AI service error" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Log usage
+    const inputText = fullSystemPrompt + messages.map(m => m.content).join(' ');
+    const estimatedPromptTokens = Math.ceil(inputText.length / 4);
+    await logAIUsage(
+      supabaseAdmin, userId, 'chat', model,
+      estimatedPromptTokens, 500, estimatedPromptTokens + 500,
+      'success', { personality, messageCount: messages.length, webSearchUsed: !!webSearchMatch }
+    );
+
+    // Stream the response, collecting text for save_memory extraction
+    const reader = streamResponse.body!.getReader();
     let fullResponseText = '';
     
     const stream = new ReadableStream({
@@ -1032,7 +1117,6 @@ serve(async (req) => {
         }
         // Collect text for memory extraction
         const text = new TextDecoder().decode(value);
-        // Extract content from SSE data lines
         for (const line of text.split('\n')) {
           if (line.startsWith('data: ') && line.slice(6).trim() !== '[DONE]') {
             try {
