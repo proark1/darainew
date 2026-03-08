@@ -527,7 +527,7 @@ serve(async (req) => {
 
 ${userContext}
 ${dataContext}
-
+${memoryContext}
 ---
 
 ## Your Role

@@ -981,8 +981,59 @@ serve(async (req) => {
       { personality, messageCount: messages.length }
     );
 
-    // Stream the response directly (already in OpenAI format)
-    return new Response(response.body, {
+    // Stream the response, but also collect it to parse save_memory tool calls
+    const reader = response.body!.getReader();
+    let fullResponseText = '';
+    
+    const stream = new ReadableStream({
+      async pull(controller) {
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.close();
+          // After stream ends, parse and persist any save_memory calls server-side
+          try {
+            const memoryRegex = /<tool>save_memory<\/tool>\s*<memory>(\{[\s\S]*?\})<\/memory>/g;
+            const memMatches = fullResponseText.matchAll(memoryRegex);
+            for (const match of memMatches) {
+              try {
+                const memData = JSON.parse(match[1]);
+                if (memData.key && memData.value && userId !== 'anonymous') {
+                  await supabaseAdmin.from('ai_memory').upsert({
+                    user_id: userId,
+                    memory_type: memData.type || 'fact',
+                    category: memData.category || null,
+                    key: memData.key,
+                    value: memData.value,
+                    source: 'chat',
+                  }, { onConflict: 'user_id,key' });
+                  console.log('Saved memory:', memData.key);
+                }
+              } catch (e) {
+                console.error('Failed to save memory:', e);
+              }
+            }
+          } catch (e) {
+            console.error('Memory parsing error:', e);
+          }
+          return;
+        }
+        // Collect text for memory extraction
+        const text = new TextDecoder().decode(value);
+        // Extract content from SSE data lines
+        for (const line of text.split('\n')) {
+          if (line.startsWith('data: ') && line.slice(6).trim() !== '[DONE]') {
+            try {
+              const parsed = JSON.parse(line.slice(6));
+              const content = parsed.choices?.[0]?.delta?.content;
+              if (content) fullResponseText += content;
+            } catch {}
+          }
+        }
+        controller.enqueue(value);
+      }
+    });
+
+    return new Response(stream, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (error) {

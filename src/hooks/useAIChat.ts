@@ -555,6 +555,11 @@ export function useAIChat() {
         payload.habitsSummary = habitsSummary;
       }
 
+      // AI Memory
+      if (memories && memories.length > 0) {
+        payload.memories = memories;
+      }
+
       const resp = await fetch(CHAT_URL, {
         method: 'POST',
         headers: {
