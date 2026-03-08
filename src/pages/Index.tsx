@@ -372,12 +372,21 @@ const Index = () => {
 
     // Keep prompts small and avoid runaway token usage
     const conversationMessages = (() => {
+      // Prepend previous conversation context for cross-session memory
+      const prevContext: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+      if (previousConversationMessages.length > 0 && messages.length === 0) {
+        // Only inject previous context at the start of a new session
+        prevContext.push({ role: 'user', content: '[Previous conversation context — use for continuity]' });
+        prevContext.push(...previousConversationMessages);
+        prevContext.push({ role: 'assistant', content: '[End of previous context — new conversation starts below]' });
+      }
+
       const recent = messages
         .slice(-20)
         .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
       const deduped: Array<{ role: 'user' | 'assistant'; content: string }> = [];
-      for (const m of recent) {
+      for (const m of [...prevContext, ...recent]) {
         const last = deduped[deduped.length - 1];
         if (last && last.role === m.role && last.content === m.content) continue;
         deduped.push(m);
