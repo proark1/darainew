@@ -449,8 +449,8 @@ export default function Contacts() {
               </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </GlassCardContent>
+      </GlassCard>
     );
   };
 
