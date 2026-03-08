@@ -86,9 +86,11 @@ function TimelineRow({ item, index, onNavigate, onCompleteTask, isOverdue = fals
       )}
       <span className={cn(
         "text-[10px] px-1.5 py-0.5 rounded-full shrink-0",
-        item.type === 'event' ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+        item.type === 'event' ? "bg-primary/10 text-primary" 
+          : item.type === 'prayer' ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+          : "bg-muted text-muted-foreground"
       )}>
-        {item.type === 'event' ? 'Event' : 'Task'}
+        {item.type === 'event' ? 'Event' : item.type === 'prayer' ? '🕌 Salah' : 'Task'}
       </span>
     </motion.div>
   );
