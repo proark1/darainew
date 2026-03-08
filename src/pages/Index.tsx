@@ -3,6 +3,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useDatabase } from '@/hooks/useDatabase';
 import { useSettings } from '@/hooks/useSettings';
 import { useAIChat } from '@/hooks/useAIChat';
+import { useAssistantConversations } from '@/hooks/useAssistantConversations';
 import { useTaskNotifications } from '@/hooks/useTaskNotifications';
 import { useEventNotifications } from '@/hooks/useEventNotifications';
 import { useSharedItemsRealtime } from '@/hooks/useSharedItemsRealtime';
