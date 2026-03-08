@@ -237,7 +237,7 @@ export function useContextualActions(onNavigate?: (panel: string) => void) {
     if (priorityEmailCount > 0) {
       allActions.push({
         id: 'priority-emails',
-        label: 'Priority Emails',
+        label: 'Emails',
         icon: 'Mail',
         category: 'priority',
         action: () => navigate('email'),
