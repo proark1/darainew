@@ -37,7 +37,8 @@ export function DashboardHero({
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
-    const name = userName || '';
+    // Skip names that are just initials (2 chars or less like "G.")
+    const name = userName && userName.length > 2 ? userName : '';
     if (hour < 12) return `Good morning${name ? `, ${name}` : ''}`;
     if (hour < 17) return `Good afternoon${name ? `, ${name}` : ''}`;
     return `Good evening${name ? `, ${name}` : ''}`;
