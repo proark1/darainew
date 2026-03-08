@@ -48,7 +48,14 @@ export function DashboardPanel({ userId, onNavigate }: DashboardPanelProps) {
   const { t } = useLanguage();
   const { profile } = useAuth();
   const { todayScore } = useLifeScore();
+  const { suggestion, loading: sugLoading, refresh: refreshSuggestion } = useSmartTaskSuggestions(tasks, events);
 
+  const handleStartTask = (taskId: string | null, _title: string) => {
+    onNavigate?.('tasks');
+    if (taskId) {
+      // Could pre-select task in future
+    }
+  };
   useEffect(() => {
     if (!userId) return;
 
