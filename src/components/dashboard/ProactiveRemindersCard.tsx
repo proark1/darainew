@@ -37,17 +37,17 @@ export function ProactiveRemindersCard({ onNavigate }: ProactiveRemindersCardPro
 
   if (loading) {
     return (
-      <Card className="glass-panel-solid animate-pulse">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
+      <GlassCard className="animate-pulse">
+        <GlassCardHeader className="pb-2">
+          <div className="flex items-center gap-2 text-sm font-semibold">
             <Brain className="w-4 h-4 text-primary" />
             {t('proactiveReminders.title')}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+          </div>
+        </GlassCardHeader>
+        <GlassCardContent>
           <div className="h-24 bg-muted/50 rounded-lg" />
-        </CardContent>
-      </Card>
+        </GlassCardContent>
+      </GlassCard>
     );
   }
 
