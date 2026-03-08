@@ -151,9 +151,17 @@ export function TodayTimeline({ tasks, events = [], onNavigate, onCompleteTask }
               <span className="text-[10px] font-semibold uppercase tracking-wider text-destructive px-2.5">Overdue</span>
             </div>
           )}
-          {items.overdue.map((item, i) => (
-            <TimelineRow key={item.id} item={item} index={i} onNavigate={onNavigate} onCompleteTask={onCompleteTask} />
+          {items.overdue.slice(0, 3).map((item, i) => (
+            <TimelineRow key={item.id} item={item} index={i} onNavigate={onNavigate} onCompleteTask={onCompleteTask} isOverdue />
           ))}
+          {items.overdue.length > 3 && (
+            <button
+              onClick={() => onNavigate?.('tasks')}
+              className="text-xs text-primary hover:underline px-2.5 py-1"
+            >
+              See all {items.overdue.length} overdue →
+            </button>
+          )}
           
           {items.timed.length > 0 && items.overdue.length > 0 && (
             <div className="h-px bg-border/40 my-1" />
