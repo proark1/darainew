@@ -50,9 +50,18 @@ export function TodayTimeline({ tasks, events = [], onNavigate, onCompleteTask }
         priority: t.priority, completed: false, category: t.category,
       }));
 
-    return [...overdueItems, ...taskItems, ...eventItems]
-      .sort((a, b) => (a.time?.getTime() || 0) - (b.time?.getTime() || 0))
-      .slice(0, 5);
+    // Group: overdue first, then timed, then all-day
+    const isAllDay = (item: TimelineItem) =>
+      item.time && item.time.getHours() === 0 && item.time.getMinutes() === 0;
+    
+    const timed = [...taskItems, ...eventItems]
+      .filter(i => !isAllDay(i))
+      .sort((a, b) => (a.time?.getTime() || 0) - (b.time?.getTime() || 0));
+    
+    const allDay = [...taskItems, ...eventItems]
+      .filter(i => isAllDay(i));
+
+    return { overdue: overdueItems, timed, allDay };
   }, [tasks, events]);
 
   if (items.length === 0) {
