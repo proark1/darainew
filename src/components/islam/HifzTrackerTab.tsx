@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Card } from '@/components/ui/card';
+import { motion } from 'framer-motion';
+import { GlassCard } from '@/components/ui/glass-card';
+import { staggerItem, staggerContainer } from '@/components/ui/panel-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
