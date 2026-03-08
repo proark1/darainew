@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DoriPanel } from '../assistant/DoriPanel';
@@ -154,6 +154,12 @@ export function MobileLayout({
     setActiveTab(panel as Tab);
   }, []);
 
+  // Scroll to top on panel change
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+  }, [activeTab]);
+
   const displayTasks = filter === 'shared' ? sharedTasks : tasks;
   const displayEvents = filter === 'shared' ? sharedEvents : events;
 
@@ -261,6 +267,7 @@ export function MobileLayout({
           <motion.div
             key={activeTab}
             {...panelTransition}
+            ref={scrollRef}
             className="h-full overflow-y-auto"
           >
             {renderPanel()}

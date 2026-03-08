@@ -8,8 +8,7 @@ import { ContractTimeline } from './ContractTimeline';
 import { SnoozeReminderDialog } from './SnoozeReminderDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { GlassCard, GlassCardContent } from '@/components/ui/glass-card';
+import { GlassCard, GlassCardContent, GlassCardHeader, GlassCardTitle } from '@/components/ui/glass-card';
 import { SectionHeader } from '@/components/ui/section-header';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -256,11 +255,11 @@ export function ContractManager({
   const ContractTable = () => {
     if (filteredContracts.length === 0) {
       return (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
+        <GlassCard>
+          <GlassCardContent className="py-8 text-center text-muted-foreground">
             {search ? t('contracts.noContractsSearch') : t('contracts.noContracts')}
-          </CardContent>
-        </Card>
+          </GlassCardContent>
+        </GlassCard>
       );
     }
 
@@ -418,14 +417,14 @@ export function ContractManager({
 
       {/* Alerts */}
       {cancellationDeadlines.length > 0 && (
-        <Card className="border-destructive/50 bg-destructive/5">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2 text-destructive">
+        <GlassCard className="border-destructive/50 bg-destructive/5">
+          <GlassCardHeader className="pb-2">
+            <GlassCardTitle className="text-sm font-medium flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-4 w-4" />
               {t('contracts.cancellationDeadlines')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+            </GlassCardTitle>
+          </GlassCardHeader>
+          <GlassCardContent>
             <div className="space-y-1">
               {cancellationDeadlines.map(c => (
                 <div key={c.id} className="flex items-center justify-between text-sm">
@@ -446,8 +445,8 @@ export function ContractManager({
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          </GlassCardContent>
+        </GlassCard>
       )}
 
       {/* Stats */}
@@ -565,11 +564,11 @@ export function ContractManager({
           <TabsContent value={activeCategory} className="mt-4">
             {viewMode === 'cards' ? (
               filteredContracts.length === 0 ? (
-                <Card>
-                  <CardContent className="py-8 text-center text-muted-foreground">
+              <GlassCard>
+                  <GlassCardContent className="py-8 text-center text-muted-foreground">
                     {search ? t('contracts.noContractsSearch') : t('contracts.noContracts')}
-                  </CardContent>
-                </Card>
+                  </GlassCardContent>
+                </GlassCard>
               ) : (
                 <div className="grid gap-3 md:grid-cols-2">
                   {filteredContracts.map(contract => (

@@ -13,6 +13,7 @@ import { AddGoalDialog } from './AddGoalDialog';
 import { StreakDisplay } from './StreakDisplay';
 import { PanelShell, staggerItem } from '@/components/ui/panel-shell';
 import { motion } from 'framer-motion';
+import { EmptyState } from '@/components/ui/empty-state';
 import { 
   Plus, 
   Check, 
@@ -123,11 +124,17 @@ export function HabitsPanel({ userId }: HabitsPanelProps) {
                 )}
 
                 {todayHabits.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Flame className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">{t('habits.noHabitsYet')}</p>
-                    <p className="text-xs">{t('habits.createFirstHabit')}</p>
-                  </div>
+                  <EmptyState
+                    icon={Flame}
+                    title={t('habits.noHabitsYet')}
+                    description={t('habits.createFirstHabit')}
+                    action={
+                      <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setShowAddHabit(true)}>
+                        <Plus className="w-3.5 h-3.5" />
+                        {t('habits.addNewHabit')}
+                      </Button>
+                    }
+                  />
                 ) : (
                   todayHabits.map(habit => (
                     <motion.div key={habit.id} variants={staggerItem}>

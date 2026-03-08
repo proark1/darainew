@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
+import { GlassCard, GlassCardContent } from '@/components/ui/glass-card';
 import { Badge } from '@/components/ui/badge';
 import { Mic, X, Send, Inbox, Brain, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -74,8 +74,8 @@ export function BrainDumpFAB({ className, collapsed = false }: BrainDumpFABProps
     return (
       <div className={cn("relative", className)}>
         {isExpanded && (
-          <Card className="absolute top-full left-0 mt-2 w-72 shadow-lg z-50 animate-in slide-in-from-top-2 duration-200">
-            <CardContent className="p-3">
+          <GlassCard className="absolute top-full left-0 mt-2 w-72 shadow-lg z-50 animate-in slide-in-from-top-2 duration-200">
+            <GlassCardContent className="p-3">
               <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
@@ -114,8 +114,8 @@ export function BrainDumpFAB({ className, collapsed = false }: BrainDumpFABProps
               <p className="text-xs text-muted-foreground mt-2 px-1">
                 AI will categorize this 🧠
               </p>
-            </CardContent>
-          </Card>
+            </GlassCardContent>
+          </GlassCard>
         )}
 
         <div className="flex items-center gap-1">
@@ -154,8 +154,8 @@ export function BrainDumpFAB({ className, collapsed = false }: BrainDumpFABProps
     <div className={cn("fixed bottom-20 right-4 z-40", className)}>
       {/* Expanded Input */}
       {isExpanded && (
-        <Card className="mb-2 shadow-lg animate-in slide-in-from-bottom-2 duration-200">
-          <CardContent className="p-3">
+        <GlassCard className="mb-2 shadow-lg animate-in slide-in-from-bottom-2 duration-200">
+          <GlassCardContent className="p-3">
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
@@ -206,8 +206,8 @@ export function BrainDumpFAB({ className, collapsed = false }: BrainDumpFABProps
             <p className="text-xs text-muted-foreground mt-2 px-1">
               AI will categorize this for you 🧠
             </p>
-          </CardContent>
-        </Card>
+          </GlassCardContent>
+        </GlassCard>
       )}
 
       {/* FAB Buttons */}

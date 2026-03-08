@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { GlassCard, GlassCardContent, GlassCardHeader, GlassCardTitle } from '@/components/ui/glass-card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -59,8 +59,8 @@ export function WidgetGrid({ widgets, tasks, events, onAddTask, onSelectTask }: 
     switch (widget.type) {
       case 'streak':
         return (
-          <Card className={cn(sizeClasses[widget.size], 'bg-gradient-to-br from-warning/20 to-warning/5')}>
-            <CardContent className="p-4 flex items-center gap-3">
+          <GlassCard className={cn(sizeClasses[widget.size], 'bg-gradient-to-br from-warning/20 to-warning/5')}>
+            <GlassCardContent className="p-4 flex items-center gap-3">
               <div className="p-2 bg-warning/20 rounded-full">
                 <Flame className="w-6 h-6 text-warning" />
               </div>
@@ -68,21 +68,21 @@ export function WidgetGrid({ widgets, tasks, events, onAddTask, onSelectTask }: 
                 <p className="text-2xl font-bold">{userXP?.current_streak || 0}</p>
                 <p className="text-xs text-muted-foreground">Day Streak</p>
               </div>
-            </CardContent>
-          </Card>
+            </GlassCardContent>
+          </GlassCard>
         );
 
       case 'tasks_today':
         return (
-          <Card className={cn(sizeClasses[widget.size])}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
+          <GlassCard className={cn(sizeClasses[widget.size])}>
+            <GlassCardHeader className="pb-2">
+              <GlassCardTitle className="text-sm flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-primary" />
                 Today's Tasks
                 <Badge variant="secondary" className="ml-auto">{todayTasks.length}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
+              </GlassCardTitle>
+            </GlassCardHeader>
+            <GlassCardContent className="space-y-2">
               {todayTasks.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-2">
                   No tasks due today! 🎉
@@ -108,15 +108,15 @@ export function WidgetGrid({ widgets, tasks, events, onAddTask, onSelectTask }: 
                   +{todayTasks.length - 3} more
                 </p>
               )}
-            </CardContent>
-          </Card>
+            </GlassCardContent>
+          </GlassCard>
         );
 
       case 'ai_suggestion':
         return (
-          <Card className={cn(sizeClasses[widget.size], 'bg-gradient-to-br from-primary/10 to-accent/5')}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
+          <GlassCard className={cn(sizeClasses[widget.size], 'bg-gradient-to-br from-primary/10 to-accent/5')}>
+            <GlassCardHeader className="pb-2">
+              <GlassCardTitle className="text-sm flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-primary" />
                 AI Suggestion
                 <Button 
@@ -132,9 +132,9 @@ export function WidgetGrid({ widgets, tasks, events, onAddTask, onSelectTask }: 
                     <RefreshCw className="w-3 h-3" />
                   )}
                 </Button>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+              </GlassCardTitle>
+            </GlassCardHeader>
+            <GlassCardContent>
               {suggestionLoading ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -158,37 +158,37 @@ export function WidgetGrid({ widgets, tasks, events, onAddTask, onSelectTask }: 
                   Complete some tasks to get personalized suggestions!
                 </p>
               )}
-            </CardContent>
-          </Card>
+            </GlassCardContent>
+          </GlassCard>
         );
 
       case 'weather':
         return (
-          <Card className={cn(sizeClasses[widget.size])}>
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="p-2 bg-sky-500/20 rounded-full">
-                {weather?.condition === 'rainy' ? <CloudRain className="w-6 h-6 text-sky-500" /> :
-                 weather?.condition === 'cloudy' ? <Cloud className="w-6 h-6 text-sky-500" /> :
-                 <Sun className="w-6 h-6 text-yellow-500" />}
+          <GlassCard className={cn(sizeClasses[widget.size])}>
+            <GlassCardContent className="p-4 flex items-center gap-3">
+              <div className="p-2 bg-muted rounded-full">
+                {weather?.condition === 'rainy' ? <CloudRain className="w-6 h-6 text-accent" /> :
+                 weather?.condition === 'cloudy' ? <Cloud className="w-6 h-6 text-accent" /> :
+                 <Sun className="w-6 h-6 text-warning" />}
               </div>
               <div>
                 <p className="text-2xl font-bold">{weather?.temperature || '--'}°</p>
                 <p className="text-xs text-muted-foreground capitalize">{weather?.condition || 'Loading...'}</p>
               </div>
-            </CardContent>
-          </Card>
+            </GlassCardContent>
+          </GlassCard>
         );
 
       case 'upcoming_events':
         return (
-          <Card className={cn(sizeClasses[widget.size])}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
+          <GlassCard className={cn(sizeClasses[widget.size])}>
+            <GlassCardHeader className="pb-2">
+              <GlassCardTitle className="text-sm flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-accent" />
                 Upcoming
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
+              </GlassCardTitle>
+            </GlassCardHeader>
+            <GlassCardContent className="space-y-2">
               {upcomingEvents.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-2">
                   No upcoming events
@@ -206,16 +206,16 @@ export function WidgetGrid({ widgets, tasks, events, onAddTask, onSelectTask }: 
                   </div>
                 ))
               )}
-            </CardContent>
-          </Card>
+            </GlassCardContent>
+          </GlassCard>
         );
 
       case 'focus_stats':
-        const todayFocus = 0; // Would come from focus sessions
-        const dailyGoal = 120; // 2 hours
+        const todayFocus = 0;
+        const dailyGoal = 120;
         return (
-          <Card className={cn(sizeClasses[widget.size])}>
-            <CardContent className="p-4">
+          <GlassCard className={cn(sizeClasses[widget.size])}>
+            <GlassCardContent className="p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Target className="w-4 h-4 text-primary" />
                 <span className="text-sm font-medium">Focus Today</span>
@@ -227,18 +227,18 @@ export function WidgetGrid({ widgets, tasks, events, onAddTask, onSelectTask }: 
                 </div>
                 <Progress value={(todayFocus / dailyGoal) * 100} className="h-2" />
               </div>
-            </CardContent>
-          </Card>
+            </GlassCardContent>
+          </GlassCard>
         );
 
       case 'quick_add':
         return (
-          <Card className={cn(sizeClasses[widget.size], 'cursor-pointer hover:bg-muted/50 transition-colors')} onClick={onAddTask}>
-            <CardContent className="p-4 flex items-center justify-center gap-2">
+          <GlassCard className={cn(sizeClasses[widget.size], 'cursor-pointer hover:bg-muted/50 transition-colors')} onClick={onAddTask} pressable>
+            <GlassCardContent className="p-4 flex items-center justify-center gap-2">
               <Plus className="w-5 h-5 text-primary" />
               <span className="font-medium">Quick Add</span>
-            </CardContent>
-          </Card>
+            </GlassCardContent>
+          </GlassCard>
         );
 
       default:
