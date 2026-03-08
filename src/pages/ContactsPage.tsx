@@ -932,8 +932,8 @@ export default function Contacts() {
                   <ScrollArea className="h-[calc(100vh-400px)]">
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 pr-4">
                       {filterContacts(businessContacts).length === 0 ? (
-                        <div className="col-span-full text-center py-8 text-muted-foreground">
-                          No business contacts yet. Build your professional network!
+                        <div className="col-span-full">
+                          <EmptyState icon={Briefcase} title="No business contacts" description="Build your professional network" />
                         </div>
                       ) : (
                         filterContacts(businessContacts).map(contact => (
