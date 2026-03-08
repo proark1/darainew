@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useHabits } from '@/hooks/useHabits';
 import { useGoals } from '@/hooks/useGoals';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { GlassCard } from '@/components/ui/glass-card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -11,6 +11,8 @@ import { Separator } from '@/components/ui/separator';
 import { AddHabitDialog } from './AddHabitDialog';
 import { AddGoalDialog } from './AddGoalDialog';
 import { StreakDisplay } from './StreakDisplay';
+import { PanelShell, staggerItem } from '@/components/ui/panel-shell';
+import { motion } from 'framer-motion';
 import { 
   Plus, 
   Check, 
