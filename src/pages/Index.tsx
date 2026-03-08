@@ -382,9 +382,13 @@ const Index = () => {
         prevContext.push({ role: 'assistant', content: '[End of previous context — new conversation starts below]' });
       }
 
-      const recent = messages
-        .slice(-20)
-        .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+      let recent = messages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+      
+      // Truncate older messages if history is very long to save tokens
+      if (recent.length > 12) {
+        // Keep the most recent 10 with a brief note about truncation
+        recent = recent.slice(-10);
+      }
 
       const deduped: Array<{ role: 'user' | 'assistant'; content: string }> = [];
       for (const m of [...prevContext, ...recent]) {
@@ -424,7 +428,7 @@ const Index = () => {
           date: v.date_administered,
           nextDose: v.next_dose_date || undefined,
         })),
-        metrics: recentMetrics.slice(0, 50).map(m => ({
+        metrics: recentMetrics.slice(0, 10).map(m => ({
           type: m.metric_type,
           value: m.value,
           unit: m.unit,
@@ -473,7 +477,7 @@ const Index = () => {
       const now = new Date();
       const startOfToday = new Date(now);
       startOfToday.setHours(0, 0, 0, 0);
-      const thirtyDaysFromNow = addDays(now, 30);
+      const thirtyDaysFromNow = addDays(now, 7);
       
       // Filter calendar events to include today and future (next 30 days)
       const upcomingCalendarEvents = events.filter(e => {

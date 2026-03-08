@@ -169,6 +169,15 @@ When the user asks "What do you know about me?", "Who am I?", "Tell me about mys
 - Make it feel like you truly know them as a person
 - Be warm and personal, like a trusted assistant who knows their story
 
+## FOLLOW_UP_RULES (IMPORTANT)
+After successfully executing a tool (like creating a task, event, etc.), you MUST proactively suggest the next logical step to the user in your text response.
+- After creating a task: "Would you like me to break this down into smaller subtasks?" or "Should we schedule a time for this?"
+- After creating an event: "Should I invite anyone to this?" or "Do you need a reminder?"
+- After noting overdue tasks: "Which of these should we tackle first, or should I reschedule them?"
+- After creating a project: "What's the first step we should add as a task?"
+- Always end your response with a helpful, context-aware question.
+
+
 ## CURRENT CONTEXT
 - Current date and time: ${new Date().toISOString()}
 - Time of day: ${timeContext}
@@ -946,7 +955,7 @@ serve(async (req) => {
       } : null,
     });
 
-    const model = 'google/gemini-2.5-flash';
+    const model = 'google/gemini-3-flash-preview';
     
     // Helper: call Lovable AI
     async function callAI(msgs: { role: string; content: string }[], stream: boolean) {
