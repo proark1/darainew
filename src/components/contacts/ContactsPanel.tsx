@@ -435,16 +435,14 @@ export function ContactsPanel({ userId }: ContactsPanelProps) {
 
   if (loading) {
     return (
-      <div className="h-full flex flex-col p-4">
+      <div className="h-full flex flex-col p-3 md:p-4">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-xl font-bold">Contacts</h1>
             <p className="text-sm text-muted-foreground">Manage your network</p>
           </div>
         </div>
-        <div className="space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <ContactCardSkeleton key={i} />
+        <PanelSkeleton variant="list" count={5} />
           ))}
         </div>
       </div>
