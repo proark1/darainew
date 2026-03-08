@@ -158,7 +158,7 @@ export function DashboardPanel({ userId, onNavigate }: DashboardPanelProps) {
   }
 
   return (
-    <div className="h-full overflow-y-auto p-3 md:p-4">
+    <div className="h-full overflow-y-auto p-3 md:p-4 pb-20">
       <StaggerContainer className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
         {/* Slim check-in banner */}
         <StaggerItem className="col-span-full">
