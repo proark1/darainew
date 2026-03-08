@@ -349,7 +349,7 @@ export function ContactsPanel({ userId }: ContactsPanelProps) {
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-destructive" />
           </span>
         )}
-        <CardContent className="p-3">
+        <GlassCardContent className="p-3">
           <div className="flex items-start gap-2.5">
             <Avatar className="h-9 w-9 shrink-0">
               <AvatarFallback className="bg-primary/10 text-primary text-xs">
