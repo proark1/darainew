@@ -34,6 +34,7 @@ export function RecipeDetailDialog({ open, onOpenChange, recipeId }: RecipeDetai
       setRecipe(null);
       setCookingMode(false);
       setCurrentStep(0);
+      setCheckedIngredients(new Set());
     }
   }, [open, recipeId]);
 
