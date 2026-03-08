@@ -3,7 +3,8 @@ import { useContracts } from '@/hooks/useContracts';
 import { useItemSharing } from '@/hooks/useItemSharing';
 import { ContractManager } from './ContractManager';
 import { ShareDialog } from '@/components/sharing/ShareDialog';
-import { PanelSkeleton } from '@/components/ui/panel-skeleton';
+import { PanelShell } from '@/components/ui/panel-shell';
+import { FileText } from 'lucide-react';
 
 interface ContractsPanelProps {
   userId: string;
