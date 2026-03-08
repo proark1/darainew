@@ -183,6 +183,6 @@ export function CalendarHubPanel({
           </div>
         </div>
       </PullToRefresh>
-    </div>
+    </PanelShell>
   );
 }
