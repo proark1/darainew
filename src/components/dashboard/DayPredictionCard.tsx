@@ -54,8 +54,8 @@ export function DayPredictionCard() {
             <div className="h-4 bg-muted rounded w-1/3" />
             <div className="h-8 bg-muted rounded" />
           </div>
-        </CardContent>
-      </Card>
+        </GlassCardContent>
+      </GlassCard>
     );
   }
 
