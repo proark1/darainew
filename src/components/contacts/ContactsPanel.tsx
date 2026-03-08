@@ -443,6 +443,7 @@ export function ContactsPanel({ userId }: ContactsPanelProps) {
           </div>
         </div>
         <PanelSkeleton variant="list" count={5} />
+      </div>
     );
   }
 
