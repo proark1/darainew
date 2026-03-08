@@ -1,148 +1,81 @@
 
-# Deep Module Interconnection + AI Daily Voice Briefing
 
-## Vision
-Transform DarAI from siloed modules into a deeply interconnected intelligent system where email, calendar, contacts, contracts, and the AI assistant all feed into each other -- with a new AI-generated daily voice briefing as the centerpiece.
+# Performance & Cost Optimization Audit
 
----
+## Critical Issues Found
 
-## Feature 1: AI Daily Voice Briefing on Dashboard
+### 1. `useAuth()` has no shared state — 10+ duplicate profile fetches per page load
+`useAuth()` is a plain hook (no Context/Provider). It's called in **91 files**. Each call independently sets up an auth listener AND fetches the profile from the database. On the dashboard alone, this causes **10+ identical `GET /profiles`** requests (visible in network logs).
 
-A new dashboard card where the AI generates a personalized daily summary and reads it aloud using text-to-speech. The briefing aggregates data from ALL modules.
+**Fix:** Convert `useAuth` to a Context + Provider pattern. One auth listener, one profile fetch, shared across all consumers.
 
-### New Edge Function: `daily-voice-briefing`
-- Accepts user_id and fetches cross-module data server-side:
-  - Pending tasks (count, top 3 by priority)
-  - Today's calendar events
-  - Unread email count + priority emails
-  - Contract alerts (upcoming renewals/cancellations)
-  - Contacts overdue for follow-up
-  - Habit completion status
-  - Yesterday's check-in mood/energy
-- Sends all context to Gemini 3 Flash (via Lovable AI gateway) with a prompt like: "Generate a warm, concise 30-second daily briefing script for this user. Be specific, mention names and times."
-- Returns: `{ briefingText: string, highlights: [...] }`
+### 2. `useEmails()` called in 5 places — each independently fetches 200 emails
+Sidebar, Index, GhostMode, EmailPanel all call `useEmails()` independently, each fetching 200 rows. The Sidebar only needs `unreadCount`.
 
-### New Component: `DailyBriefingCard`
-- Displayed prominently on the dashboard (below the hero)
-- Shows a text summary with key highlights as chips/badges
-- Play button that reads the briefing aloud via Web Speech API (existing `useTextToSpeech` hook)
-- Auto-play option (respects existing morning auto-play setting)
-- Cached per day so it doesn't re-generate on every page load
+**Fix:** Create an `EmailsContext` provider, or at minimum a lightweight `useUnreadEmailCount()` hook for Sidebar that only fetches `count`.
 
-### Files
-- `supabase/functions/daily-voice-briefing/index.ts` (new)
-- `src/components/dashboard/DailyBriefingCard.tsx` (new)
-- `src/hooks/useDailyBriefing.ts` (new)
-- `src/components/dashboard/DashboardPanel.tsx` (add card)
+### 3. Dashboard fetches ALL tasks with `select('*')` — no date filter
+`DashboardPanel.fetchAll` does `supabase.from('tasks').select('*').eq('user_id', userId)` — returns every task the user has ever created, including completed and old ones. Only today's tasks and overdue are needed.
 
----
+**Fix:** Add `.eq('completed', false)` or date range filter. Select only needed columns instead of `select('*')`.
 
-## Feature 2: Email-to-Calendar Integration
+### 4. Prayer API called twice — DashboardPrayerCard + TodayTimeline
+Both components independently call the Aladhan API via `fetchPrayerTimesForTimeline`. The prayer card also calls it on its own.
 
-When an email contains dates, times, or meeting references, surface a one-tap "Add to Calendar" action.
+**Fix:** Fetch once in DashboardPanel and pass prayer times as props to both components.
 
-### Changes
-- Update the `extract-contract-from-email` edge function (or create a shared extraction endpoint) to also detect event-like data: dates, times, locations, meeting links
-- Add an "Add to Calendar" button in `EmailDetailSheet.tsx` that pre-fills an event creation dialog with AI-extracted data (title from subject, time from email body, description from snippet)
-- Show a small calendar icon badge on `EmailCard.tsx` when the email contains detected dates
+### 5. QueryClient has no `staleTime` — refetches on every mount
+The default `new QueryClient()` has `staleTime: 0`, meaning every component mount triggers a refetch even if data was just fetched.
 
-### Files
-- `supabase/functions/extract-contract-from-email/index.ts` (extend to also return `detectedEvent` data)
-- `src/components/email/EmailDetailSheet.tsx` (add "Add to Calendar" action)
-- `src/components/email/EmailCard.tsx` (date detection badge)
+**Fix:** Set sensible defaults: `staleTime: 5 * 60 * 1000` (5 min), `gcTime: 10 * 60 * 1000`.
+
+### 6. `select('*')` used broadly — fetches unnecessary columns
+Contracts, tasks, emails all use `select('*')` returning large payloads including fields never displayed. Email `gmail_labels` arrays, `body_preview`, etc. are transferred but unused in dashboard context.
+
+**Fix:** Use column-specific selects everywhere (already done for contacts/emails in DashboardPanel — extend to tasks/contracts).
 
 ---
 
-## Feature 3: Email-to-Contact Linking
+## Plan
 
-Automatically link emails to existing contacts and surface contact context when reading emails.
+### 1. Create AuthContext Provider
+Convert `useAuth` from independent hook to Context + Provider. Single auth listener, single profile fetch, all 91 consumers share state.
 
-### Changes
-- In `EmailDetailSheet.tsx`, match the sender email against `user_contacts` table
-- If a match is found, show a mini contact card (name, tier, last contacted, relationship) inline in the email detail view
-- Add a "Save as Contact" button when no match exists, pre-filling name and email
-- When viewing a contact profile, show their recent emails in the timeline
+**Files:** `src/contexts/AuthContext.tsx` (new), `src/hooks/useAuth.ts` (rewrite to consume context), `src/App.tsx` (wrap with provider)
 
-### Files
-- `src/components/email/EmailDetailSheet.tsx` (contact context card)
-- `src/components/contacts/ContactTimeline.tsx` (add email history section)
+### 2. Configure QueryClient defaults
+Add `staleTime: 5 * 60 * 1000` and `gcTime: 10 * 60 * 1000` to prevent redundant refetches.
 
----
+**File:** `src/App.tsx`
 
-## Feature 4: Smart Dashboard Insight Card (Cross-Module)
+### 3. Optimize DashboardPanel queries
+- Tasks: add `.eq('completed', false)` and select only needed columns
+- Contracts: select only `id, name, renewal_date, cancellation_notice_days, auto_renews`
+- Remove duplicate prayer API call — fetch once, pass as props
 
-Upgrade the existing `SmartInsightCard` to pull insights from ALL modules instead of just tasks.
+**File:** `src/components/dashboard/DashboardPanel.tsx`, `src/components/dashboard/TodayTimeline.tsx`
 
-### Changes
-- Add email-based insights: "You have 3 unread priority emails from key contacts"
-- Add contract insights: "Insurance contract renews in 5 days -- review or cancel?"
-- Add contact insights: "You haven't spoken to [Name] in 45 days"
-- Add calendar-email correlation: "Meeting with [Contact] tomorrow -- check their latest email"
-- Rotate through these insights automatically
+### 4. Create lightweight `useUnreadEmailCount` hook
+For Sidebar and other places that only need the count, not 200 email rows. Uses `.select('id', { count: 'exact', head: true })`.
 
-### Files
-- `src/components/dashboard/SmartInsightCard.tsx` (accept emails, contracts, contacts props)
-- `src/components/dashboard/DashboardPanel.tsx` (pass new data to SmartInsightCard)
+**File:** `src/hooks/useUnreadEmailCount.ts` (new), `src/components/layout/Sidebar.tsx`
+
+### 5. Deduplicate prayer time fetches
+Have DashboardPanel fetch prayer times once and pass to both DashboardPrayerCard and TodayTimeline as props instead of each fetching independently.
+
+**Files:** `src/components/dashboard/DashboardPanel.tsx`, `src/components/dashboard/DashboardPrayerCard.tsx`, `src/components/dashboard/TodayTimeline.tsx`
 
 ---
 
-## Feature 5: Contextual Quick Actions (Cross-Module)
+## Impact Summary
 
-Enhance the existing `useContextualActions` hook to suggest actions based on cross-module data.
+| # | Fix | Requests Saved | Data Saved |
+|---|-----|---------------|------------|
+| 1 | AuthContext | ~10 profile fetches/page | High |
+| 2 | QueryClient staleTime | Varies, prevents refetch spam | Medium |
+| 3 | Dashboard query optimization | Same count, smaller payloads | Medium |
+| 4 | Unread count hook | 3-4 full email fetches → 1 count query | High |
+| 5 | Prayer dedup | 1 API call saved per dashboard load | Low |
 
-### Changes
-- Add email-aware actions: "Reply to [Contact]'s email" when there are priority unread emails from known contacts
-- Add contract-aware actions: "Review [Contract] renewal" when a deadline is within 3 days
-- Add calendar-contact actions: "Prepare for meeting with [Name]" when a calendar event matches a contact
-- These actions appear in the QuickActionsBar on the dashboard
+Total estimated reduction: **~60-70% fewer database requests** on dashboard load, **~50% less data transferred**.
 
-### Files
-- `src/hooks/useContextualActions.ts` (add email, contract, calendar-contact cross-references)
-- `src/components/dashboard/DashboardPanel.tsx` (pass onNavigate to QuickActionsBar)
-
----
-
-## Technical Details
-
-### Daily Voice Briefing Edge Function
-```text
-POST /daily-voice-briefing
-Body: { user_id }
-Response: {
-  briefingText: "Good morning, Dar! You have 4 tasks today, including...",
-  highlights: [
-    { type: "task", label: "4 tasks, 1 overdue" },
-    { type: "email", label: "3 unread priority" },
-    { type: "contract", label: "Insurance renews in 5 days" },
-    { type: "contact", label: "Follow up with Ahmed" }
-  ]
-}
-```
-
-Uses Lovable AI gateway with `google/gemini-3-flash-preview` model. Queries tasks, events, user_emails, contracts, user_contacts, daily_checkins tables server-side using the service role key.
-
-### Data Flow for Cross-Module Features
-```text
-Email sender --> match against user_contacts.email
-Email body --> AI extract --> calendar event / contract data
-Contact profile --> query user_emails WHERE from_email = contact.email
-Calendar event title --> fuzzy match against contact names
-Contract provider --> match against email senders
-```
-
-### Caching Strategy
-- Daily briefing: cached in localStorage with date key, regenerated once per day
-- Cross-module matches (email-contact): computed on render, lightweight DB queries
-- Smart insights: refreshed every 5 minutes (existing pattern)
-
-## Summary of Files Modified/Created
-- `supabase/functions/daily-voice-briefing/index.ts` (new)
-- `src/components/dashboard/DailyBriefingCard.tsx` (new)
-- `src/hooks/useDailyBriefing.ts` (new)
-- `src/components/dashboard/DashboardPanel.tsx` (add briefing card + pass data to SmartInsightCard)
-- `src/components/dashboard/SmartInsightCard.tsx` (cross-module insights)
-- `src/components/email/EmailDetailSheet.tsx` (contact card + calendar action)
-- `src/components/email/EmailCard.tsx` (date badge)
-- `src/components/contacts/ContactTimeline.tsx` (email history)
-- `src/hooks/useContextualActions.ts` (cross-module actions)
-- `supabase/functions/extract-contract-from-email/index.ts` (extend for calendar detection)
