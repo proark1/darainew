@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useLifeScore } from '@/hooks/useLifeScore';
+import { useCelebration } from '@/hooks/useCelebration';
 import { CheckinPrompt } from '@/components/checkin/CheckinPrompt';
 import { DashboardHero } from './DashboardHero';
 import { FocusCard } from './FocusCard';
