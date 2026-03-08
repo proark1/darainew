@@ -726,7 +726,7 @@ export function HifzTrackerTab() {
                     })}
                 </>
               ) : (
-                <Card className="p-8 text-center">
+                <GlassCard className="p-8 text-center">
                   <Check className="w-12 h-12 mx-auto text-emerald-500 mb-3" />
                   <h3 className="font-semibold mb-1">All Caught Up!</h3>
                   <p className="text-sm text-muted-foreground">
