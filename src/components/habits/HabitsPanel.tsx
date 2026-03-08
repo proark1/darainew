@@ -304,7 +304,7 @@ export function HabitsPanel({ userId }: HabitsPanelProps) {
                           {t('habits.completedGoals')}
                         </h3>
                         {completedGoals.map(goal => (
-                          <Card key={goal.id} className="p-3 bg-success/10 border-success/30">
+                          <GlassCard key={goal.id} className="p-3 bg-success/10 border-success/30">
                             <div className="flex items-center gap-3">
                               <div 
                                 className="w-8 h-8 rounded-full flex items-center justify-center"
