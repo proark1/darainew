@@ -233,7 +233,7 @@ export function HabitsPanel({ userId }: HabitsPanelProps) {
                     {activeGoals.map(goal => {
                       const progress = (goal.currentValue / goal.targetValue) * 100;
                       return (
-                        <Card key={goal.id} className="p-3">
+                        <motion.div key={goal.id} variants={staggerItem}><GlassCard className="p-3">
                           <div className="flex items-start gap-3">
                             <div 
                               className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
