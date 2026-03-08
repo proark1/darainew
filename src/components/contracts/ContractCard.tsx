@@ -3,6 +3,8 @@ import { GlassCard, GlassCardContent } from '@/components/ui/glass-card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { motion } from 'framer-motion';
+import { staggerItem } from '@/components/ui/panel-shell';
 import { 
   Pencil, 
   Trash2, 
