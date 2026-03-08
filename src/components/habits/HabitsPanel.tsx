@@ -291,7 +291,7 @@ export function HabitsPanel({ userId }: HabitsPanelProps) {
                               </div>
                             </div>
                           </div>
-                        </Card>
+                        </GlassCard></motion.div>
                       );
                     })}
 
