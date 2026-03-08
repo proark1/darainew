@@ -434,6 +434,8 @@ export function useAIChat() {
     emailSummary,
     notesSummary,
     habitsSummary,
+    // AI Memory
+    memories,
   }: {
     messages: Message[];
     tasks?: Task[];
