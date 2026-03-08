@@ -22,6 +22,7 @@ interface DashboardHeroProps {
   sugLoading: boolean;
   onRefreshSuggestion: () => void;
   onStartTask: (taskId: string | null, title: string) => void;
+  onNavigate?: (panel: string) => void;
 }
 
 const energyConfig = {
