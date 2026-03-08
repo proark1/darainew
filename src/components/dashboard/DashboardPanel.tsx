@@ -174,6 +174,7 @@ export function DashboardPanel({ userId, onNavigate }: DashboardPanelProps) {
             sugLoading={sugLoading}
             onRefreshSuggestion={refreshSuggestion}
             onStartTask={handleStartTask}
+            onNavigate={onNavigate}
           />
         </StaggerItem>
 
