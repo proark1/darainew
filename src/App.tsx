@@ -12,7 +12,9 @@ import { NetworkStatusBanner } from "@/components/NetworkStatusBanner";
 import { XPBadgeProvider } from "@/components/ui/xp-badge";
 
 import { useMorningAutoPlay } from "@/hooks/useMorningAutoPlay";
+import { TopLoader } from "@/components/ui/top-loader";
 import Index from "@/pages/Index";
+import Landing from "@/pages/Landing";
 import CalendarCallback from "@/pages/CalendarCallback";
 import {
   LazyAuth,
