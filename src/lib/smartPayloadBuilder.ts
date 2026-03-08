@@ -224,8 +224,8 @@ export function buildSmartPayload({
   }
 
   // Always include memories (Tier 1 — always-on)
-  if (arguments[0].memories && arguments[0].memories.length > 0) {
-    payload.memories = arguments[0].memories;
+  if (memories && memories.length > 0) {
+    payload.memories = memories;
   }
 
   return payload;
