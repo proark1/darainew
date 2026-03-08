@@ -130,8 +130,8 @@ export function HabitsPanel({ userId }: HabitsPanelProps) {
                   </div>
                 ) : (
                   todayHabits.map(habit => (
-                    <Card 
-                      key={habit.id}
+                    <motion.div key={habit.id} variants={staggerItem}>
+                    <GlassCard 
                       className={cn(
                         "p-3 transition-colors",
                         habit.isCompleted && "bg-success/10 border-success/30"
