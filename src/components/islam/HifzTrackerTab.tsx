@@ -656,7 +656,7 @@ export function HifzTrackerTab() {
                 </div>
               </GlassCard>
 
-              <Card className="p-4">
+              <GlassCard className="p-4">
                 <h3 className="font-semibold flex items-center gap-2 mb-3">
                   <Brain className="w-4 h-4 text-primary" />
                   Memorization Tips
