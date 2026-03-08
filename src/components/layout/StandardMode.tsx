@@ -12,6 +12,7 @@ import { List, Grid3X3, X, LayoutGrid, Activity } from 'lucide-react';
 import { TaskViewSwitcher, TaskView } from '../tasks/TaskViewSwitcher';
 import { PanelFallback } from '@/components/lazy/LazyLoader';
 import { ContextualHeader } from './ContextualHeader';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { ActivityItem } from '@/hooks/useActivityFeed';
 import type { SearchResult, SearchFilters } from '@/hooks/useGlobalSearch';
 import type { Contact } from '@/hooks/useContacts';
