@@ -477,21 +477,21 @@ export function HifzTrackerTab() {
       {/* Statistics Header */}
       <div className="p-4 border-b border-border space-y-4">
         <div className="grid grid-cols-3 gap-2">
-          <Card className="p-3 text-center bg-gradient-to-br from-emerald-500/20 to-teal-500/20">
+          <GlassCard className="p-3 text-center bg-gradient-to-br from-emerald-500/20 to-teal-500/20">
             <Trophy className="w-5 h-5 mx-auto text-emerald-600 mb-1" />
             <p className="text-xl font-bold text-emerald-600">{stats.memorizedSurahs}</p>
             <p className="text-[10px] text-muted-foreground">Surahs</p>
-          </Card>
-          <Card className="p-3 text-center bg-gradient-to-br from-primary/20 to-primary/10">
+          </GlassCard>
+          <GlassCard className="p-3 text-center bg-gradient-to-br from-primary/20 to-primary/10">
             <Target className="w-5 h-5 mx-auto text-primary mb-1" />
             <p className="text-xl font-bold text-primary">{stats.totalPercentage}%</p>
             <p className="text-[10px] text-muted-foreground">{stats.memorizedAyahs} Ayahs</p>
-          </Card>
-          <Card className="p-3 text-center bg-gradient-to-br from-amber-500/20 to-orange-500/20">
+          </GlassCard>
+          <GlassCard className="p-3 text-center bg-gradient-to-br from-amber-500/20 to-orange-500/20">
             <Repeat className="w-5 h-5 mx-auto text-amber-600 mb-1" />
             <p className="text-xl font-bold text-amber-600">{stats.dueForReview}</p>
             <p className="text-[10px] text-muted-foreground">Due Review</p>
-          </Card>
+          </GlassCard>
         </div>
 
         {/* Quick Actions */}
