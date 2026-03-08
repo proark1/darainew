@@ -67,9 +67,9 @@ export function FollowUpCard() {
           <Badge variant="secondary" className="ml-auto">
             {dueFollowUps.length}
           </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
+        </div>
+      </GlassCardHeader>
+      <GlassCardContent className="space-y-2">
         {dueFollowUps.slice(0, 3).map((followUp) => (
           <div
             key={followUp.id}
