@@ -114,8 +114,8 @@ export function BrainDumpFAB({ className, collapsed = false }: BrainDumpFABProps
               <p className="text-xs text-muted-foreground mt-2 px-1">
                 AI will categorize this 🧠
               </p>
-            </CardContent>
-          </Card>
+            </GlassCardContent>
+          </GlassCard>
         )}
 
         <div className="flex items-center gap-1">
