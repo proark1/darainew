@@ -50,6 +50,7 @@ export function DashboardPanel({ userId, onNavigate }: DashboardPanelProps) {
   const { profile } = useAuth();
   const { todayScore } = useLifeScore();
   const { suggestion, loading: sugLoading, refresh: refreshSuggestion } = useSmartTaskSuggestions(tasks, events);
+  const { celebrate, checkStreak } = useCelebration();
 
   const handleStartTask = (taskId: string | null, _title: string) => {
     onNavigate?.('tasks');
