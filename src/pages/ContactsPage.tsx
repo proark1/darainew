@@ -912,8 +912,8 @@ export default function Contacts() {
                   <ScrollArea className="h-[calc(100vh-400px)]">
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 pr-4">
                       {filterContacts(personalContacts).length === 0 ? (
-                        <div className="col-span-full text-center py-8 text-muted-foreground">
-                          No personal contacts yet. Add family, friends, or acquaintances!
+                        <div className="col-span-full">
+                          <EmptyState icon={Heart} title="No personal contacts" description="Add family, friends, or acquaintances" />
                         </div>
                       ) : (
                         filterContacts(personalContacts).map(contact => (
