@@ -891,6 +891,15 @@ serve(async (req) => {
       contextMessage += `\nEncourage the user about their streaks and remind about incomplete habits.`;
     }
 
+    // Inject AI Memory into prompt
+    if (memories && memories.length > 0) {
+      contextMessage += `\n\n## LONG-TERM MEMORY (Things you've learned about this user from previous conversations)`;
+      contextMessage += `\nUse this knowledge naturally in your responses. Reference it when relevant.`;
+      for (const mem of memories) {
+        contextMessage += `\n- [${mem.type}]${mem.category ? ` (${mem.category})` : ''} ${mem.key}: "${mem.value}"`;
+      }
+    }
+
     const fullSystemPrompt = baseSystemPrompt + '\n\nPersonality: ' + personalityAddition + contextMessage;
 
     console.log("Chat request with enhanced context:", {
