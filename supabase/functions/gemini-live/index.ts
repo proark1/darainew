@@ -88,6 +88,7 @@ interface LiveSessionRequest {
   text?: string;
   userProfile?: UserProfile;
   contextData?: ContextData;
+  memories?: { type: string; key: string; value: string; category?: string }[];
 }
 
 const personalityPrompts: Record<string, string> = {
