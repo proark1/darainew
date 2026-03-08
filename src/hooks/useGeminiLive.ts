@@ -90,7 +90,8 @@ export function useGeminiLive({
             timezone: userProfile.timezone,
             preferredWorkHours: userProfile.preferredWorkHours,
           } : undefined,
-          contextData: contextData || undefined
+          contextData: contextData || undefined,
+          memories: memories || undefined,
         }
       });
 
