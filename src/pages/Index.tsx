@@ -428,7 +428,7 @@ const Index = () => {
           date: v.date_administered,
           nextDose: v.next_dose_date || undefined,
         })),
-        metrics: recentMetrics.slice(0, 50).map(m => ({
+        metrics: recentMetrics.slice(0, 10).map(m => ({
           type: m.metric_type,
           value: m.value,
           unit: m.unit,
