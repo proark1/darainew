@@ -21,6 +21,7 @@ import { useSmartTaskSuggestions } from '@/hooks/useSmartTaskSuggestions';
 import { Task, TaskCategory, CalendarEvent } from '@/types/flux';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { isSameDay, subDays, startOfDay, endOfDay, isToday } from 'date-fns';
 import { cn } from '@/lib/utils';
 

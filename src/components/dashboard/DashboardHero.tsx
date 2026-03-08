@@ -32,7 +32,7 @@ const energyConfig = {
 };
 
 export function DashboardHero({
-  userName, tasks, suggestion, sugLoading, onRefreshSuggestion, onStartTask,
+  userName, tasks, suggestion, sugLoading, onRefreshSuggestion, onStartTask, onNavigate,
 }: DashboardHeroProps) {
   const [altOpen, setAltOpen] = useState(false);
 

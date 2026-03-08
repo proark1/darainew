@@ -4,7 +4,7 @@ import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { useContextualActions, QuickAction } from '@/hooks/useContextualActions';
 import { 
   Sun, Calendar, ListTodo, Timer, Zap, Check, CalendarPlus, 
-  BarChart, Users, Trophy, Brain, Sparkles, Mail, FileText, LucideIcon
+  BarChart, Users, Trophy, Brain, Sparkles, Mail, FileText, LucideIcon, ChevronRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 

@@ -64,9 +64,15 @@ export function StatPills({
         >
           <div className="flex items-center gap-1.5">
             <pill.icon className={cn("w-3.5 h-3.5", pill.color)} />
-            <AnimatedCounter value={pill.value} className="text-sm font-bold" />
+            {pill.value === 0 && pill.zeroLabel ? (
+              <span className="text-[10px] font-medium text-muted-foreground">{pill.zeroLabel}</span>
+            ) : (
+              <AnimatedCounter value={pill.value} className="text-sm font-bold" />
+            )}
           </div>
-          <span className="text-[10px] text-muted-foreground">{pill.label}</span>
+          {!(pill.value === 0 && pill.zeroLabel) && (
+            <span className="text-[10px] text-muted-foreground">{pill.label}</span>
+          )}
           <MiniProgress value={pill.value} max={pill.max} color={pill.barColor} />
         </motion.button>
       ))}
