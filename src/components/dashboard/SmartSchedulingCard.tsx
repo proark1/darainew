@@ -45,8 +45,8 @@ export function SmartSchedulingCard() {
             <div className="h-4 bg-muted rounded w-1/3" />
             <div className="h-16 bg-muted rounded" />
           </div>
-        </CardContent>
-      </Card>
+        </GlassCardContent>
+      </GlassCard>
     );
   }
 
