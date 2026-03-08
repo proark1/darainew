@@ -194,6 +194,15 @@ export function DashboardPanel({ userId, onNavigate }: DashboardPanelProps) {
           <DailyBriefingCard />
         </StaggerItem>
 
+        <StaggerItem className="col-span-full">
+          <WhatNowCard
+            suggestion={suggestion}
+            loading={sugLoading}
+            onRefresh={refreshSuggestion}
+            onStartTask={handleStartTask}
+          />
+        </StaggerItem>
+
         <StaggerItem className="md:col-span-2">
           <FocusCard tasks={tasks} onCompleteTask={handleCompleteTask} />
         </StaggerItem>
