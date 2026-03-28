@@ -2,8 +2,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': Deno.env.get('APP_URL') || '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'X-Content-Type-Options': 'nosniff',
 };
 
 interface PushPayload {
@@ -37,9 +38,7 @@ serve(async (req) => {
     const payload: PushPayload = await req.json();
     const { user_ids, title, body, data } = payload;
 
-    console.log('Sending push notification to users:', user_ids);
-    console.log('Title:', title);
-    console.log('Body:', body);
+    console.log(`Sending push notification to ${user_ids.length} users`);
 
     if (!user_ids || user_ids.length === 0) {
       return new Response(

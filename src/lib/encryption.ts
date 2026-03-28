@@ -294,11 +294,12 @@ async function openDB(): Promise<IDBDatabase> {
 
 export async function storePrivateKey(userId: string, privateKey: CryptoKey): Promise<void> {
   const db = await openDB();
-  const exported = await exportPrivateKey(privateKey);
+  // Store the CryptoKey object directly via structured clone instead of
+  // exporting to base64, so the raw key material is never exposed in IndexedDB
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE_NAME, 'readwrite');
     const store = transaction.objectStore(STORE_NAME);
-    const request = store.put({ id: `private-key-${userId}`, key: exported });
+    const request = store.put({ id: `private-key-${userId}`, key: privateKey, version: 2 });
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve();
   });
@@ -314,8 +315,14 @@ export async function getPrivateKey(userId: string): Promise<CryptoKey | null> {
     request.onsuccess = async () => {
       if (request.result?.key) {
         try {
-          const privateKey = await importPrivateKey(request.result.key);
-          resolve(privateKey);
+          // Version 2: CryptoKey stored directly via structured clone
+          if (request.result.key instanceof CryptoKey) {
+            resolve(request.result.key);
+          } else {
+            // Legacy: base64-encoded key string, re-import it
+            const privateKey = await importPrivateKey(request.result.key);
+            resolve(privateKey);
+          }
         } catch {
           resolve(null);
         }

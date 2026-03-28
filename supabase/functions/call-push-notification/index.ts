@@ -2,8 +2,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': Deno.env.get('APP_URL') || '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'X-Content-Type-Options': 'nosniff',
 };
 
 interface CallNotificationPayload {
@@ -46,8 +47,7 @@ serve(async (req) => {
     const payload: CallNotificationPayload = await req.json();
     const { callee_id, caller_id, caller_name, session_id, call_type } = payload;
 
-    console.log('[call-push] Sending notification for call:', session_id);
-    console.log('[call-push] From:', caller_name, 'to user:', callee_id);
+    console.log('[call-push] Sending call notification for session:', session_id);
 
     // Get callee's push tokens
     const { data: tokens, error: tokenError } = await supabase
