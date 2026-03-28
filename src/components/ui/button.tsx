@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
+import { Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useHaptics } from "@/hooks/useHaptics";
@@ -43,13 +44,14 @@ export interface ButtonProps
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
   haptic?: "light" | "medium" | "heavy" | "success" | false;
+  loading?: boolean;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, haptic = "light", onClick, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, haptic = "light", loading = false, onClick, disabled, children, ...props }, ref) => {
     const { vibrate } = useHaptics();
     const Comp = asChild ? Slot : "button";
-    
+
     const handleClick = React.useCallback(
       (e: React.MouseEvent<HTMLButtonElement>) => {
         if (haptic) {
@@ -59,14 +61,19 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       },
       [haptic, vibrate, onClick]
     );
-    
+
     return (
-      <Comp 
-        className={cn(buttonVariants({ variant, size, className }))} 
-        ref={ref} 
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
         onClick={asChild ? onClick : handleClick}
-        {...props} 
-      />
+        disabled={disabled || loading}
+        aria-busy={loading || undefined}
+        {...props}
+      >
+        {loading && <Loader2 className="animate-spin" />}
+        {children}
+      </Comp>
     );
   }
 );
