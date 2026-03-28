@@ -56,7 +56,8 @@ export function StatPills({
             "bg-card border border-border/50",
             "shadow-soft",
             "transition-all duration-200 hover:border-primary/30 hover:shadow-md",
-            "active:scale-95 cursor-pointer"
+            "active:scale-95 cursor-pointer",
+            pill.value >= pill.max && "ring-2 ring-primary/30 border-primary/40 shadow-primary/10"
           )}
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}

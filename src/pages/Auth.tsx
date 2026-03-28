@@ -151,6 +151,7 @@ export default function Auth() {
                     onChange={(e) => setDisplayName(e.target.value)}
                     placeholder={t('auth.yourName')}
                     className="pl-12 h-12 text-base"
+                    autoComplete="name"
                   />
                 </div>
               </div>
@@ -166,6 +167,7 @@ export default function Auth() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
                   className="pl-12 h-12 text-base"
+                  autoComplete="email"
                   required
                 />
               </div>
@@ -191,6 +193,7 @@ export default function Auth() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   className="pl-12 pr-12 h-12 text-base"
+                  autoComplete={isLogin ? "current-password" : "new-password"}
                   required
                   minLength={6}
                 />

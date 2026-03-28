@@ -1,16 +1,17 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { Sparkles, Mail, ArrowLeft, Loader2, CheckCircle } from 'lucide-react';
+import { Sparkles, Mail, ArrowLeft, CheckCircle } from 'lucide-react';
 
 export default function ForgotPassword() {
   const { toast } = useToast();
   const { t } = useLanguage();
-  
+
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
@@ -43,20 +44,39 @@ export default function ForgotPassword() {
   };
 
   return (
-    <main className="min-h-screen bg-background flex items-center justify-center p-4">
+    <main className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Floating orbs */}
+      <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-primary/5 rounded-full blur-3xl animate-pulse" />
+      <div className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-primary/8 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+
       <h1 className="sr-only">Reset your password</h1>
-      <div className="w-full max-w-md">
+      <motion.div
+        className="w-full max-w-md relative z-10"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+      >
         {/* Logo */}
         <div className="flex justify-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent">
+          <motion.div
+            className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent shadow-glow"
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.1, type: 'spring' }}
+          >
             <Sparkles className="w-8 h-8 text-primary-foreground" />
-          </div>
+          </motion.div>
         </div>
 
         {/* Reset Card */}
         <div className="glass-panel-solid p-8">
           {sent ? (
-            <div className="text-center space-y-4">
+            <motion.div
+              className="text-center space-y-4"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring' }}
+            >
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mx-auto">
                 <CheckCircle className="w-8 h-8 text-primary" />
               </div>
@@ -72,7 +92,7 @@ export default function ForgotPassword() {
                   {t('auth.backToLogin') || 'Back to login'}
                 </Button>
               </Link>
-            </div>
+            </motion.div>
           ) : (
             <>
               <div className="text-center mb-6">
@@ -97,17 +117,14 @@ export default function ForgotPassword() {
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@example.com"
                       className="pl-12 h-12 text-base"
+                      autoComplete="email"
                       required
                     />
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full h-12 text-base" disabled={loading}>
-                  {loading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    t('auth.sendResetLink') || 'Send reset link'
-                  )}
+                <Button type="submit" className="w-full h-12 text-base" loading={loading}>
+                  {t('auth.sendResetLink') || 'Send reset link'}
                 </Button>
               </form>
 
@@ -123,7 +140,7 @@ export default function ForgotPassword() {
             </>
           )}
         </div>
-      </div>
+      </motion.div>
     </main>
   );
 }
