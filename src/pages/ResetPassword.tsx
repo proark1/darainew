@@ -36,11 +36,12 @@ export default function ResetPassword() {
   const passwordsMatch = confirmPassword.length > 0 ? password === confirmPassword : null;
 
   useEffect(() => {
-    supabase.auth.onAuthStateChange(async (event) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
       if (event === 'PASSWORD_RECOVERY') {
         // User clicked the reset link
       }
     });
+    return () => subscription.unsubscribe();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {

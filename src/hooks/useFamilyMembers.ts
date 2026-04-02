@@ -81,6 +81,7 @@ export function useFamilyMembers() {
         async () => supabase
           .from('family_members')
           .select('*')
+          .eq('user_id', user.id)
           .eq('is_active', true)
           .order('name'),
         { maxRetries: 2, timeoutMs: 12000 }

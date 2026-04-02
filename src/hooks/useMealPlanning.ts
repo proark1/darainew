@@ -156,6 +156,7 @@ export function useMealPlanning() {
         .from('recipes')
         .update({ ...updates, updated_at: new Date().toISOString() })
         .eq('id', id)
+        .eq('user_id', user?.id)
         .select()
         .single();
 

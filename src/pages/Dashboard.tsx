@@ -58,6 +58,7 @@ export default function Dashboard() {
           priority: t.priority as 'high' | 'medium' | 'low',
           completed: t.completed,
           createdAt: new Date(t.created_at),
+          updatedAt: new Date(t.updated_at),
           dueDate: t.due_date ? new Date(t.due_date) : undefined,
         })));
       }
@@ -75,17 +76,17 @@ export default function Dashboard() {
     const monthEnd = endOfMonth(now);
 
     // Tasks completed this week
-    const completedThisWeek = tasks.filter(t => 
-      t.completed && 
-      t.createdAt && 
-      isWithinInterval(t.createdAt, { start: weekStart, end: weekEnd })
+    const completedThisWeek = tasks.filter(t =>
+      t.completed &&
+      t.updatedAt &&
+      isWithinInterval(t.updatedAt, { start: weekStart, end: weekEnd })
     ).length;
 
     // Tasks completed this month
-    const completedThisMonth = tasks.filter(t => 
-      t.completed && 
-      t.createdAt && 
-      isWithinInterval(t.createdAt, { start: monthStart, end: monthEnd })
+    const completedThisMonth = tasks.filter(t =>
+      t.completed &&
+      t.updatedAt &&
+      isWithinInterval(t.updatedAt, { start: monthStart, end: monthEnd })
     ).length;
 
     // Category breakdown
@@ -98,10 +99,10 @@ export default function Dashboard() {
     let checkDate = startOfDay(now);
     
     for (let i = 0; i < 365; i++) {
-      const dayTasks = tasks.filter(t => 
-        t.completed && 
-        t.createdAt && 
-        isSameDay(t.createdAt, checkDate)
+      const dayTasks = tasks.filter(t =>
+        t.completed &&
+        t.updatedAt &&
+        isSameDay(t.updatedAt, checkDate)
       );
       
       if (dayTasks.length > 0) {
