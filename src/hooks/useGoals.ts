@@ -33,6 +33,7 @@ export function useGoals(userId: string | undefined) {
       const { data, error } = await supabase
         .from('goals')
         .select('*')
+        .eq('user_id', userId)
         .order('is_completed', { ascending: true })
         .order('target_date', { ascending: true, nullsFirst: false });
 

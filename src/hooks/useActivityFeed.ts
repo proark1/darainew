@@ -44,6 +44,7 @@ export function useActivityFeed(userId: string | undefined) {
     const { data: activityData, error } = await supabase
       .from('activity_feed')
       .select('*')
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(50);
 

@@ -35,6 +35,7 @@ export function useNotes(userId: string | undefined) {
       const { data, error } = await supabase
         .from('notes')
         .select('*')
+        .eq('user_id', userId)
         .eq('trashed', false)
         .order('is_pinned', { ascending: false })
         .order('updated_at', { ascending: false });

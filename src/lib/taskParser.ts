@@ -84,15 +84,6 @@ export function parseTaskInput(input: string): ParsedTask {
       break;
     }
   }
-  if (category === 'personal') {
-    for (const word of PERSONAL_WORDS) {
-      if (lowerInput.includes(word)) {
-        category = 'personal';
-        break;
-      }
-    }
-  }
-
   // Extract date
   for (const pattern of DATE_PATTERNS) {
     const match = title.match(pattern.regex);

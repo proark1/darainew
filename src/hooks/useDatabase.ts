@@ -115,6 +115,7 @@ export function useDatabase(userId: string | undefined) {
     const { data: tasksData } = await supabase
       .from('tasks')
       .select('*')
+      .eq('user_id', userId)
       .eq('trashed', false)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: false });
@@ -127,6 +128,7 @@ export function useDatabase(userId: string | undefined) {
     const { data: trashedData } = await supabase
       .from('tasks')
       .select('*')
+      .eq('user_id', userId)
       .eq('trashed', true)
       .order('trashed_at', { ascending: false });
     
@@ -138,6 +140,7 @@ export function useDatabase(userId: string | undefined) {
     const { data: eventsData } = await supabase
       .from('events')
       .select('*')
+      .eq('user_id', userId)
       .order('start_time', { ascending: true });
     
     if (eventsData) {

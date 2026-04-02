@@ -47,6 +47,7 @@ export function useHabits(userId: string | undefined) {
       const { data: habitsData, error: habitsError } = await supabase
         .from('habits')
         .select('*')
+        .eq('user_id', userId)
         .eq('is_active', true)
         .order('created_at', { ascending: true });
 
@@ -57,6 +58,7 @@ export function useHabits(userId: string | undefined) {
       const { data: logsData, error: logsError } = await supabase
         .from('habit_logs')
         .select('*')
+        .eq('user_id', userId)
         .gte('log_date', thirtyDaysAgo);
 
       if (logsError) throw logsError;

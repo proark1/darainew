@@ -38,6 +38,7 @@ export function useProjects(userId: string | undefined) {
     const { data } = await supabase
       .from('projects')
       .select('*')
+      .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
     if (data) {
