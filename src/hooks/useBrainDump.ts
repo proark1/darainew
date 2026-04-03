@@ -200,7 +200,8 @@ export function useBrainDump() {
       const { error } = await supabase
         .from('brain_dumps')
         .delete()
-        .eq('id', dumpId);
+        .eq('id', dumpId)
+        .eq('user_id', user?.id);
 
       if (error) throw error;
       setDumps(prev => prev.filter(d => d.id !== dumpId));

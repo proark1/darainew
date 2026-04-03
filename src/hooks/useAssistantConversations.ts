@@ -215,7 +215,8 @@ export function useAssistantConversations() {
       const { error } = await supabase
         .from('assistant_conversations')
         .delete()
-        .eq('id', conversationId);
+        .eq('id', conversationId)
+        .eq('user_id', user?.id);
 
       if (error) throw error;
       setConversations(prev => prev.filter(c => c.id !== conversationId));

@@ -155,7 +155,8 @@ export function useFamilyDocuments() {
       const { error } = await supabase
         .from('family_documents')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', user?.id);
 
       if (error) throw error;
       setDocuments(prev => prev.filter(d => d.id !== id));

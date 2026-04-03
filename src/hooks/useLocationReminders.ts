@@ -344,7 +344,8 @@ export function useLocationReminders() {
       const { error } = await supabase
         .from('location_triggers')
         .update(updates)
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', user?.id);
 
       if (error) throw error;
       
@@ -363,7 +364,8 @@ export function useLocationReminders() {
       const { error } = await supabase
         .from('location_triggers')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', user?.id);
 
       if (error) throw error;
       

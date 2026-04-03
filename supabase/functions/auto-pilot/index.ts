@@ -196,10 +196,10 @@ serve(async (req) => {
 
     for (const meeting of recentMeetings.slice(0, 2)) {
       // Check if a follow-up task already exists
-      const hasFollowUp = tasks.some(t => 
+      const hasFollowUp = tasks.some(t =>
         t.title.toLowerCase().includes(meeting.title.toLowerCase()) ||
-        t.title.toLowerCase().includes('follow up') && 
-        new Date(t.created_at) > new Date(meeting.end_time)
+        (t.title.toLowerCase().includes('follow up') &&
+        new Date(t.created_at) > new Date(meeting.end_time))
       );
 
       if (!hasFollowUp) {

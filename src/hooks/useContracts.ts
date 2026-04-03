@@ -187,7 +187,8 @@ export function useContracts(userId: string | undefined) {
     const { error } = await supabase
       .from('contracts')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', userId);
 
     if (!error) {
       setContracts(prev => prev.filter(c => c.id !== id));

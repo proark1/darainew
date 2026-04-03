@@ -125,6 +125,7 @@ export function useShoppingLists() {
         .from('shopping_lists')
         .update({ ...updates, updated_at: new Date().toISOString() })
         .eq('id', id)
+        .eq('user_id', user?.id)
         .select()
         .single();
 
@@ -144,7 +145,8 @@ export function useShoppingLists() {
       const { error } = await supabase
         .from('shopping_lists')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', user?.id);
 
       if (error) throw error;
       setLists(prev => prev.filter(l => l.id !== id));
