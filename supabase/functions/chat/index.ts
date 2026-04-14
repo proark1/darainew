@@ -128,6 +128,7 @@ interface FamilyContext {
 
 interface ChatRequest {
   messages: Message[];
+  imageUrl?: string; // Base64 data URL for image input
   tasks?: { id: string; title: string; completed: boolean; category: string; priority: string; dueDate?: string }[];
   events?: { id: string; title: string; startTime: string; endTime: string }[];
   overdueTasks?: OverdueTask[];
