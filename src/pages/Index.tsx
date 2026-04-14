@@ -51,9 +51,10 @@ const Index = () => {
   const { settings, updateSettings, updateNotifications } = useSettings();
   const { streamChat, isStreaming } = useAIChat();
   const { memories, getMemoriesForContext } = useAIMemory();
-  const { fetchMessages: fetchConversationMessages, fetchConversations, conversations } = useAssistantConversations();
+  const { fetchMessages: fetchConversationMessages, fetchConversations, conversations, startConversation, addMessage: saveMessageToDB, currentConversation } = useAssistantConversations();
   const previousContextLoadedRef = useRef(false);
   const [previousConversationMessages, setPreviousConversationMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const activeConversationIdRef = useRef<string | null>(null);
 
   // Load last conversation's recent messages for cross-session context
   useEffect(() => {
