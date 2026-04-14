@@ -1138,6 +1138,18 @@ const Index = () => {
           onDeleteEvent={deleteEvent}
           onImportEvents={handleImportEvents}
           onSendMessage={handleSendMessage}
+          thinkingStatus={thinkingStatus}
+          actionCards={actionCards}
+          doriStats={{
+            overdueTasks: tasks.filter(t => !t.completed && t.dueDate && new Date(t.dueDate) < new Date()).length,
+            unreadEmails: unreadEmailCount,
+            todayEvents: events.filter(e => {
+              const d = new Date(e.startTime);
+              const now = new Date();
+              return d.toDateString() === now.toDateString();
+            }).length,
+            pendingTasks: tasks.filter(t => !t.completed).length,
+          }}
           onVoiceMode={() => setMode('ghost')}
           onEditProfile={() => setShowProfileSettings(true)}
           settings={settings}
