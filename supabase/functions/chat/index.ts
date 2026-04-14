@@ -469,7 +469,22 @@ WHEN TO USE web_search:
 - User asks about specific companies, people, or places
 - ANY question that is NOT about their personal tasks, events, contacts, contracts, family, or health data
 
-IMPORTANT: When you need real-time or factual information, ALWAYS use web_search. Do NOT make up facts or give outdated information. After receiving search results, synthesize a clear answer with the sources cited as [1], [2], etc.`;
+IMPORTANT: When you need real-time or factual information, ALWAYS use web_search. Do NOT make up facts or give outdated information. After receiving search results, synthesize a clear answer with the sources cited as [1], [2], etc.
+
+## MULTI-TOOL CHAINING
+You CAN use multiple tools in a single response. For example:
+- Create a task AND set a reminder for it
+- Add a contact AND schedule a meeting with them
+- Create multiple tasks at once when breaking down a project
+Just include multiple tool XML blocks in your response. Each will be executed.
+
+## REASONING GUIDELINES
+Before responding, think step by step:
+1. What is the user actually asking for?
+2. Do I have the data in my context to answer, or do I need a tool?
+3. What's the most helpful thing I can do beyond just answering the question?
+4. Is there something proactive I should mention (overdue tasks, upcoming deadlines, health trends)?`;
+
 
 async function logAIUsage(
   supabase: any,
@@ -502,6 +517,34 @@ async function logAIUsage(
   } catch (error) {
     console.error('Failed to log AI usage:', error);
   }
+}
+
+// Detect if user's message likely needs a web search (avoids two-pass)
+function detectWebSearchIntent(msg: string): boolean {
+  const searchPatterns = [
+    /^(what|who|where|when|why|how)\s+(is|are|was|were|do|does|did|can|could|should|would)/i,
+    /\b(latest|current|recent|today'?s?|news|price|cost of|weather|score|recipe for|best|top|review|recommend)\b/i,
+    /\b(search|look up|find out|google|tell me about)\b/i,
+    /\b(what happened|what's happening|trending)\b/i,
+  ];
+  
+  // Don't trigger for personal data queries
+  const personalPatterns = [
+    /\b(my task|my event|my contact|my contract|my habit|my note|my email|my family|my health|my calendar|my schedule|add|create|delete|update|complete|mark|remind me|set reminder)\b/i,
+    /\b(shopping list|brain dump|how am i doing|life score)\b/i,
+  ];
+  
+  if (personalPatterns.some(p => p.test(msg))) return false;
+  return searchPatterns.some(p => p.test(msg));
+}
+
+// Extract a clean search query from the user message
+function extractSearchQuery(msg: string): string {
+  // Remove common prefixes
+  return msg
+    .replace(/^(hey dori|dori|can you|could you|please|search for|look up|google|find out|tell me)\s*/i, '')
+    .replace(/\?$/, '')
+    .trim() || msg;
 }
 
 serve(async (req) => {
@@ -1012,75 +1055,54 @@ serve(async (req) => {
       }
     }
 
-    const allMessages = [
+    const allMessages: { role: string; content: string }[] = [
       { role: 'system', content: fullSystemPrompt },
       ...messages,
     ];
 
-    // First pass: non-streaming to detect web_search tool calls
-    const firstResponse = await callAI(allMessages, false);
+    // Pre-detect web search intent from the user's last message to avoid two-pass
+    const lastUserMsg = messages[messages.length - 1]?.content?.toLowerCase() || '';
+    const isWebSearchLikely = detectWebSearchIntent(lastUserMsg);
+    
+    if (isWebSearchLikely) {
+      // Pre-fetch search results and inject them into context (single AI call)
+      const searchQuery = extractSearchQuery(lastUserMsg);
+      console.log('Pre-fetching web search for:', searchQuery);
+      
+      const searchResult = await webSearch(searchQuery);
+      
+      if (searchResult.answer && searchResult.answer !== 'Web search failed.' && searchResult.answer !== 'Web search is not configured.') {
+        let citationText = '';
+        if (searchResult.citations.length > 0) {
+          citationText = '\n\nSources:\n' + searchResult.citations.map((c: string, i: number) => `[${i + 1}] ${c}`).join('\n');
+        }
+        
+        // Inject search results into the conversation context
+        allMessages.push({
+          role: 'system',
+          content: `Web search results for the user's question:\n\n${searchResult.answer}${citationText}\n\nUse these results to give a comprehensive answer. Cite sources as [1], [2], etc. Do NOT use the web_search tool — results are already provided.`,
+        });
+      }
+    }
 
-    if (!firstResponse.ok) {
-      const errorText = await firstResponse.text();
-      console.error("Lovable AI error:", firstResponse.status, errorText);
+    // Single streaming call
+    const streamResponse = await callAI(allMessages, true);
+
+    if (!streamResponse.ok) {
+      const errorText = await streamResponse.text();
+      console.error("Lovable AI error:", streamResponse.status, errorText);
       await logAIUsage(supabaseAdmin, userId, 'chat', model, 0, 0, 0, 'error', { error: errorText, personality });
       
-      if (firstResponse.status === 429) {
+      if (streamResponse.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (firstResponse.status === 402) {
+      if (streamResponse.status === 402) {
         return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }), {
           status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      return new Response(JSON.stringify({ error: "AI service error" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const firstData = await firstResponse.json();
-    const firstContent = firstData.choices?.[0]?.message?.content || '';
-
-    // Check for web_search tool call
-    const webSearchMatch = firstContent.match(/<tool>web_search<\/tool>\s*<query>(\{[\s\S]*?\})<\/query>/);
-    
-    let finalMessages = allMessages;
-    if (webSearchMatch) {
-      try {
-        const queryData = JSON.parse(webSearchMatch[1]);
-        const searchQuery = queryData.q || queryData.query || '';
-        console.log('Executing web search:', searchQuery);
-        
-        const searchResult = await webSearch(searchQuery);
-        
-        let citationText = '';
-        if (searchResult.citations.length > 0) {
-          citationText = '\n\nSources:\n' + searchResult.citations.map((c, i) => `[${i + 1}] ${c}`).join('\n');
-        }
-        
-        // Add the first AI response and search results, then ask for a final synthesis
-        finalMessages = [
-          ...allMessages,
-          { role: 'assistant', content: firstContent },
-          { role: 'system', content: `Web search results for "${searchQuery}":\n\n${searchResult.answer}${citationText}\n\nNow synthesize a clear, helpful answer based on these search results. Cite sources as [1], [2], etc. Do NOT use the web_search tool again.` },
-        ];
-      } catch (e) {
-        console.error('Failed to parse web search query:', e);
-        // Fall through to stream the original response
-      }
-    }
-
-    // If no web search was needed, stream the original; if web search was done, stream the synthesis
-    const streamResponse = await callAI(
-      webSearchMatch ? finalMessages : allMessages,
-      true,
-    );
-
-    if (!streamResponse.ok) {
-      const errorText = await streamResponse.text();
-      console.error("Lovable AI stream error:", streamResponse.status, errorText);
       return new Response(JSON.stringify({ error: "AI service error" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -1092,8 +1114,9 @@ serve(async (req) => {
     await logAIUsage(
       supabaseAdmin, userId, 'chat', model,
       estimatedPromptTokens, 500, estimatedPromptTokens + 500,
-      'success', { personality, messageCount: messages.length, webSearchUsed: !!webSearchMatch }
+      'success', { personality, messageCount: messages.length, webSearchUsed: isWebSearchLikely }
     );
+
 
     // Stream the response, collecting text for save_memory extraction
     const reader = streamResponse.body!.getReader();
