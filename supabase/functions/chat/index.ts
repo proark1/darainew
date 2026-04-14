@@ -1027,75 +1027,54 @@ serve(async (req) => {
       }
     }
 
-    const allMessages = [
+    const allMessages: { role: string; content: string }[] = [
       { role: 'system', content: fullSystemPrompt },
       ...messages,
     ];
 
-    // First pass: non-streaming to detect web_search tool calls
-    const firstResponse = await callAI(allMessages, false);
+    // Pre-detect web search intent from the user's last message to avoid two-pass
+    const lastUserMsg = messages[messages.length - 1]?.content?.toLowerCase() || '';
+    const isWebSearchLikely = detectWebSearchIntent(lastUserMsg);
+    
+    if (isWebSearchLikely) {
+      // Pre-fetch search results and inject them into context (single AI call)
+      const searchQuery = extractSearchQuery(lastUserMsg);
+      console.log('Pre-fetching web search for:', searchQuery);
+      
+      const searchResult = await webSearch(searchQuery);
+      
+      if (searchResult.answer && searchResult.answer !== 'Web search failed.' && searchResult.answer !== 'Web search is not configured.') {
+        let citationText = '';
+        if (searchResult.citations.length > 0) {
+          citationText = '\n\nSources:\n' + searchResult.citations.map((c: string, i: number) => `[${i + 1}] ${c}`).join('\n');
+        }
+        
+        // Inject search results into the conversation context
+        allMessages.push({
+          role: 'system',
+          content: `Web search results for the user's question:\n\n${searchResult.answer}${citationText}\n\nUse these results to give a comprehensive answer. Cite sources as [1], [2], etc. Do NOT use the web_search tool — results are already provided.`,
+        });
+      }
+    }
 
-    if (!firstResponse.ok) {
-      const errorText = await firstResponse.text();
-      console.error("Lovable AI error:", firstResponse.status, errorText);
+    // Single streaming call
+    const streamResponse = await callAI(allMessages, true);
+
+    if (!streamResponse.ok) {
+      const errorText = await streamResponse.text();
+      console.error("Lovable AI error:", streamResponse.status, errorText);
       await logAIUsage(supabaseAdmin, userId, 'chat', model, 0, 0, 0, 'error', { error: errorText, personality });
       
-      if (firstResponse.status === 429) {
+      if (streamResponse.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (firstResponse.status === 402) {
+      if (streamResponse.status === 402) {
         return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }), {
           status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      return new Response(JSON.stringify({ error: "AI service error" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const firstData = await firstResponse.json();
-    const firstContent = firstData.choices?.[0]?.message?.content || '';
-
-    // Check for web_search tool call
-    const webSearchMatch = firstContent.match(/<tool>web_search<\/tool>\s*<query>(\{[\s\S]*?\})<\/query>/);
-    
-    let finalMessages = allMessages;
-    if (webSearchMatch) {
-      try {
-        const queryData = JSON.parse(webSearchMatch[1]);
-        const searchQuery = queryData.q || queryData.query || '';
-        console.log('Executing web search:', searchQuery);
-        
-        const searchResult = await webSearch(searchQuery);
-        
-        let citationText = '';
-        if (searchResult.citations.length > 0) {
-          citationText = '\n\nSources:\n' + searchResult.citations.map((c, i) => `[${i + 1}] ${c}`).join('\n');
-        }
-        
-        // Add the first AI response and search results, then ask for a final synthesis
-        finalMessages = [
-          ...allMessages,
-          { role: 'assistant', content: firstContent },
-          { role: 'system', content: `Web search results for "${searchQuery}":\n\n${searchResult.answer}${citationText}\n\nNow synthesize a clear, helpful answer based on these search results. Cite sources as [1], [2], etc. Do NOT use the web_search tool again.` },
-        ];
-      } catch (e) {
-        console.error('Failed to parse web search query:', e);
-        // Fall through to stream the original response
-      }
-    }
-
-    // If no web search was needed, stream the original; if web search was done, stream the synthesis
-    const streamResponse = await callAI(
-      webSearchMatch ? finalMessages : allMessages,
-      true,
-    );
-
-    if (!streamResponse.ok) {
-      const errorText = await streamResponse.text();
-      console.error("Lovable AI stream error:", streamResponse.status, errorText);
       return new Response(JSON.stringify({ error: "AI service error" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -1107,8 +1086,9 @@ serve(async (req) => {
     await logAIUsage(
       supabaseAdmin, userId, 'chat', model,
       estimatedPromptTokens, 500, estimatedPromptTokens + 500,
-      'success', { personality, messageCount: messages.length, webSearchUsed: !!webSearchMatch }
+      'success', { personality, messageCount: messages.length, webSearchUsed: isWebSearchLikely }
     );
+
 
     // Stream the response, collecting text for save_memory extraction
     const reader = streamResponse.body!.getReader();
