@@ -1015,6 +1015,7 @@ const Index = () => {
         content: "I'm sorry, I encountered an error. Please try again.",
       });
       setIsProcessing(false);
+      setThinkingStatus(undefined);
     } finally {
       sendLockRef.current = false;
     }
