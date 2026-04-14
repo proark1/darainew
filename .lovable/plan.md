@@ -1,92 +1,74 @@
-# DarAI — Architecture & Security Hardening Summary
 
-## Overview
 
-DarAI is an AI-powered life dashboard with 36 Supabase Edge Functions, 135 custom hooks, 45 component categories, and 11 pages. It integrates AI chat, email, calendar, contacts, contracts, health tracking, and family management into a unified cross-module intelligence system.
+# Dori AI Assistant — Next-Level Improvements
 
-## Security Hardening (Completed)
+## What's Already Strong
+Dori has 15+ tools, streaming, web search, long-term memory, family/health/contact/contract awareness, and multi-tool chaining. The model was recently upgraded to `gemini-3-flash-preview`.
 
-All 36 edge functions are now fully secured:
+## Gaps Identified
 
-### Authentication
-- **33 user-facing functions**: Gateway-level JWT verification (`verify_jwt = true` in config.toml) + in-code `supabase.auth.getUser()` validation
-- **3 server-to-server functions**: Service role key validation (`proactive-assistant`, `push-delivery`, `send-push-notification`)
-- **OAuth**: HMAC-SHA256 signed state parameter with 10-minute expiry on calendar OAuth flow
-- **Auth bypass fixed**: Removed `body.userId` override pattern in `analyze-patterns`, `auto-pilot`, `life-correlator`, `weekly-coach`
+### 1. No image understanding
+Users can't send photos (receipts, screenshots, documents) to Dori. For a "real personal assistant," visual input is essential — snap a receipt, get it categorized; share a screenshot, get action items.
 
-### Input Validation & XSS
-- Email format validation on `gmail-send-reply`
-- Path traversal prevention on `scan-contract` (`..` and `/` prefix rejected)
-- `innerHTML` replaced with `DOMParser` in `EmailCard.tsx` and `IslamEnhancedPanel.tsx`
-- Raw AI response content removed from error responses (`extract-contract-from-email`, `scan-contract`)
+### 2. No file/document attachment in chat
+The chat input only accepts text. There's no way to attach PDFs, images, or files for Dori to analyze.
 
-### Headers & CORS
-- `Access-Control-Allow-Origin` restricted to `Deno.env.get('APP_URL')` with wildcard fallback
-- `X-Content-Type-Options: nosniff` on all 35 edge function response headers
+### 3. Conversation persistence is fragile
+Messages live in React state (`useState<ChatMessage[]>`). If the user navigates away or refreshes, the entire conversation is lost. Only the last 10 messages from a previous session are injected as context — the current session isn't saved until it's already gone.
 
-### Data Protection
-- Hardcoded user identity ("Asad Dar") replaced with dynamic profile lookup in `gmail-sync` and `email-draft-reply`
-- Sensitive data (user IDs, message content) removed from push notification logs
-- CryptoKey stored directly in IndexedDB via structured clone (not exported to base64)
-- `.env` added to `.gitignore`
+### 4. No inline confirmation cards for tool actions
+When Dori creates a task or event, it just shows a toast + text. A proper assistant would show an interactive confirmation card inline (e.g., a mini task card with "Edit" / "Undo" buttons).
 
-### Error Handling
-- `health-insights` and `weekly-review` error responses changed from HTTP 200 to 500
+### 5. Family context is incomplete when passed via smartPayload
+In `Index.tsx` lines 580-599, family context from `smartPayload` strips out critical fields: `grade`, `teacherName`, `teacherContact`, `kindergarten`, `kindergartenTeacher`, `allergies`, `medicalNotes` are all set to `null/[]`. The full family data exists in `familyMembers` but isn't properly mapped.
 
-## Frontend Quality (Completed)
+### 6. No "thinking" transparency
+When Dori reasons or searches the web, the user only sees bouncing dots. There's no indication of *what* Dori is doing ("Searching the web...", "Checking your calendar...", "Creating task...").
 
-### Memory Leak Prevention
-- All 15 Supabase realtime channels call `channel.unsubscribe()` before `supabase.removeChannel()`
-- `useMorningAutoPlay` setTimeout captured in ref and cleared on unmount
+---
 
-### Accessibility (WCAG)
-- `prefers-reduced-motion` CSS media query disables all animations
-- Skip-to-content link (visible on keyboard focus)
-- `aria-label` on password toggle buttons
-- `aria-busy` on loading buttons
-- `autoComplete` attributes on all auth form inputs
+## Plan
 
-### UI/UX Polish
-- `Button` component: `loading` prop with Loader2 spinner and disabled state
-- `Card` component: hover shadow transition
-- `EmptyState` component: gradient icon container with staggered entrance
-- Sonner toast: bottom-center position with rich colors and safe-area offset
-- 404 page: quick nav links, attempted path display, Dori bobbing animation
-- Password strength meter on Auth and ResetPassword (Weak/Fair/Good/Strong)
-- Password match indicator on ResetPassword (green check / red X)
-- Search term highlighting in GlobalSearch results
-- Onboarding skip option for power users
-- ForgotPassword/ResetPassword visual parity with Auth.tsx (gradient orbs, motion)
-- Sidebar collapse animation easing (linear to ease-out)
-- StatPills goal-reached ring glow
+### 1. Fix family context data loss
+Map the full `familyMembers` data (school, grade, teachers, allergies, activities with schedules) into the `familyContext` payload instead of the current stripped-down version from `smartPayload`.
 
-### Parsing
-- Recurrence BYDAY: filters out undefined values from invalid day codes
-- Recurrence UNTIL: validates parsed date with `isNaN` check
+**File:** `src/pages/Index.tsx` (~lines 580-599)
 
-## Edge Function Categories
+### 2. Save conversations in real-time
+Auto-save each message to the `assistant_conversations` / `assistant_messages` tables as it's sent/received, so conversations persist across refreshes and navigation. Load the current conversation on mount.
 
-| Category | Functions |
-|----------|-----------|
-| AI & Chat | chat, chat-ai, ai-assistant, gemini-live, openai-realtime-session, family-assistant, recipe-assistant, weekly-review, weekly-coach, morning-briefing |
-| Voice | text-to-speech, voice-to-text, daily-voice-briefing |
-| Email | gmail-sync, gmail-fetch-email, gmail-send-reply, email-draft-reply |
-| Calendar | calendar-oauth-start, calendar-oauth-callback, calendar-sync, import-calendar |
-| Contracts | scan-contract, extract-contract-from-email, detect-recurring-payments, generate-cancellation-email |
-| Analytics | analyze-patterns, contact-insights, health-insights, health-coach, life-correlator, auto-pilot, proactive-assistant |
-| Notifications | send-push-notification, push-delivery, call-push-notification |
-| Search | web-search |
+**Files:** `src/pages/Index.tsx`, `src/hooks/useAssistantConversations.ts`
 
-## Files Modified Across All Rounds
+### 3. Add inline action cards for tool results
+After Dori executes a tool (task created, event scheduled, note saved), render an interactive card in the chat showing what was created with Edit/Undo actions — instead of just a toast notification.
 
-**9 commits, ~90 file modifications total:**
-- 36 edge function files (auth, CORS, headers, input validation, error handling)
-- 15 hook files (channel cleanup, setTimeout cleanup)
-- 6 UI component files (button, card, empty-state, sonner, skeleton, sidebar)
-- 5 page files (Auth, ResetPassword, ForgotPassword, NotFound, Onboarding)
-- 2 config files (supabase/config.toml, .gitignore)
-- 2 lib files (recurrence.ts, encryption.ts)
-- 1 CSS file (index.css — reduced motion)
-- 1 app file (App.tsx — skip link)
-- 1 search component (GlobalSearch.tsx — highlighting)
-- 1 dashboard component (StatPills.tsx — milestone glow)
+**Files:** `src/components/assistant/DoriPanel.tsx`, `src/components/assistant/ActionCard.tsx` (new)
+
+### 4. Add thinking status messages
+Show contextual status text during processing: "Searching the web...", "Checking your tasks...", "Creating event..." based on detected intent and tool execution. Replace the generic bouncing dots with specific status.
+
+**Files:** `src/components/assistant/DoriPanel.tsx`, `src/hooks/useAIChat.ts` (add `onStatus` callback)
+
+### 5. Image attachment support
+Add a camera/image button to the chat input. When the user attaches an image, upload it to storage and send it to the AI via the Gemini vision model (already supported by `gemini-3-flash-preview`). Enable receipt scanning, document reading, and screenshot analysis.
+
+**Files:** `src/components/assistant/DoriPanel.tsx`, `supabase/functions/chat/index.ts`, `src/hooks/useAIChat.ts`
+
+### 6. Smarter empty state with live data
+Pass actual counts (overdue tasks, unread emails, habit streaks at risk) into `DoriPanel` so suggestions are data-driven: "You have 3 overdue tasks — want to reschedule?" instead of generic time-based prompts.
+
+**Files:** `src/components/assistant/DoriPanel.tsx`, `src/components/layout/StandardMode.tsx` or `src/pages/Index.tsx`
+
+---
+
+## Summary
+
+| # | Change | Impact | Effort |
+|---|--------|--------|--------|
+| 1 | Fix family context data loss | High — Dori currently forgets kid details | Small |
+| 2 | Real-time conversation persistence | High — no more lost chats | Medium |
+| 3 | Inline action cards | High — visual feedback | Medium |
+| 4 | Thinking status messages | Medium — better UX | Small |
+| 5 | Image attachment + vision | High — new capability | Medium |
+| 6 | Data-driven empty state | Medium — better first impression | Small |
+
