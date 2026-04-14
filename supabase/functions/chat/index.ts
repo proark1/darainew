@@ -1057,10 +1057,26 @@ serve(async (req) => {
       }
     }
 
-    const allMessages: { role: string; content: string }[] = [
+    // Build messages, injecting image into the last user message if present
+    const allMessages: { role: string; content: string | any[] }[] = [
       { role: 'system', content: fullSystemPrompt },
-      ...messages,
     ];
+    
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      if (imageUrl && i === messages.length - 1 && msg.role === 'user') {
+        // Multimodal message with image
+        allMessages.push({
+          role: 'user',
+          content: [
+            { type: 'text', text: msg.content || 'What do you see in this image?' },
+            { type: 'image_url', image_url: { url: imageUrl } },
+          ],
+        });
+      } else {
+        allMessages.push(msg);
+      }
+    }
 
     // Pre-detect web search intent from the user's last message to avoid two-pass
     const lastUserMsg = messages[messages.length - 1]?.content?.toLowerCase() || '';
