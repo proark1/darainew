@@ -346,8 +346,14 @@ const Index = () => {
       timestamp: new Date(),
     };
     setMessages(prev => [...prev, newMessage]);
+
+    // Persist to DB
+    if (activeConversationIdRef.current) {
+      saveMessageToDB(activeConversationIdRef.current, message.role as 'user' | 'assistant', message.content);
+    }
+
     return newMessage;
-  }, []);
+  }, [saveMessageToDB]);
 
   // Handle AI chat with real streaming
   const handleSendMessage = useCallback(async (content: string) => {
