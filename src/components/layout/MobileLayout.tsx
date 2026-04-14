@@ -202,6 +202,9 @@ export function MobileLayout({
             onSendMessage={onSendMessage}
             isProcessing={isProcessing}
             onVoiceMode={onVoiceMode}
+            thinkingStatus={thinkingStatus}
+            actionCards={actionCards as any}
+            stats={doriStats}
           />
         );
       case 'social':
