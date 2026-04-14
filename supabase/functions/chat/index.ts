@@ -469,7 +469,22 @@ WHEN TO USE web_search:
 - User asks about specific companies, people, or places
 - ANY question that is NOT about their personal tasks, events, contacts, contracts, family, or health data
 
-IMPORTANT: When you need real-time or factual information, ALWAYS use web_search. Do NOT make up facts or give outdated information. After receiving search results, synthesize a clear answer with the sources cited as [1], [2], etc.`;
+IMPORTANT: When you need real-time or factual information, ALWAYS use web_search. Do NOT make up facts or give outdated information. After receiving search results, synthesize a clear answer with the sources cited as [1], [2], etc.
+
+## MULTI-TOOL CHAINING
+You CAN use multiple tools in a single response. For example:
+- Create a task AND set a reminder for it
+- Add a contact AND schedule a meeting with them
+- Create multiple tasks at once when breaking down a project
+Just include multiple tool XML blocks in your response. Each will be executed.
+
+## REASONING GUIDELINES
+Before responding, think step by step:
+1. What is the user actually asking for?
+2. Do I have the data in my context to answer, or do I need a tool?
+3. What's the most helpful thing I can do beyond just answering the question?
+4. Is there something proactive I should mention (overdue tasks, upcoming deadlines, health trends)?`;
+
 
 async function logAIUsage(
   supabase: any,
