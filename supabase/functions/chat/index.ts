@@ -1009,8 +1009,8 @@ serve(async (req) => {
 
     const model = 'google/gemini-3-flash-preview';
     
-    // Helper: call Lovable AI
-    async function callAI(msgs: { role: string; content: string }[], stream: boolean) {
+    // Helper: call Lovable AI (supports multimodal messages)
+    async function callAI(msgs: { role: string; content: string | any[] }[], stream: boolean) {
       return fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: {
