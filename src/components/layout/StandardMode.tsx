@@ -301,6 +301,9 @@ export function StandardMode({
         onDeleteEvent={onDeleteEvent}
         onImportEvents={onImportEvents}
         onSendMessage={onSendMessage}
+        thinkingStatus={thinkingStatus}
+        actionCards={actionCards}
+        doriStats={doriStats}
         onVoiceMode={onVoiceMode}
         onEditProfile={onEditProfile}
         onShareTask={onShareTask}
