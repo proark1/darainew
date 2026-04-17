@@ -46,6 +46,7 @@ import { ProactiveSettingsPanel } from './ProactiveSettingsPanel';
 import { KeyboardShortcutsPanel, useKeyboardShortcutsPanel } from './KeyboardShortcutsPanel';
 import { AutomationRulesPanel } from './AutomationRulesPanel';
 import { CalendarConnectionsPanel } from './CalendarConnectionsPanel';
+import { TelegramConnectPanel } from './TelegramConnectPanel';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useUserProfile } from '@/hooks/useUserProfile';
@@ -479,6 +480,11 @@ export function SettingsPanelContent({
             {/* Calendar Connections Section */}
             <div className="pt-4 border-t border-border">
               <CalendarConnectionsPanel />
+            </div>
+
+            {/* Telegram Connection */}
+            <div className="pt-4 border-t border-border">
+              <TelegramConnectPanel />
             </div>
 
             {/* Appearance Section */}

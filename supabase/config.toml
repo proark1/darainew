@@ -107,3 +107,9 @@ verify_jwt = true
 
 [functions.weekly-review]
 verify_jwt = true
+
+[functions.telegram-poll]
+verify_jwt = false
+
+[functions.telegram-link]
+verify_jwt = true
