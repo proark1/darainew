@@ -236,6 +236,48 @@ Deno.serve(async (req) => {
   if (lower.startsWith('/add ')) { forced = 'task'; payloadText = trimmed.slice(5); }
   else if (lower.startsWith('/buy ')) { forced = 'shopping_item'; payloadText = trimmed.slice(5); }
 
+  // ─── Build conversation history so Dori remembers context ───
+  // Pull last ~30 minutes of messages from this chat (user side from telegram_messages,
+  // assistant side from telegram_assistant_replies), interleave by timestamp,
+  // and cap to last 12 turns. This lets Dori understand follow-ups like
+  // "yes do it", "and also add milk", "what about the second one?", etc.
+  const sinceIso = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  const [{ data: priorUserMsgs }, { data: priorReplies }] = await Promise.all([
+    supabase
+      .from('telegram_messages')
+      .select('text, created_at')
+      .eq('chat_id', chat_id)
+      .gte('created_at', sinceIso)
+      .not('text', 'is', null)
+      .order('created_at', { ascending: true })
+      .limit(20),
+    supabase
+      .from('telegram_assistant_replies')
+      .select('reply, created_at')
+      .eq('chat_id', chat_id)
+      .gte('created_at', sinceIso)
+      .order('created_at', { ascending: true })
+      .limit(20),
+  ]);
+
+  type Turn = { role: 'user' | 'assistant'; content: string; ts: number };
+  const turns: Turn[] = [];
+  (priorUserMsgs || []).forEach((m: any) => {
+    if (m.text && m.text.trim() && m.text.trim() !== trimmed) {
+      turns.push({ role: 'user', content: m.text, ts: new Date(m.created_at).getTime() });
+    }
+  });
+  (priorReplies || []).forEach((r: any) => {
+    if (r.reply) turns.push({ role: 'assistant', content: r.reply, ts: new Date(r.created_at).getTime() });
+  });
+  turns.sort((a, b) => a.ts - b.ts);
+  const recent = turns.slice(-12);
+
+  const conversationMessages = [
+    ...recent.map(t => ({ role: t.role, content: t.content })),
+    { role: 'user' as const, content: trimmed },
+  ];
+
   // For ALL natural-language messages (and unknown slash commands), route to the
   // full Dori brain with server-side tool execution so Dori can create/update/delete
   // tasks, events, contacts, contracts, properties, businesses, family members,
@@ -250,7 +292,7 @@ Deno.serve(async (req) => {
         'x-telegram-user-id': userForChat,
       },
       body: JSON.stringify({
-        messages: [{ role: 'user', content: trimmed }],
+        messages: conversationMessages,
         personality: 'balanced',
         executeServerSide: true,
       }),
@@ -271,6 +313,17 @@ Deno.serve(async (req) => {
       parts.push(toolResults.map(t => t.message).join('\n'));
     }
     const finalMsg = parts.join('\n\n').trim() || 'Got it.';
+
+    // Persist Dori's reply so the next user message has context
+    try {
+      await supabase.from('telegram_assistant_replies').insert({
+        chat_id,
+        reply: finalMsg,
+      });
+    } catch (e) {
+      console.error('Failed to persist assistant reply', e);
+    }
+
     // Telegram has a 4096 char limit
     await tgSend(chat_id, finalMsg.slice(0, 4000));
     return new Response('{"ok":true}', { headers: corsHeaders });
