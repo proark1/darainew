@@ -112,8 +112,10 @@ export function TelegramConnectPanel() {
             <div className="flex gap-2">
               <Button asChild size="sm" className="flex-1">
                 <a href={deepLink} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="w-3 h-3 mr-2" />
-                  Open Telegram
+                  <span className="inline-flex items-center">
+                    <ExternalLink className="w-3 h-3 mr-2" />
+                    Open Telegram
+                  </span>
                 </a>
               </Button>
               <Button
