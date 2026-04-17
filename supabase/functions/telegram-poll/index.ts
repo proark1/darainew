@@ -34,6 +34,73 @@ async function sendMessage(chatId: number, text: string, lovableKey: string, tgK
   }
 }
 
+// Download a Telegram file (voice/audio) and transcribe via Gemini.
+// Returns the transcript text, or null on failure.
+async function transcribeTelegramVoice(
+  fileId: string,
+  mime: string,
+  lovableKey: string,
+  tgKey: string,
+): Promise<string | null> {
+  try {
+    // 1) Resolve file_path
+    const fileRes = await tg('getFile', { file_id: fileId }, lovableKey, tgKey);
+    const filePath = fileRes?.result?.file_path;
+    if (!filePath) return null;
+
+    // 2) Download file bytes via gateway
+    const dl = await fetch(`${GATEWAY_URL}/file/${filePath}`, {
+      headers: { 'Authorization': `Bearer ${lovableKey}`, 'X-Connection-Api-Key': tgKey },
+    });
+    if (!dl.ok) {
+      console.error('voice download failed', dl.status);
+      return null;
+    }
+    const bytes = new Uint8Array(await dl.arrayBuffer());
+
+    // 3) Base64 encode (chunked to avoid stack overflow on large files)
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunkSize)));
+    }
+    const base64Audio = btoa(binary);
+
+    // 4) Transcribe via Lovable AI Gateway (Gemini supports audio inline as data URL)
+    const audioMime = mime || 'audio/ogg';
+    const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${lovableKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a precise transcriber. Transcribe the audio verbatim in the original language. Output ONLY the transcript, no quotes, no commentary.',
+          },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Transcribe this voice message.' },
+              { type: 'image_url', image_url: { url: `data:${audioMime};base64,${base64Audio}` } },
+            ],
+          },
+        ],
+      }),
+    });
+    if (!aiRes.ok) {
+      console.error('transcription failed', aiRes.status, await aiRes.text());
+      return null;
+    }
+    const aiData = await aiRes.json();
+    const transcript = aiData?.choices?.[0]?.message?.content?.trim();
+    return transcript || null;
+  } catch (e) {
+    console.error('transcribeTelegramVoice error', e);
+    return null;
+  }
+}
+
 async function callDori(userId: string, message: string, supabaseUrl: string, serviceKey: string): Promise<string> {
   try {
     const r = await fetch(`${supabaseUrl}/functions/v1/chat`, {
