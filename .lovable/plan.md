@@ -1,74 +1,70 @@
 
+Goal: fix Telegram replies so messages sent to the linked bot actually reach Dori instead of returning “Sorry, I'm having trouble reaching Dori right now.”
 
-# Dori AI Assistant — Next-Level Improvements
+What I found
+- The failure is not in the Telegram link flow. Linking succeeds and `telegram-poll` is receiving messages.
+- Current logs show the real backend error:
+  - `telegram-poll` logs: `Dori call failed ... 401 {"code":"UNAUTHORIZED_INVALID_JWT_FORMAT","message":"Invalid JWT"}`
+- In code, `telegram-poll` calls `/functions/v1/chat` with:
+  - `Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+  - `x-telegram-user-id: <linked user id>`
+- In `supabase/functions/chat/index.ts`, there is already a trusted server-to-server branch that accepts this pattern.
+- But `supabase/config.toml` still has:
+  - `[functions.chat] verify_jwt = true`
+- That means platform-level JWT verification rejects the service-role token before the function code can run. So the trusted branch never gets a chance.
 
-## What's Already Strong
-Dori has 15+ tools, streaming, web search, long-term memory, family/health/contact/contract awareness, and multi-tool chaining. The model was recently upgraded to `gemini-3-flash-preview`.
+Plan
+1. Align the `chat` function config with the intended Telegram auth flow
+- Change `supabase/config.toml` so `functions.chat` does not require platform JWT verification.
+- Keep authentication enforcement inside `supabase/functions/chat/index.ts`:
+  - allow only:
+    - valid user JWTs via `getClaims()`, or
+    - trusted Telegram server calls with exact `service role token + x-telegram-user-id`
+- This preserves security while allowing Telegram polling to work.
 
-## Gaps Identified
+2. Harden the `chat` function auth block
+- Confirm the trusted path is strict:
+  - require `x-telegram-user-id`
+  - require bearer token to exactly match `SUPABASE_SERVICE_ROLE_KEY`
+  - reject all other malformed or missing auth
+- Add clearer logging for which auth branch was used, without leaking secrets.
 
-### 1. No image understanding
-Users can't send photos (receipts, screenshots, documents) to Dori. For a "real personal assistant," visual input is essential — snap a receipt, get it categorized; share a screenshot, get action items.
+3. Re-deploy affected edge functions
+- Deploy at least:
+  - `chat`
+  - `telegram-poll`
+- This ensures config and runtime code are both live together.
 
-### 2. No file/document attachment in chat
-The chat input only accepts text. There's no way to attach PDFs, images, or files for Dori to analyze.
+4. Validate end-to-end
+- Test the `chat` function directly in both modes:
+  - regular app-authenticated request
+  - Telegram-style trusted request
+- Check edge logs after deployment to confirm:
+  - no more `UNAUTHORIZED_INVALID_JWT_FORMAT`
+  - Telegram messages produce successful assistant responses
+- Then send a real Telegram message like “hi” and verify Dori answers.
 
-### 3. Conversation persistence is fragile
-Messages live in React state (`useState<ChatMessage[]>`). If the user navigates away or refreshes, the entire conversation is lost. Only the last 10 messages from a previous session are injected as context — the current session isn't saved until it's already gone.
+5. Secondary cleanup if needed
+- If a separate `ai-assistant` 401 still appears in logs, review it independently. It does not look like the blocker for Telegram replies right now because the Telegram worker is explicitly calling `chat`, not `ai-assistant`.
 
-### 4. No inline confirmation cards for tool actions
-When Dori creates a task or event, it just shows a toast + text. A proper assistant would show an interactive confirmation card inline (e.g., a mini task card with "Edit" / "Undo" buttons).
+Technical details
+- Root cause:
+  - config says `verify_jwt = true` for `chat`
+  - Telegram worker sends a non-user JWT pattern (`service role`) intentionally
+  - edge platform rejects it before the function code executes
+- Files to update:
+  - `supabase/config.toml`
+  - possibly small hardening/logging touch in `supabase/functions/chat/index.ts`
+- Files already consistent with the intended design:
+  - `supabase/functions/telegram-poll/index.ts`
+- Expected outcome:
+  - Telegram remains linked
+  - incoming messages route through the trusted server-to-server path
+  - Dori responds in Telegram normally
 
-### 5. Family context is incomplete when passed via smartPayload
-In `Index.tsx` lines 580-599, family context from `smartPayload` strips out critical fields: `grade`, `teacherName`, `teacherContact`, `kindergarten`, `kindergartenTeacher`, `allergies`, `medicalNotes` are all set to `null/[]`. The full family data exists in `familyMembers` but isn't properly mapped.
-
-### 6. No "thinking" transparency
-When Dori reasons or searches the web, the user only sees bouncing dots. There's no indication of *what* Dori is doing ("Searching the web...", "Checking your calendar...", "Creating task...").
-
----
-
-## Plan
-
-### 1. Fix family context data loss
-Map the full `familyMembers` data (school, grade, teachers, allergies, activities with schedules) into the `familyContext` payload instead of the current stripped-down version from `smartPayload`.
-
-**File:** `src/pages/Index.tsx` (~lines 580-599)
-
-### 2. Save conversations in real-time
-Auto-save each message to the `assistant_conversations` / `assistant_messages` tables as it's sent/received, so conversations persist across refreshes and navigation. Load the current conversation on mount.
-
-**Files:** `src/pages/Index.tsx`, `src/hooks/useAssistantConversations.ts`
-
-### 3. Add inline action cards for tool results
-After Dori executes a tool (task created, event scheduled, note saved), render an interactive card in the chat showing what was created with Edit/Undo actions — instead of just a toast notification.
-
-**Files:** `src/components/assistant/DoriPanel.tsx`, `src/components/assistant/ActionCard.tsx` (new)
-
-### 4. Add thinking status messages
-Show contextual status text during processing: "Searching the web...", "Checking your tasks...", "Creating event..." based on detected intent and tool execution. Replace the generic bouncing dots with specific status.
-
-**Files:** `src/components/assistant/DoriPanel.tsx`, `src/hooks/useAIChat.ts` (add `onStatus` callback)
-
-### 5. Image attachment support
-Add a camera/image button to the chat input. When the user attaches an image, upload it to storage and send it to the AI via the Gemini vision model (already supported by `gemini-3-flash-preview`). Enable receipt scanning, document reading, and screenshot analysis.
-
-**Files:** `src/components/assistant/DoriPanel.tsx`, `supabase/functions/chat/index.ts`, `src/hooks/useAIChat.ts`
-
-### 6. Smarter empty state with live data
-Pass actual counts (overdue tasks, unread emails, habit streaks at risk) into `DoriPanel` so suggestions are data-driven: "You have 3 overdue tasks — want to reschedule?" instead of generic time-based prompts.
-
-**Files:** `src/components/assistant/DoriPanel.tsx`, `src/components/layout/StandardMode.tsx` or `src/pages/Index.tsx`
-
----
-
-## Summary
-
-| # | Change | Impact | Effort |
-|---|--------|--------|--------|
-| 1 | Fix family context data loss | High — Dori currently forgets kid details | Small |
-| 2 | Real-time conversation persistence | High — no more lost chats | Medium |
-| 3 | Inline action cards | High — visual feedback | Medium |
-| 4 | Thinking status messages | Medium — better UX | Small |
-| 5 | Image attachment + vision | High — new capability | Medium |
-| 6 | Data-driven empty state | Medium — better first impression | Small |
-
+Verification checklist
+- Telegram link still shows connected in Settings
+- `telegram-poll` logs stop showing `Invalid JWT`
+- `chat` logs show successful requests from Telegram path
+- A real Telegram message receives a real assistant reply
+- Normal in-app chat still works for logged-in users
