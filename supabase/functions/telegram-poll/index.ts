@@ -122,11 +122,15 @@ Deno.serve(async (req) => {
 
       const chatId = msg.chat.id;
       const chatType = msg.chat.type as string; // 'private' | 'group' | 'supergroup' | 'channel'
-      const text: string = msg.text.trim();
+      const rawText: string = msg.text.trim();
+      // Normalize: strip @botname suffix from commands so "/linkfamily@darai_bot CODE" works
+      const text: string = rawText.replace(/^(\/[a-zA-Z_]+)@\w+/, '$1');
       const fromId = msg.from?.id;
       const fromUsername = msg.from?.username ?? null;
       const fromFirstName = msg.from?.first_name ?? null;
       const isGroup = chatType === 'group' || chatType === 'supergroup';
+
+      console.log(`[telegram-poll] chat=${chatId} type=${chatType} from=${fromId} text="${text.slice(0, 80)}"`);
 
       // ---------- /start (private only — group link uses /linkfamily) ----------
       if (text.startsWith('/start') && !isGroup) {
