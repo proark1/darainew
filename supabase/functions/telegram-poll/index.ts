@@ -185,10 +185,32 @@ Deno.serve(async (req) => {
 
     for (const u of updates) {
       const msg = u.message;
-      if (!msg || !msg.text) continue;
+      if (!msg) continue;
 
       const chatId = msg.chat.id;
-      const chatType = msg.chat.type as string; // 'private' | 'group' | 'supergroup' | 'channel'
+      const chatType = msg.chat.type as string;
+
+      // ---------- VOICE / AUDIO → transcribe via Gemini, then treat as text ----------
+      let textFromVoice: string | null = null;
+      if (!msg.text && (msg.voice || msg.audio)) {
+        const v = msg.voice || msg.audio;
+        const mime = v.mime_type || 'audio/ogg';
+        try {
+          await tg('sendChatAction', { chat_id: chatId, action: 'typing' }, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+        } catch { /* ignore */ }
+        textFromVoice = await transcribeTelegramVoice(v.file_id, mime, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+        if (!textFromVoice) {
+          await sendMessage(chatId, "🎙️ I couldn't understand that voice message. Try again or type it.", LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          await supabase.from('telegram_bot_state').update({ update_offset: u.update_id + 1, updated_at: new Date().toISOString() }).eq('id', 1);
+          currentOffset = u.update_id + 1;
+          continue;
+        }
+        // Inject transcript so the rest of the pipeline treats it as a text message
+        msg.text = textFromVoice;
+      }
+
+      if (!msg.text) continue;
+
       const rawText: string = msg.text.trim();
       // Normalize: strip @botname suffix from commands so "/linkfamily@darai_bot CODE" works
       const text: string = rawText.replace(/^(\/[a-zA-Z_]+)@\w+/, '$1');
