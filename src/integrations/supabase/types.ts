@@ -4483,6 +4483,30 @@ export type Database = {
           },
         ]
       }
+      telegram_assistant_replies: {
+        Row: {
+          chat_id: number
+          created_at: string
+          id: number
+          in_response_to_update_id: number | null
+          reply: string
+        }
+        Insert: {
+          chat_id: number
+          created_at?: string
+          id?: number
+          in_response_to_update_id?: number | null
+          reply: string
+        }
+        Update: {
+          chat_id?: number
+          created_at?: string
+          id?: number
+          in_response_to_update_id?: number | null
+          reply?: string
+        }
+        Relationships: []
+      }
       telegram_bot_state: {
         Row: {
           id: number
