@@ -75,11 +75,71 @@ interface ReminderData {
   triggerAt: string;
 }
 
+interface PropertyData {
+  name?: string;
+  propertyType?: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  purchasePrice?: number;
+  currentValue?: number;
+  sizeSqm?: number;
+  notes?: string;
+  query?: string;
+}
+
+interface BusinessData {
+  name?: string;
+  description?: string;
+  problemStatement?: string;
+  targetAudience?: string;
+  businessModel?: string;
+  uniqueValueProposition?: string;
+  status?: string;
+  tags?: string[];
+  notes?: string;
+  query?: string;
+}
+
+interface FamilyMemberData {
+  name?: string;
+  relationship?: string;
+  birthDate?: string;
+  email?: string;
+  phone?: string;
+  schoolName?: string;
+  schoolGrade?: string;
+  allergies?: string[];
+  medicalNotes?: string;
+  notes?: string;
+  query?: string;
+}
+
+interface EventManageData {
+  query?: string;
+  title?: string;
+  startTime?: string;
+  endTime?: string;
+  location?: string;
+}
+
+interface FetchEmailsData {
+  scope?: string;
+  from?: string;
+  limit?: number;
+}
+
+interface DraftEmailReplyData {
+  emailQuery: string;
+  instruction?: string;
+  tone?: string;
+}
+
 interface ToolCall {
-  tool: 'manage_task' | 'schedule_event' | 'suggest_contacts' | 'create_meeting_plan' | 'create_note' | 'add_shopping_item' | 'manage_contact' | 'manage_contract' | 'manage_project' | 'manage_habit' | 'manage_note' | 'compose_email' | 'get_summary' | 'set_reminder';
+  tool: 'manage_task' | 'schedule_event' | 'suggest_contacts' | 'create_meeting_plan' | 'create_note' | 'add_shopping_item' | 'manage_contact' | 'manage_contract' | 'manage_project' | 'manage_habit' | 'manage_note' | 'compose_email' | 'get_summary' | 'set_reminder' | 'manage_event' | 'manage_property' | 'manage_business' | 'manage_family_member' | 'fetch_emails' | 'draft_email_reply';
   action?: string;
   task?: Partial<Task>;
-  event?: Partial<CalendarEvent>;
+  event?: Partial<CalendarEvent> | EventManageData;
   criteria?: { location?: string; type?: string; keywords?: string[] };
   plan?: { city?: string; contacts?: string[]; dates?: string[] };
   note?: NoteData;
@@ -91,6 +151,11 @@ interface ToolCall {
   email?: EmailData;
   summaryType?: string;
   reminder?: ReminderData;
+  property?: PropertyData;
+  business?: BusinessData;
+  familyMember?: FamilyMemberData;
+  fetchEmails?: FetchEmailsData;
+  draftEmailReply?: DraftEmailReplyData;
 }
 
 interface RelevantContact {
