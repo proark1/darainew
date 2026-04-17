@@ -631,7 +631,428 @@ function extractSearchQuery(msg: string): string {
     .trim() || msg;
 }
 
-serve(async (req) => {
+// ============================================================================
+// SERVER-SIDE TOOL EXECUTOR (used for Telegram + non-browser surfaces)
+// Parses XML tool tags emitted by the AI and executes the corresponding DB ops.
+// Returns a list of human-readable results for surfaces that want to display them.
+// ============================================================================
+
+function stripAllToolTags(text: string): string {
+  return text
+    .replace(/<tool>[\s\S]*?<\/(?:task|event|note|criteria|plan|item|contact|contract|project|habit|email|reminder|memory|query|type|property|business|member|filter|draft)>/g, '')
+    .replace(/<tool>[\s\S]*?<\/tool>/g, '')
+    .replace(/<action>[\s\S]*?<\/action>/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+interface ToolExecResult { tool: string; ok: boolean; message: string; data?: any }
+
+async function executeToolsServerSide(text: string, userId: string, supabase: any): Promise<ToolExecResult[]> {
+  const out: ToolExecResult[] = [];
+  if (!userId || userId === 'anonymous') return out;
+
+  const safeJSON = (s: string) => { try { return JSON.parse(s); } catch { return null; } };
+  const isoOrNull = (s?: string) => { if (!s) return null; const d = new Date(s); return isNaN(d.getTime()) ? null : d.toISOString(); };
+
+  // ---------- manage_task ----------
+  for (const m of text.matchAll(/<tool>manage_task<\/tool>\s*<action>(\w+)<\/action>\s*<task>(\{[\s\S]*?\})<\/task>/g)) {
+    const action = m[1]; const data = safeJSON(m[2]); if (!data) continue;
+    try {
+      if (action === 'add') {
+        const { data: t, error } = await supabase.from('tasks').insert({
+          user_id: userId, title: data.title, category: data.category || 'personal',
+          priority: data.priority || 'medium', due_date: isoOrNull(data.dueDate),
+          recurrence_rule: data.recurrenceRule || null,
+        }).select('id, title, due_date').single();
+        if (error) throw error;
+        out.push({ tool: 'manage_task', ok: true, message: `✅ Added task: ${t.title}${t.due_date ? ` (due ${new Date(t.due_date).toLocaleString()})` : ''}`, data: t });
+      } else if (action === 'complete' && data.id) {
+        await supabase.from('tasks').update({ completed: true, completed_at: new Date().toISOString() }).eq('id', data.id).eq('user_id', userId);
+        out.push({ tool: 'manage_task', ok: true, message: `✅ Marked task complete` });
+      } else if (action === 'delete' && data.id) {
+        await supabase.from('tasks').delete().eq('id', data.id).eq('user_id', userId);
+        out.push({ tool: 'manage_task', ok: true, message: `🗑️ Deleted task` });
+      } else if (action === 'update' && data.id) {
+        const upd: any = {};
+        if (data.title) upd.title = data.title;
+        if (data.category) upd.category = data.category;
+        if (data.priority) upd.priority = data.priority;
+        if (data.dueDate) upd.due_date = isoOrNull(data.dueDate);
+        await supabase.from('tasks').update(upd).eq('id', data.id).eq('user_id', userId);
+        out.push({ tool: 'manage_task', ok: true, message: `✏️ Updated task` });
+      }
+    } catch (e) { out.push({ tool: 'manage_task', ok: false, message: `Failed: ${(e as Error).message}` }); }
+  }
+
+  // ---------- schedule_event (create) ----------
+  for (const m of text.matchAll(/<tool>schedule_event<\/tool>\s*<event>(\{[\s\S]*?\})<\/event>/g)) {
+    const data = safeJSON(m[1]); if (!data?.title || !data.startTime) continue;
+    try {
+      const start = isoOrNull(data.startTime)!;
+      const end = isoOrNull(data.endTime) || new Date(new Date(start).getTime() + 60 * 60 * 1000).toISOString();
+      const { data: e, error } = await supabase.from('events').insert({
+        user_id: userId, title: data.title, start_time: start, end_time: end,
+        location: data.location || null, attendees: data.attendees || null,
+        recurrence_rule: data.recurrenceRule || null, category: data.category || 'personal',
+      }).select('id, title, start_time').single();
+      if (error) throw error;
+      out.push({ tool: 'schedule_event', ok: true, message: `📅 Scheduled: ${e.title} — ${new Date(e.start_time).toLocaleString()}`, data: e });
+    } catch (e) { out.push({ tool: 'schedule_event', ok: false, message: `Failed: ${(e as Error).message}` }); }
+  }
+
+  // ---------- manage_event (update / delete / search) ----------
+  for (const m of text.matchAll(/<tool>manage_event<\/tool>\s*<action>(\w+)<\/action>\s*<event>(\{[\s\S]*?\})<\/event>/g)) {
+    const action = m[1]; const data = safeJSON(m[2]); if (!data) continue;
+    try {
+      let target: any = null;
+      if (data.query) {
+        const { data: rows } = await supabase.from('events').select('id, title, start_time')
+          .eq('user_id', userId).ilike('title', `%${data.query}%`)
+          .gte('end_time', new Date(Date.now() - 24 * 3600 * 1000).toISOString())
+          .order('start_time').limit(1);
+        target = rows?.[0];
+      }
+      if (!target) { out.push({ tool: 'manage_event', ok: false, message: `Could not find event matching "${data.query}"` }); continue; }
+      if (action === 'delete') {
+        await supabase.from('events').delete().eq('id', target.id).eq('user_id', userId);
+        out.push({ tool: 'manage_event', ok: true, message: `🗑️ Deleted event: ${target.title}` });
+      } else if (action === 'update') {
+        const upd: any = {};
+        if (data.title) upd.title = data.title;
+        if (data.startTime) upd.start_time = isoOrNull(data.startTime);
+        if (data.endTime) upd.end_time = isoOrNull(data.endTime);
+        if (data.location !== undefined) upd.location = data.location;
+        await supabase.from('events').update(upd).eq('id', target.id).eq('user_id', userId);
+        out.push({ tool: 'manage_event', ok: true, message: `✏️ Updated event: ${target.title}` });
+      } else {
+        out.push({ tool: 'manage_event', ok: true, message: `Found: ${target.title} on ${new Date(target.start_time).toLocaleString()}` });
+      }
+    } catch (e) { out.push({ tool: 'manage_event', ok: false, message: `Failed: ${(e as Error).message}` }); }
+  }
+
+  // ---------- manage_contact ----------
+  for (const m of text.matchAll(/<tool>manage_contact<\/tool>\s*<action>(\w+)<\/action>\s*<contact>(\{[\s\S]*?\})<\/contact>/g)) {
+    const action = m[1]; const data = safeJSON(m[2]); if (!data) continue;
+    try {
+      if (action === 'create') {
+        const { data: c, error } = await supabase.from('user_contacts').insert({
+          user_id: userId, name: data.name, email: data.email || null, phone: data.phone || null,
+          company: data.company || null, role: data.role || null, city: data.city || null,
+          country: data.country || null, contact_type: data.contactType || 'business',
+          notes: data.notes || null,
+        }).select('id, name').single();
+        if (error) throw error;
+        out.push({ tool: 'manage_contact', ok: true, message: `👤 Added contact: ${c.name}`, data: c });
+      } else {
+        const { data: rows } = await supabase.from('user_contacts').select('id, name')
+          .eq('user_id', userId)
+          .or(`name.ilike.%${data.query}%,email.ilike.%${data.query}%,company.ilike.%${data.query}%`).limit(1);
+        const target = rows?.[0];
+        if (!target) { out.push({ tool: 'manage_contact', ok: false, message: `No contact matches "${data.query}"` }); continue; }
+        if (action === 'delete') {
+          await supabase.from('user_contacts').delete().eq('id', target.id).eq('user_id', userId);
+          out.push({ tool: 'manage_contact', ok: true, message: `🗑️ Deleted contact: ${target.name}` });
+        } else if (action === 'update') {
+          const upd: any = {};
+          ['name','email','phone','company','role','city','country','notes'].forEach(k => { if (data[k] !== undefined) upd[k] = data[k]; });
+          await supabase.from('user_contacts').update(upd).eq('id', target.id).eq('user_id', userId);
+          out.push({ tool: 'manage_contact', ok: true, message: `✏️ Updated contact: ${target.name}` });
+        } else if (action === 'mark_contacted') {
+          await supabase.from('contact_interactions').insert({ user_id: userId, contact_id: target.id, interaction_type: 'note', notes: 'Logged via Dori' });
+          out.push({ tool: 'manage_contact', ok: true, message: `✅ Logged interaction with ${target.name}` });
+        } else {
+          out.push({ tool: 'manage_contact', ok: true, message: `Found contact: ${target.name}` });
+        }
+      }
+    } catch (e) { out.push({ tool: 'manage_contact', ok: false, message: `Failed: ${(e as Error).message}` }); }
+  }
+
+  // ---------- manage_contract ----------
+  for (const m of text.matchAll(/<tool>manage_contract<\/tool>\s*<action>(\w+)<\/action>\s*<contract>(\{[\s\S]*?\})<\/contract>/g)) {
+    const action = m[1]; const data = safeJSON(m[2]); if (!data) continue;
+    try {
+      if (action === 'create') {
+        const { data: c, error } = await supabase.from('contracts').insert({
+          user_id: userId, name: data.name, provider: data.provider || null,
+          category: data.category || 'subscription', cost_amount: data.costAmount || null,
+          cost_frequency: data.costFrequency || null, renewal_date: isoOrNull(data.renewalDate),
+          auto_renews: data.autoRenews ?? null, notes: data.notes || null,
+        }).select('id, name').single();
+        if (error) throw error;
+        out.push({ tool: 'manage_contract', ok: true, message: `📄 Added contract: ${c.name}`, data: c });
+      } else if (action === 'get_costs') {
+        const { data: rows } = await supabase.from('contracts').select('name, cost_amount, cost_frequency').eq('user_id', userId).eq('is_active', true);
+        let monthly = 0;
+        rows?.forEach((r: any) => {
+          if (!r.cost_amount) return;
+          if (r.cost_frequency === 'monthly') monthly += r.cost_amount;
+          else if (r.cost_frequency === 'yearly') monthly += r.cost_amount / 12;
+          else if (r.cost_frequency === 'weekly') monthly += r.cost_amount * 4.33;
+        });
+        out.push({ tool: 'manage_contract', ok: true, message: `💰 Total active contracts: ${rows?.length || 0}, ~${monthly.toFixed(2)}/month` });
+      } else {
+        const { data: rows } = await supabase.from('contracts').select('id, name')
+          .eq('user_id', userId)
+          .or(`name.ilike.%${data.query}%,provider.ilike.%${data.query}%`).limit(1);
+        const target = rows?.[0];
+        if (!target) { out.push({ tool: 'manage_contract', ok: false, message: `No contract matches "${data.query}"` }); continue; }
+        if (action === 'delete') {
+          await supabase.from('contracts').delete().eq('id', target.id).eq('user_id', userId);
+          out.push({ tool: 'manage_contract', ok: true, message: `🗑️ Deleted contract: ${target.name}` });
+        } else if (action === 'update') {
+          const upd: any = {};
+          if (data.name) upd.name = data.name;
+          if (data.provider) upd.provider = data.provider;
+          if (data.category) upd.category = data.category;
+          if (data.costAmount !== undefined) upd.cost_amount = data.costAmount;
+          if (data.costFrequency) upd.cost_frequency = data.costFrequency;
+          if (data.renewalDate) upd.renewal_date = isoOrNull(data.renewalDate);
+          if (data.autoRenews !== undefined) upd.auto_renews = data.autoRenews;
+          if (data.notes !== undefined) upd.notes = data.notes;
+          await supabase.from('contracts').update(upd).eq('id', target.id).eq('user_id', userId);
+          out.push({ tool: 'manage_contract', ok: true, message: `✏️ Updated contract: ${target.name}` });
+        } else {
+          out.push({ tool: 'manage_contract', ok: true, message: `Found contract: ${target.name}` });
+        }
+      }
+    } catch (e) { out.push({ tool: 'manage_contract', ok: false, message: `Failed: ${(e as Error).message}` }); }
+  }
+
+  // ---------- manage_property ----------
+  for (const m of text.matchAll(/<tool>manage_property<\/tool>\s*<action>(\w+)<\/action>\s*<property>(\{[\s\S]*?\})<\/property>/g)) {
+    const action = m[1]; const data = safeJSON(m[2]); if (!data) continue;
+    try {
+      if (action === 'create') {
+        const { data: p, error } = await supabase.from('properties').insert({
+          user_id: userId, name: data.name, property_type: data.propertyType || 'apartment',
+          address: data.address || null, city: data.city || null, country: data.country || null,
+          purchase_price: data.purchasePrice || null, current_value: data.currentValue || null,
+          size_sqm: data.sizeSqm || null, notes: data.notes || null,
+        }).select('id, name').single();
+        if (error) throw error;
+        out.push({ tool: 'manage_property', ok: true, message: `🏠 Added property: ${p.name}`, data: p });
+      } else if (action === 'list') {
+        const { data: rows } = await supabase.from('properties').select('name, property_type, city').eq('user_id', userId).eq('is_active', true);
+        out.push({ tool: 'manage_property', ok: true, message: `🏠 Properties (${rows?.length || 0}): ${rows?.map((r: any) => `${r.name}${r.city ? ` (${r.city})` : ''}`).join(', ') || 'none'}` });
+      } else {
+        const { data: rows } = await supabase.from('properties').select('id, name')
+          .eq('user_id', userId)
+          .or(`name.ilike.%${data.query}%,address.ilike.%${data.query}%,city.ilike.%${data.query}%`).limit(1);
+        const target = rows?.[0];
+        if (!target) { out.push({ tool: 'manage_property', ok: false, message: `No property matches "${data.query}"` }); continue; }
+        if (action === 'delete') {
+          await supabase.from('properties').delete().eq('id', target.id).eq('user_id', userId);
+          out.push({ tool: 'manage_property', ok: true, message: `🗑️ Deleted property: ${target.name}` });
+        } else if (action === 'update') {
+          const upd: any = {};
+          if (data.name) upd.name = data.name;
+          if (data.propertyType) upd.property_type = data.propertyType;
+          ['address','city','country','notes'].forEach(k => { if (data[k] !== undefined) upd[k] = data[k]; });
+          if (data.purchasePrice !== undefined) upd.purchase_price = data.purchasePrice;
+          if (data.currentValue !== undefined) upd.current_value = data.currentValue;
+          if (data.sizeSqm !== undefined) upd.size_sqm = data.sizeSqm;
+          await supabase.from('properties').update(upd).eq('id', target.id).eq('user_id', userId);
+          out.push({ tool: 'manage_property', ok: true, message: `✏️ Updated property: ${target.name}` });
+        } else {
+          out.push({ tool: 'manage_property', ok: true, message: `Found property: ${target.name}` });
+        }
+      }
+    } catch (e) { out.push({ tool: 'manage_property', ok: false, message: `Failed: ${(e as Error).message}` }); }
+  }
+
+  // ---------- manage_business (startup_ideas) ----------
+  for (const m of text.matchAll(/<tool>manage_business<\/tool>\s*<action>(\w+)<\/action>\s*<business>(\{[\s\S]*?\})<\/business>/g)) {
+    const action = m[1]; const data = safeJSON(m[2]); if (!data) continue;
+    try {
+      if (action === 'create') {
+        const { data: b, error } = await supabase.from('startup_ideas').insert({
+          user_id: userId, name: data.name, description: data.description || null,
+          problem_statement: data.problemStatement || null, target_audience: data.targetAudience || null,
+          business_model: data.businessModel || null, unique_value_proposition: data.uniqueValueProposition || null,
+          status: data.status || 'idea', tags: data.tags || null, notes: data.notes || null,
+        }).select('id, name').single();
+        if (error) throw error;
+        out.push({ tool: 'manage_business', ok: true, message: `🚀 Added business: ${b.name}`, data: b });
+      } else if (action === 'list') {
+        const { data: rows } = await supabase.from('startup_ideas').select('name, status').eq('user_id', userId);
+        out.push({ tool: 'manage_business', ok: true, message: `🚀 Businesses (${rows?.length || 0}): ${rows?.map((r: any) => `${r.name} [${r.status || 'idea'}]`).join(', ') || 'none'}` });
+      } else {
+        const { data: rows } = await supabase.from('startup_ideas').select('id, name').eq('user_id', userId).ilike('name', `%${data.query}%`).limit(1);
+        const target = rows?.[0];
+        if (!target) { out.push({ tool: 'manage_business', ok: false, message: `No business matches "${data.query}"` }); continue; }
+        if (action === 'delete') {
+          await supabase.from('startup_ideas').delete().eq('id', target.id).eq('user_id', userId);
+          out.push({ tool: 'manage_business', ok: true, message: `🗑️ Deleted business: ${target.name}` });
+        } else if (action === 'update') {
+          const upd: any = {};
+          ['name','description','status','notes'].forEach(k => { if (data[k] !== undefined) upd[k] = data[k]; });
+          if (data.problemStatement !== undefined) upd.problem_statement = data.problemStatement;
+          if (data.targetAudience !== undefined) upd.target_audience = data.targetAudience;
+          if (data.businessModel !== undefined) upd.business_model = data.businessModel;
+          if (data.uniqueValueProposition !== undefined) upd.unique_value_proposition = data.uniqueValueProposition;
+          if (data.tags !== undefined) upd.tags = data.tags;
+          await supabase.from('startup_ideas').update(upd).eq('id', target.id).eq('user_id', userId);
+          out.push({ tool: 'manage_business', ok: true, message: `✏️ Updated business: ${target.name}` });
+        } else {
+          out.push({ tool: 'manage_business', ok: true, message: `Found business: ${target.name}` });
+        }
+      }
+    } catch (e) { out.push({ tool: 'manage_business', ok: false, message: `Failed: ${(e as Error).message}` }); }
+  }
+
+  // ---------- manage_family_member ----------
+  for (const m of text.matchAll(/<tool>manage_family_member<\/tool>\s*<action>(\w+)<\/action>\s*<member>(\{[\s\S]*?\})<\/member>/g)) {
+    const action = m[1]; const data = safeJSON(m[2]); if (!data) continue;
+    try {
+      if (action === 'create') {
+        const { data: f, error } = await supabase.from('family_members').insert({
+          user_id: userId, name: data.name, relationship: data.relationship || 'other',
+          birth_date: isoOrNull(data.birthDate), email: data.email || null, phone: data.phone || null,
+          school_name: data.schoolName || null, school_grade: data.schoolGrade || null,
+          allergies: data.allergies || null, medical_notes: data.medicalNotes || null,
+          notes: data.notes || null,
+        }).select('id, name').single();
+        if (error) throw error;
+        out.push({ tool: 'manage_family_member', ok: true, message: `👨‍👩‍👧 Added family member: ${f.name}`, data: f });
+      } else {
+        const { data: rows } = await supabase.from('family_members').select('id, name').eq('user_id', userId).ilike('name', `%${data.query}%`).limit(1);
+        const target = rows?.[0];
+        if (!target) { out.push({ tool: 'manage_family_member', ok: false, message: `No family member matches "${data.query}"` }); continue; }
+        if (action === 'delete') {
+          await supabase.from('family_members').update({ is_active: false }).eq('id', target.id).eq('user_id', userId);
+          out.push({ tool: 'manage_family_member', ok: true, message: `🗑️ Removed family member: ${target.name}` });
+        } else if (action === 'update') {
+          const upd: any = {};
+          ['name','relationship','email','phone','notes'].forEach(k => { if (data[k] !== undefined) upd[k] = data[k]; });
+          if (data.birthDate) upd.birth_date = isoOrNull(data.birthDate);
+          if (data.schoolName !== undefined) upd.school_name = data.schoolName;
+          if (data.schoolGrade !== undefined) upd.school_grade = data.schoolGrade;
+          if (data.allergies !== undefined) upd.allergies = data.allergies;
+          if (data.medicalNotes !== undefined) upd.medical_notes = data.medicalNotes;
+          await supabase.from('family_members').update(upd).eq('id', target.id).eq('user_id', userId);
+          out.push({ tool: 'manage_family_member', ok: true, message: `✏️ Updated family member: ${target.name}` });
+        } else {
+          out.push({ tool: 'manage_family_member', ok: true, message: `Found family member: ${target.name}` });
+        }
+      }
+    } catch (e) { out.push({ tool: 'manage_family_member', ok: false, message: `Failed: ${(e as Error).message}` }); }
+  }
+
+  // ---------- create_note / manage_note ----------
+  for (const m of text.matchAll(/<tool>(?:create_note|manage_note)<\/tool>(?:\s*<action>(\w+)<\/action>)?\s*<note>(\{[\s\S]*?\})<\/note>/g)) {
+    const action = m[1] || 'create'; const data = safeJSON(m[2]); if (!data) continue;
+    try {
+      if (action === 'create') {
+        const { data: n, error } = await supabase.from('notes').insert({
+          user_id: userId, title: data.title || 'Note', content: data.content || '', tags: data.tags || null,
+        }).select('id, title').single();
+        if (error) throw error;
+        out.push({ tool: 'manage_note', ok: true, message: `📝 Saved note: ${n.title}`, data: n });
+      } else if (action === 'delete' && data.query) {
+        const { data: rows } = await supabase.from('notes').select('id, title').eq('user_id', userId).ilike('title', `%${data.query}%`).limit(1);
+        if (rows?.[0]) {
+          await supabase.from('notes').delete().eq('id', rows[0].id).eq('user_id', userId);
+          out.push({ tool: 'manage_note', ok: true, message: `🗑️ Deleted note: ${rows[0].title}` });
+        }
+      }
+    } catch (e) { out.push({ tool: 'manage_note', ok: false, message: `Failed: ${(e as Error).message}` }); }
+  }
+
+  // ---------- add_shopping_item ----------
+  for (const m of text.matchAll(/<tool>add_shopping_item<\/tool>\s*<item>(\{[\s\S]*?\})<\/item>/g)) {
+    const data = safeJSON(m[1]); if (!data?.name) continue;
+    try {
+      let { data: list } = await supabase.from('shopping_lists').select('id').eq('user_id', userId).eq('is_completed', false).order('created_at').limit(1).maybeSingle();
+      if (!list) {
+        const { data: newList } = await supabase.from('shopping_lists').insert({ user_id: userId, name: 'Shopping', category: 'grocery' }).select('id').single();
+        list = newList;
+      }
+      await supabase.from('shopping_list_items').insert({ list_id: list.id, user_id: userId, name: data.name, quantity: data.quantity || 1, category: data.category || null });
+      out.push({ tool: 'add_shopping_item', ok: true, message: `🛒 Added to shopping: ${data.quantity && data.quantity > 1 ? `${data.quantity}× ` : ''}${data.name}` });
+    } catch (e) { out.push({ tool: 'add_shopping_item', ok: false, message: `Failed: ${(e as Error).message}` }); }
+  }
+
+  // ---------- set_reminder ----------
+  for (const m of text.matchAll(/<tool>set_reminder<\/tool>\s*<reminder>(\{[\s\S]*?\})<\/reminder>/g)) {
+    const data = safeJSON(m[1]); if (!data?.message || !data.triggerAt) continue;
+    try {
+      const trigger = isoOrNull(data.triggerAt);
+      if (!trigger) continue;
+      // Store reminders as scheduled tasks with due_date
+      await supabase.from('tasks').insert({
+        user_id: userId, title: data.message, category: 'personal', priority: 'medium', due_date: trigger,
+      });
+      out.push({ tool: 'set_reminder', ok: true, message: `⏰ Reminder set for ${new Date(trigger).toLocaleString()}: ${data.message}` });
+    } catch (e) { out.push({ tool: 'set_reminder', ok: false, message: `Failed: ${(e as Error).message}` }); }
+  }
+
+  // ---------- compose_email ----------
+  for (const m of text.matchAll(/<tool>compose_email<\/tool>\s*<email>(\{[\s\S]*?\})<\/email>/g)) {
+    const data = safeJSON(m[1]); if (!data?.to) continue;
+    out.push({ tool: 'compose_email', ok: true, message: `✉️ Email draft prepared for ${data.to} — Subject: "${data.subject || ''}"\n\n${data.body || ''}`, data });
+  }
+
+  // ---------- fetch_emails ----------
+  for (const m of text.matchAll(/<tool>fetch_emails<\/tool>\s*<filter>(\{[\s\S]*?\})<\/filter>/g)) {
+    const data = safeJSON(m[1]) || {};
+    try {
+      const limit = Math.min(data.limit || 5, 20);
+      let q = supabase.from('user_emails').select('id, subject, from_name, from_email, snippet, received_at, priority_score, is_important, is_read').eq('user_id', userId).eq('user_archived', false);
+      if (data.scope === 'important') q = q.eq('is_important', true);
+      if (data.scope === 'unread') q = q.eq('is_read', false);
+      if (data.scope === 'from' && data.from) q = q.or(`from_name.ilike.%${data.from}%,from_email.ilike.%${data.from}%`);
+      const { data: rows } = await q.order('received_at', { ascending: false }).limit(limit);
+      if (!rows?.length) { out.push({ tool: 'fetch_emails', ok: true, message: `📭 No emails found.` }); continue; }
+      const lines = rows.map((e: any, i: number) => `${i + 1}. ${e.is_important ? '⭐ ' : ''}${e.subject || '(no subject)'} — ${e.from_name || e.from_email}\n   ${(e.snippet || '').slice(0, 120)}`);
+      out.push({ tool: 'fetch_emails', ok: true, message: `📬 Recent emails:\n${lines.join('\n\n')}`, data: rows });
+    } catch (e) { out.push({ tool: 'fetch_emails', ok: false, message: `Failed: ${(e as Error).message}` }); }
+  }
+
+  // ---------- draft_email_reply ----------
+  for (const m of text.matchAll(/<tool>draft_email_reply<\/tool>\s*<draft>(\{[\s\S]*?\})<\/draft>/g)) {
+    const data = safeJSON(m[1]); if (!data?.emailQuery) continue;
+    try {
+      const { data: rows } = await supabase.from('user_emails').select('id, subject, from_name, from_email, snippet, ai_summary').eq('user_id', userId)
+        .or(`subject.ilike.%${data.emailQuery}%,from_name.ilike.%${data.emailQuery}%,from_email.ilike.%${data.emailQuery}%`)
+        .order('received_at', { ascending: false }).limit(1);
+      const target = rows?.[0];
+      if (!target) { out.push({ tool: 'draft_email_reply', ok: false, message: `No email matches "${data.emailQuery}"` }); continue; }
+
+      const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+      const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash-lite',
+          messages: [
+            { role: 'system', content: `You draft email replies. Tone: ${data.tone || 'professional'}. Keep it concise (2-5 sentences). Return only the reply body, no subject.` },
+            { role: 'user', content: `Reply to email:\nFrom: ${target.from_name} <${target.from_email}>\nSubject: ${target.subject}\nContent: ${target.snippet || target.ai_summary || ''}\n\nInstruction: ${data.instruction || 'Write an appropriate reply.'}` },
+          ],
+        }),
+      });
+      const aiJson = await aiResp.json();
+      const draft = aiJson.choices?.[0]?.message?.content?.trim() || '';
+      // Save draft on the email row (best-effort — column may or may not exist)
+      try { await supabase.from('user_emails').update({ ai_drafted_reply: draft }).eq('id', target.id).eq('user_id', userId); } catch { /* column optional */ }
+      out.push({ tool: 'draft_email_reply', ok: true, message: `✉️ Draft ready (re: "${target.subject}" from ${target.from_name || target.from_email}):\n\n${draft}\n\nOpen the email in the app to send or edit.`, data: { emailId: target.id, draft } });
+    } catch (e) { out.push({ tool: 'draft_email_reply', ok: false, message: `Failed: ${(e as Error).message}` }); }
+  }
+
+  // ---------- save_memory ----------
+  for (const m of text.matchAll(/<tool>save_memory<\/tool>\s*<memory>(\{[\s\S]*?\})<\/memory>/g)) {
+    const data = safeJSON(m[1]); if (!data?.key || !data.value) continue;
+    try {
+      await supabase.from('ai_memory').upsert({
+        user_id: userId, memory_type: data.type || 'fact', category: data.category || null,
+        key: data.key, value: data.value, source: 'chat',
+      }, { onConflict: 'user_id,key' });
+    } catch { /* silent */ }
+  }
+
+  return out;
+}
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
