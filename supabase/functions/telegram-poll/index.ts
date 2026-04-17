@@ -211,7 +211,6 @@ Deno.serve(async (req) => {
 
       if (!msg.text) continue;
 
-      const rawText: string = msg.text.trim();
       // Normalize: strip @botname suffix from commands so "/linkfamily@darai_bot CODE" works
       const text: string = rawText.replace(/^(\/[a-zA-Z_]+)@\w+/, '$1');
       const fromId = msg.from?.id;
