@@ -84,7 +84,6 @@ export const useWakeWordDetection = ({
       recognition.maxAlternatives = 3;
 
       recognition.onstart = () => {
-        console.log('[WakeWord] Started listening for wake word');
         setIsListening(true);
         setError(null);
         isActiveRef.current = true;
@@ -151,17 +150,16 @@ export const useWakeWordDetection = ({
       };
 
       recognition.onend = () => {
-        console.log('[WakeWord] Recognition ended');
         setIsListening(false);
         isActiveRef.current = false;
-        
-        // Auto-restart if we should still be listening
+
+        // Auto-restart if we should still be listening, with backoff to avoid tight loops
         if (enabled && !error) {
           setTimeout(() => {
             if (enabled && !isActiveRef.current) {
               startListening();
             }
-          }, 100);
+          }, 1500);
         }
       };
 
