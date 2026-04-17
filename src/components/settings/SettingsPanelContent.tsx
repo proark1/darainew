@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { UserSettings, ThemeMode, ColorScheme, TaskCategory, TaskPriority } from '@/types/flux';
 import { 
-  Settings, 
+  Settings,
+  Send,
   Palette, 
   ListTodo, 
   Sun, 
