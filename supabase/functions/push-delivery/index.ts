@@ -138,6 +138,40 @@ serve(async (req) => {
         notificationData.trigger_entity_id = reminderData?.trigger_entity_id;
       }
 
+      // Get user's settings (telegram + push toggles)
+      const { data: fullSettings } = await supabase
+        .from('proactive_settings')
+        .select('telegram_proactive_enabled')
+        .eq('user_id', userId)
+        .maybeSingle();
+      const telegramEnabled = fullSettings?.telegram_proactive_enabled !== false;
+
+      // Telegram delivery
+      if (telegramEnabled) {
+        const { data: link } = await supabase
+          .from('telegram_links')
+          .select('chat_id')
+          .eq('user_id', userId)
+          .eq('is_active', true)
+          .maybeSingle();
+        if (link?.chat_id) {
+          const tgRes = await sendTelegram(Number(link.chat_id), notificationTitle, notificationBody);
+          await supabase.from('reminder_delivery_log').insert({
+            user_id: userId,
+            reminder_id: reminder_id || null,
+            delivery_channel: 'telegram',
+            delivery_status: tgRes.ok ? 'sent' : 'failed',
+            error_message: tgRes.ok ? null : (tgRes.error || JSON.stringify(tgRes.data)),
+            sent_at: new Date().toISOString(),
+          });
+          if (tgRes.ok) {
+            results.push({ user_id: userId, channel: 'telegram', status: 'sent' });
+          } else {
+            errors.push(`Telegram failed for ${userId}: ${tgRes.error || 'unknown'}`);
+          }
+        }
+      }
+
       // Send Expo Push Notifications
       if (pushEnabled && tokens && tokens.length > 0) {
         for (const tokenRecord of tokens) {
