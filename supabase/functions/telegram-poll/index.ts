@@ -175,6 +175,7 @@ Deno.serve(async (req) => {
     let data: any;
     try {
       data = await tg('getUpdates', { offset: currentOffset, timeout, allowed_updates: ['message'] }, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+      // (voice/audio arrive inside 'message' updates — no extra allowed_updates needed)
     } catch (e) {
       console.error('getUpdates failed:', e);
       break;
