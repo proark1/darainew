@@ -672,6 +672,7 @@ serve(async (req) => {
   const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
+    const reqBody = await req.json();
     const { 
       messages, 
       imageUrl,
@@ -693,7 +694,9 @@ serve(async (req) => {
       habitsSummary,
       // AI Memory
       memories,
-    }: ChatRequest = await req.json();
+      // Server-side execution flag (for Telegram and other non-browser surfaces)
+      executeServerSide = false,
+    }: ChatRequest & { executeServerSide?: boolean } = reqBody;
     
     const personalityAddition = personalityPrompts[personality] || personalityPrompts.balanced;
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
