@@ -8,6 +8,32 @@ const corsHeaders = {
 };
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+const TELEGRAM_GATEWAY = 'https://connector-gateway.lovable.dev/telegram';
+const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+const TELEGRAM_API_KEY = Deno.env.get('TELEGRAM_API_KEY');
+
+async function sendTelegram(chatId: number, title: string, body: string) {
+  if (!LOVABLE_API_KEY || !TELEGRAM_API_KEY) return { ok: false, error: 'telegram not configured' };
+  try {
+    const res = await fetch(`${TELEGRAM_GATEWAY}/sendMessage`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'X-Connection-Api-Key': TELEGRAM_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: `<b>${title}</b>\n${body}`,
+        parse_mode: 'HTML',
+      }),
+    });
+    const data = await res.json();
+    return { ok: res.ok, data };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
 
 interface ExpoPushMessage {
   to: string;
@@ -110,6 +136,40 @@ serve(async (req) => {
         notificationData.reminder_type = reminderData?.reminder_type;
         notificationData.trigger_entity_type = reminderData?.trigger_entity_type;
         notificationData.trigger_entity_id = reminderData?.trigger_entity_id;
+      }
+
+      // Get user's settings (telegram + push toggles)
+      const { data: fullSettings } = await supabase
+        .from('proactive_settings')
+        .select('telegram_proactive_enabled')
+        .eq('user_id', userId)
+        .maybeSingle();
+      const telegramEnabled = fullSettings?.telegram_proactive_enabled !== false;
+
+      // Telegram delivery
+      if (telegramEnabled) {
+        const { data: link } = await supabase
+          .from('telegram_links')
+          .select('chat_id')
+          .eq('user_id', userId)
+          .eq('is_active', true)
+          .maybeSingle();
+        if (link?.chat_id) {
+          const tgRes = await sendTelegram(Number(link.chat_id), notificationTitle, notificationBody);
+          await supabase.from('reminder_delivery_log').insert({
+            user_id: userId,
+            reminder_id: reminder_id || null,
+            delivery_channel: 'telegram',
+            delivery_status: tgRes.ok ? 'sent' : 'failed',
+            error_message: tgRes.ok ? null : (tgRes.error || JSON.stringify(tgRes.data)),
+            sent_at: new Date().toISOString(),
+          });
+          if (tgRes.ok) {
+            results.push({ user_id: userId, channel: 'telegram', status: 'sent' });
+          } else {
+            errors.push(`Telegram failed for ${userId}: ${tgRes.error || 'unknown'}`);
+          }
+        }
       }
 
       // Send Expo Push Notifications
