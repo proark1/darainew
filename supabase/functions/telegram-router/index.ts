@@ -236,79 +236,12 @@ Deno.serve(async (req) => {
   if (lower.startsWith('/add ')) { forced = 'task'; payloadText = trimmed.slice(5); }
   else if (lower.startsWith('/buy ')) { forced = 'shopping_item'; payloadText = trimmed.slice(5); }
 
-  // Classify
-  const result: ClassifyResult = forced
-    ? (forced === 'task'
-        ? { intent: 'task', task: { title: payloadText, category: 'personal' } }
-        : { intent: 'shopping_item', shopping_item: { item: payloadText, quantity: 1 } })
-    : await classify(trimmed);
-
-  const ownerId = group.owner_user_id;
-  const provenance = {
-    created_via: 'telegram_group',
-    created_by_telegram_user_id: telegram_user_id ?? null,
-  };
-
+  // For ALL natural-language messages (and unknown slash commands), route to the
+  // full Dori brain with server-side tool execution so Dori can create/update/delete
+  // tasks, events, contacts, contracts, properties, businesses, family members,
+  // emails (drafts), notes, shopping, reminders — anywhere from the family group.
+  const userForChat = senderUserId || ownerId;
   try {
-    if (result.intent === 'task' && result.task?.title) {
-      const due = result.task.due ? new Date(result.task.due).toISOString() : null;
-      const cat = result.task.category === 'business' ? 'business' : 'personal';
-      const { data: t } = await supabase.from('tasks').insert({
-        user_id: ownerId,
-        title: result.task.title,
-        due_date: due,
-        category: cat,
-        priority: 'medium',
-        ...provenance,
-      }).select('id').single();
-      await tgSend(chat_id, `✅ Task added (${senderName}): <b>${result.task.title}</b>${due ? ` — due ${new Date(due).toLocaleString()}` : ''}`);
-      return new Response(JSON.stringify({ ok: true, id: t?.id }), { headers: corsHeaders });
-    }
-
-    if (result.intent === 'shopping_item' && result.shopping_item?.item) {
-      const listId = await getOrCreateDefaultShoppingList(supabase, ownerId);
-      if (!listId) throw new Error('Could not create shopping list');
-      const qty = result.shopping_item.quantity || 1;
-      await supabase.from('shopping_list_items').insert({
-        list_id: listId,
-        user_id: ownerId,
-        name: result.shopping_item.item,
-        quantity: qty,
-        ...provenance,
-      });
-      await tgSend(chat_id, `🛒 Added to shopping list (${senderName}): <b>${qty > 1 ? `${qty}× ` : ''}${result.shopping_item.item}</b>`);
-      return new Response('{"ok":true}', { headers: corsHeaders });
-    }
-
-    if (result.intent === 'event' && result.event?.title && result.event.start) {
-      const start = new Date(result.event.start);
-      const end = result.event.end ? new Date(result.event.end) : new Date(start.getTime() + 60 * 60 * 1000);
-      await supabase.from('events').insert({
-        user_id: ownerId,
-        title: result.event.title,
-        start_time: start.toISOString(),
-        end_time: end.toISOString(),
-        location: result.event.location ?? null,
-        category: 'family',
-        ...provenance,
-      });
-      await tgSend(chat_id, `📅 Event added (${senderName}): <b>${result.event.title}</b> — ${start.toLocaleString()}${result.event.location ? `\n📍 ${result.event.location}` : ''}`);
-      return new Response('{"ok":true}', { headers: corsHeaders });
-    }
-
-    if (result.intent === 'note' && result.note?.body) {
-      await supabase.from('notes').insert({
-        user_id: ownerId,
-        title: result.note.title || 'Family note',
-        content: result.note.body,
-        ...provenance,
-      });
-      await tgSend(chat_id, `📝 Note saved (${senderName}).`);
-      return new Response('{"ok":true}', { headers: corsHeaders });
-    }
-
-    // Question → route to Dori chat with the sender's identity (or owner as fallback)
-    const userForChat = senderUserId || ownerId;
     const r = await fetch(`${SUPABASE_URL}/functions/v1/chat`, {
       method: 'POST',
       headers: {
@@ -319,40 +252,31 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         messages: [{ role: 'user', content: trimmed }],
         personality: 'balanced',
+        executeServerSide: true,
       }),
     });
+
     if (!r.ok) {
       await tgSend(chat_id, "Sorry, I couldn't reach Dori right now.");
       return new Response('{"ok":true}', { headers: corsHeaders });
     }
-    const reader = r.body?.getReader();
-    const decoder = new TextDecoder();
-    let full = '';
-    let buffer = '';
-    if (reader) {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const payload = line.slice(6).trim();
-          if (payload === '[DONE]' || !payload) continue;
-          try {
-            const parsed = JSON.parse(payload);
-            const delta = parsed.choices?.[0]?.delta?.content;
-            if (delta) full += delta;
-          } catch { /* ignore */ }
-        }
-      }
+
+    const json = await r.json();
+    const reply = (json.reply || '').trim();
+    const toolResults = (json.toolResults || []) as { ok: boolean; message: string }[];
+
+    const parts: string[] = [];
+    if (reply) parts.push(reply);
+    if (toolResults.length > 0) {
+      parts.push(toolResults.map(t => t.message).join('\n'));
     }
-    await tgSend(chat_id, full.trim() || 'Got it.');
+    const finalMsg = parts.join('\n\n').trim() || 'Got it.';
+    // Telegram has a 4096 char limit
+    await tgSend(chat_id, finalMsg.slice(0, 4000));
     return new Response('{"ok":true}', { headers: corsHeaders });
   } catch (e) {
     console.error('router error', e);
-    await tgSend(chat_id, '⚠️ Something went wrong saving that.');
+    await tgSend(chat_id, '⚠️ Something went wrong.');
     return new Response(JSON.stringify({ ok: false, error: (e as Error).message }), { headers: corsHeaders });
   }
 });
