@@ -110,14 +110,15 @@ export function TelegramConnectPanel() {
               Tap the button below to open Telegram and link your account. The code expires in 10 minutes.
             </p>
             <div className="flex gap-2">
-              <Button asChild size="sm" className="flex-1">
-                <a href={deepLink} target="_blank" rel="noopener noreferrer">
-                  <span className="inline-flex items-center">
-                    <ExternalLink className="w-3 h-3 mr-2" />
-                    Open Telegram
-                  </span>
-                </a>
-              </Button>
+              <a
+                href={deepLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 inline-flex items-center justify-center gap-2 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                <ExternalLink className="w-3 h-3" />
+                Open Telegram
+              </a>
               <Button
                 variant="outline"
                 size="sm"
