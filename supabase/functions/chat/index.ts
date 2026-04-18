@@ -1050,7 +1050,106 @@ async function executeToolsServerSide(text: string, userId: string, supabase: an
     } catch { /* silent */ }
   }
 
+  // ---------- learn_preference (auto-learned behavioral patterns) ----------
+  for (const m of text.matchAll(/<tool>learn_preference<\/tool>\s*<pref>(\{[\s\S]*?\})<\/pref>/g)) {
+    const data = safeJSON(m[1]); if (!data?.key || !data.value) continue;
+    try {
+      const { data: existing } = await supabase
+        .from('dori_learned_preferences')
+        .select('id, times_seen, confidence')
+        .eq('user_id', userId)
+        .eq('key', data.key)
+        .maybeSingle();
+      if (existing) {
+        const newSeen = (existing.times_seen || 1) + 1;
+        const newConf = Math.min(0.99, (existing.confidence || 0.5) + 0.1);
+        await supabase.from('dori_learned_preferences').update({
+          value: data.value,
+          times_seen: newSeen,
+          confidence: newConf,
+          last_seen_at: new Date().toISOString(),
+          source: data.source || 'chat',
+        }).eq('id', existing.id);
+      } else {
+        await supabase.from('dori_learned_preferences').insert({
+          user_id: userId,
+          key: data.key,
+          value: data.value,
+          confidence: data.confidence || 0.6,
+          source: data.source || 'chat',
+        });
+      }
+    } catch (e) { console.error('learn_preference failed', e); }
+  }
+
   return out;
+}
+
+// Persist a turn into the unified cross-channel conversation log
+async function logDoriTurn(
+  supabase: any,
+  userId: string,
+  channel: string,
+  role: string,
+  content: string,
+  channelRef?: string | null,
+) {
+  if (!userId || userId === 'anonymous' || !content) return;
+  try {
+    await supabase.from('dori_conversations').insert({
+      user_id: userId,
+      channel,
+      channel_ref: channelRef || null,
+      role,
+      content: content.slice(0, 8000),
+    });
+  } catch (e) {
+    console.error('logDoriTurn failed', e);
+  }
+}
+
+// Load recent cross-channel turns + learned preferences for prompt injection
+async function loadDoriIntelligence(supabase: any, userId: string, currentChannel: string) {
+  const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const [{ data: turns }, { data: prefs }] = await Promise.all([
+    supabase
+      .from('dori_conversations')
+      .select('channel, role, content, created_at')
+      .eq('user_id', userId)
+      .gte('created_at', sinceIso)
+      .order('created_at', { ascending: false })
+      .limit(40),
+    supabase
+      .from('dori_learned_preferences')
+      .select('key, value, confidence')
+      .eq('user_id', userId)
+      .gte('confidence', 0.5)
+      .order('confidence', { ascending: false })
+      .limit(15),
+  ]);
+
+  let memoryBlock = '';
+  if (turns && turns.length > 0) {
+    const otherChannelTurns = turns.filter((t: any) => t.channel !== currentChannel).slice(0, 12).reverse();
+    if (otherChannelTurns.length > 0) {
+      memoryBlock += '\n\n## RECENT CROSS-CHANNEL CONVERSATIONS (last 24h, other channels)';
+      memoryBlock += '\nUse these to maintain context across web, Telegram private, and Telegram family group:';
+      for (const t of otherChannelTurns) {
+        const when = new Date(t.created_at).toISOString().slice(11, 16);
+        memoryBlock += `\n[${t.channel} ${when}] ${t.role}: ${String(t.content).slice(0, 200)}`;
+      }
+    }
+  }
+
+  let prefsBlock = '';
+  if (prefs && prefs.length > 0) {
+    prefsBlock += '\n\n## AUTO-LEARNED USER PREFERENCES (apply these silently to every action)';
+    for (const p of prefs) {
+      prefsBlock += `\n- ${p.key}: ${p.value}`;
+    }
+  }
+
+  return memoryBlock + prefsBlock;
 }
 
 serve(async (req) => {
@@ -1129,6 +1228,23 @@ serve(async (req) => {
     
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
+    }
+
+    // Determine which channel this request is coming from (for unified memory)
+    const telegramUserIdHeader = req.headers.get('x-telegram-user-id');
+    const tgChannelHint = req.headers.get('x-dori-channel'); // 'tg_private' | 'tg_family'
+    const tgChannelRef = req.headers.get('x-dori-channel-ref') || null;
+    const currentChannel = telegramUserIdHeader
+      ? (tgChannelHint === 'tg_family' ? 'tg_family' : 'tg_private')
+      : 'web';
+
+    // Load unified cross-channel memory + auto-learned preferences
+    const intelligenceBlock = await loadDoriIntelligence(supabaseAdmin, userId, currentChannel);
+
+    // Persist the latest user turn into the unified log (fire-and-forget)
+    const lastUserTurn = [...messages].reverse().find(m => m.role === 'user');
+    if (lastUserTurn?.content) {
+      logDoriTurn(supabaseAdmin, userId, currentChannel, 'user', lastUserTurn.content, tgChannelRef);
     }
 
     // Build comprehensive context
@@ -1507,7 +1623,26 @@ serve(async (req) => {
       }
     }
 
-    const fullSystemPrompt = baseSystemPrompt + '\n\nPersonality: ' + personalityAddition + contextMessage;
+    const intelligenceAndConfirmAddon = intelligenceBlock + `
+
+## CONFIRM-BEFORE-ACT (CRITICAL)
+When the user says "the meeting", "that contract", "delete it", "update him", or any reference that could match MORE THAN ONE existing item, do NOT guess. Reply with ONE short clarifying question listing the candidates (max 3) and ask which one. Only execute the tool once the user confirms.
+Examples that REQUIRE confirmation:
+- "delete the meeting" when there are 2+ upcoming meetings
+- "cancel that contract" when not previously discussed in this conversation
+- "remind him tomorrow" when multiple contacts match
+Skip confirmation when the reference is unambiguous (e.g. user just mentioned the item by name in the last 2 turns, or only one candidate exists).
+
+## TOOL: learn_preference (silent self-improvement)
+When you notice a recurring user behavior or stated preference, save it so future Doris act on it automatically.
+Format: <tool>learn_preference</tool><pref>{"key":"snake_case_key","value":"the rule in one sentence","confidence":0.7,"source":"observation"}</pref>
+Examples:
+- User confirms every email draft before sending → {"key":"always_confirm_email_send","value":"User wants to review all email drafts before they are sent."}
+- User rejects family tasks before 9am → {"key":"family_tasks_after_9am","value":"Do not schedule family-facing tasks before 9am local time."}
+- User prefers German for personal, English for business → {"key":"language_by_category","value":"Reply in German for personal/family topics, English for business/startup topics."}
+Do NOT announce this tool to the user — it's silent. Only emit it 0–1 times per response, when you genuinely learned something new.
+`;
+    const fullSystemPrompt = baseSystemPrompt + '\n\nPersonality: ' + personalityAddition + contextMessage + intelligenceAndConfirmAddon;
 
     console.log("Chat request with enhanced context:", {
       hasUserProfile: !!userProfile,
@@ -1647,6 +1782,9 @@ serve(async (req) => {
         Math.ceil((fullSystemPrompt + fullText).length / 4),
         'success', { personality, executeServerSide: true });
 
+      // Persist assistant turn to unified log
+      logDoriTurn(supabaseAdmin, userId, currentChannel, 'assistant', cleanText.trim(), tgChannelRef);
+
       return new Response(JSON.stringify({
         reply: cleanText.trim(),
         toolResults: execResults,
@@ -1719,6 +1857,15 @@ serve(async (req) => {
             }
           } catch (e) {
             console.error('Memory parsing error:', e);
+          }
+          // Persist assistant turn to unified cross-channel log
+          try {
+            const cleaned = stripAllToolTags(fullResponseText).trim();
+            if (cleaned) {
+              await logDoriTurn(supabaseAdmin, userId, currentChannel, 'assistant', cleaned, tgChannelRef);
+            }
+          } catch (e) {
+            console.error('Failed to log assistant turn', e);
           }
           return;
         }
