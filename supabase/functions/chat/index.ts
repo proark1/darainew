@@ -1858,6 +1858,15 @@ Do NOT announce this tool to the user — it's silent. Only emit it 0–1 times 
           } catch (e) {
             console.error('Memory parsing error:', e);
           }
+          // Persist assistant turn to unified cross-channel log
+          try {
+            const cleaned = stripAllToolTags(fullResponseText).trim();
+            if (cleaned) {
+              await logDoriTurn(supabaseAdmin, userId, currentChannel, 'assistant', cleaned, tgChannelRef);
+            }
+          } catch (e) {
+            console.error('Failed to log assistant turn', e);
+          }
           return;
         }
         // Collect text for memory extraction
