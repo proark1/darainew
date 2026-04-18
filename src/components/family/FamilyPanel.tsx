@@ -51,6 +51,9 @@ export function FamilyPanel() {
             <TabsTrigger value="daily" className="p-2" title="Daily Life & Routines">
               <Sun className="h-5 w-5" />
             </TabsTrigger>
+            <TabsTrigger value="memory" className="p-2" title="Traditions, Pets, Home, Vehicles">
+              <Home className="h-5 w-5" />
+            </TabsTrigger>
             <TabsTrigger value="docs" className="p-2">
               <FolderOpen className="h-5 w-5" />
             </TabsTrigger>
@@ -91,6 +94,9 @@ export function FamilyPanel() {
             </TabsContent>
             <TabsContent value="daily" className="mt-0">
               <FamilyDailyLifeCard />
+            </TabsContent>
+            <TabsContent value="memory" className="mt-0">
+              <FamilyMemoryHomeCard />
             </TabsContent>
             <TabsContent value="docs" className="mt-0">
               <DocumentStoragePanel />
