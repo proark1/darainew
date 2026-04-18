@@ -21,6 +21,9 @@ import { EmailActionPipelineCard } from './EmailActionPipelineCard';
 import { TravelIntelCard } from './TravelIntelCard';
 import { EnergyCoachCard } from './EnergyCoachCard';
 import { MeetingBriefsCard } from './MeetingBriefsCard';
+import { LearnedRoutinesCard } from './LearnedRoutinesCard';
+import { LifeScoreCommentaryCard } from './LifeScoreCommentaryCard';
+import { EpisodicMemoriesCard } from './EpisodicMemoriesCard';
 import { StaggerContainer, StaggerItem } from '@/components/ui/page-transition';
 import { PanelSkeleton } from '@/components/ui/panel-skeleton';
 import { useSmartTaskSuggestions } from '@/hooks/useSmartTaskSuggestions';
@@ -230,11 +233,14 @@ export function DashboardPanel({ userId, onNavigate }: DashboardPanelProps) {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 pt-2">
+                <div className="md:col-span-3"><LifeScoreCommentaryCard /></div>
                 <div className="md:col-span-3"><ConflictAlertsCard /></div>
                 <div className="md:col-span-3"><TravelIntelCard /></div>
                 <div className="md:col-span-3"><EmailActionPipelineCard /></div>
                 <div className="md:col-span-2"><MeetingBriefsCard /></div>
                 <div className="md:col-span-1"><EnergyCoachCard /></div>
+                <div className="md:col-span-2"><LearnedRoutinesCard /></div>
+                <div className="md:col-span-1"><EpisodicMemoriesCard /></div>
                 <div className="md:col-span-2"><DailyBriefingCard /></div>
                 <div className="md:col-span-1">
                   <SmartInsightCard tasks={tasks} emails={emails} contracts={contractAlerts} contacts={overdueContacts} events={events} />
