@@ -1,13 +1,11 @@
 
-The user wants Dori (assistant) — across the web app AND Telegram — to be a true operator, not just a Q&A bot. Read access + write access (create / edit / delete) across all major modules: tasks, events, contacts, contracts, properties, startups/businesses, emails (with draft creation), family, etc.
+User wants all 8 upgrades built. I'll sequence them in dependency order across ~4 batches so each batch is shippable and testable on its own. Keep concise — user has already approved the high-level vision; this plan is the build sequence.
 
-Let me scope quickly what already exists so the plan is accurate.
-
-Key existing pieces I know from memory + files:
-- `ai-assistant` edge function — main Dori brain (text). Already does some tool-calling (memory, web search, voice actions for tasks).
-- `gemini-live` edge function — voice path.
-- `telegram-router` edge function — handles Telegram messages from personal + family group, routes to AI.
-- `email-draft-reply`, `gmail-send-reply`, `gmail-fetch-email` — email tools exist.
-- Tables: tasks, events, user_contacts, contracts, properties (likely), businesses (likely), family_members, etc.
-
-I'll inspect what's actually implemented.
+Order rationale:
+- Memory first (everything reads from it)
+- Preferences next (cheap, plugs into prompt)
+- Confirm-before-act (small, prevents wrong actions before we add proactivity)
+- Proactive Telegram + voice replies (visible value)
+- Cross-module inference (prompt + tool upgrade)
+- Email autopilot (background job)
+- Multi-step planning (biggest, last)
