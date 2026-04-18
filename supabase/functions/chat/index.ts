@@ -646,11 +646,53 @@ function stripAllToolTags(text: string): string {
     .trim();
 }
 
-interface ToolExecResult { tool: string; ok: boolean; message: string; data?: any }
+// High-risk tool patterns — these get queued for explicit approval instead of auto-executing
+// when running server-side (Telegram, voice, agent loop). Web app shows confirm dialogs.
+const HIGH_RISK_PATTERNS: { regex: RegExp; actionType: string; entityType: string; describe: (data: any) => string }[] = [
+  { regex: /<tool>manage_task<\/tool>\s*<action>delete<\/action>\s*<task>(\{[\s\S]*?\})<\/task>/g, actionType: 'delete_task', entityType: 'task', describe: (d) => `Delete task: ${d.title || d.id}` },
+  { regex: /<tool>manage_event<\/tool>\s*<action>delete<\/action>\s*<event>(\{[\s\S]*?\})<\/event>/g, actionType: 'delete_event', entityType: 'event', describe: (d) => `Delete event: ${d.query || d.title}` },
+  { regex: /<tool>manage_contact<\/tool>\s*<action>delete<\/action>\s*<contact>(\{[\s\S]*?\})<\/contact>/g, actionType: 'delete_contact', entityType: 'contact', describe: (d) => `Delete contact: ${d.query}` },
+  { regex: /<tool>manage_contract<\/tool>\s*<action>delete<\/action>\s*<contract>(\{[\s\S]*?\})<\/contract>/g, actionType: 'delete_contract', entityType: 'contract', describe: (d) => `Delete contract: ${d.query}` },
+  { regex: /<tool>manage_property<\/tool>\s*<action>delete<\/action>\s*<property>(\{[\s\S]*?\})<\/property>/g, actionType: 'delete_property', entityType: 'property', describe: (d) => `Delete property: ${d.query}` },
+  { regex: /<tool>manage_business<\/tool>\s*<action>delete<\/action>\s*<business>(\{[\s\S]*?\})<\/business>/g, actionType: 'delete_business', entityType: 'business', describe: (d) => `Delete business: ${d.query}` },
+  { regex: /<tool>manage_contract<\/tool>\s*<action>create<\/action>\s*<contract>(\{[\s\S]*?\})<\/contract>/g, actionType: 'create_contract', entityType: 'contract', describe: (d) => `Add contract: ${d.name}${d.costAmount ? ` (${d.costAmount}/${d.costFrequency || 'mo'})` : ''}` },
+];
 
-async function executeToolsServerSide(text: string, userId: string, supabase: any): Promise<ToolExecResult[]> {
+interface ToolExecResult { tool: string; ok: boolean; message: string; data?: any; queued?: boolean }
+
+async function executeToolsServerSide(text: string, userId: string, supabase: any, opts?: { skipApprovalGate?: boolean }): Promise<ToolExecResult[]> {
   const out: ToolExecResult[] = [];
   if (!userId || userId === 'anonymous') return out;
+
+  // Approval gate: extract high-risk tool calls, queue them, and strip from text before processing.
+  if (!opts?.skipApprovalGate) {
+    let strippedText = text;
+    for (const pattern of HIGH_RISK_PATTERNS) {
+      const fullRegex = new RegExp(pattern.regex.source, 'g');
+      const matches = [...text.matchAll(fullRegex)];
+      for (const m of matches) {
+        const fullMatch = m[0];
+        const dataStr = m[1];
+        let data: any = {};
+        try { data = JSON.parse(dataStr); } catch {}
+        try {
+          await supabase.from('auto_actions_log').insert({
+            user_id: userId,
+            action_type: pattern.actionType,
+            entity_type: pattern.entityType,
+            action_data: { tool_xml: fullMatch, parsed: data },
+            reason: pattern.describe(data),
+            status: 'pending',
+          });
+          out.push({ tool: pattern.actionType, ok: true, queued: true, message: `⏸️ Queued for your approval: ${pattern.describe(data)}` });
+        } catch (e) {
+          out.push({ tool: pattern.actionType, ok: false, message: `Could not queue: ${(e as Error).message}` });
+        }
+        strippedText = strippedText.replace(fullMatch, '');
+      }
+    }
+    text = strippedText;
+  }
 
   const safeJSON = (s: string) => { try { return JSON.parse(s); } catch { return null; } };
   const isoOrNull = (s?: string) => { if (!s) return null; const d = new Date(s); return isNaN(d.getTime()) ? null : d.toISOString(); };
