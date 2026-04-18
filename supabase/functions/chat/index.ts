@@ -1782,6 +1782,9 @@ Do NOT announce this tool to the user — it's silent. Only emit it 0–1 times 
         Math.ceil((fullSystemPrompt + fullText).length / 4),
         'success', { personality, executeServerSide: true });
 
+      // Persist assistant turn to unified log
+      logDoriTurn(supabaseAdmin, userId, currentChannel, 'assistant', cleanText.trim(), tgChannelRef);
+
       return new Response(JSON.stringify({
         reply: cleanText.trim(),
         toolResults: execResults,
