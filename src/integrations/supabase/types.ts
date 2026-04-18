@@ -1405,6 +1405,63 @@ export type Database = {
         }
         Relationships: []
       }
+      episodic_memories: {
+        Row: {
+          created_at: string
+          embedding_vector: Json | null
+          id: string
+          importance: number | null
+          location: string | null
+          location_country: string | null
+          occurred_end: string | null
+          occurred_on: string
+          people: Json | null
+          source: string | null
+          source_ref: string | null
+          summary: string | null
+          tags: string[] | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          embedding_vector?: Json | null
+          id?: string
+          importance?: number | null
+          location?: string | null
+          location_country?: string | null
+          occurred_end?: string | null
+          occurred_on: string
+          people?: Json | null
+          source?: string | null
+          source_ref?: string | null
+          summary?: string | null
+          tags?: string[] | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          embedding_vector?: Json | null
+          id?: string
+          importance?: number | null
+          location?: string | null
+          location_country?: string | null
+          occurred_end?: string | null
+          occurred_on?: string
+          people?: Json | null
+          source?: string | null
+          source_ref?: string | null
+          summary?: string | null
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       events: {
         Row: {
           attendees: string[] | null
@@ -2470,6 +2527,69 @@ export type Database = {
           },
         ]
       }
+      learned_routines: {
+        Row: {
+          automation_rule_id: string | null
+          confidence: number | null
+          created_at: string
+          description: string | null
+          fingerprint: string
+          frequency: string | null
+          id: string
+          last_occurred_at: string | null
+          next_expected_at: string | null
+          occurrences: number | null
+          pattern: Json
+          proposed_at: string
+          responded_at: string | null
+          routine_type: string
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          automation_rule_id?: string | null
+          confidence?: number | null
+          created_at?: string
+          description?: string | null
+          fingerprint: string
+          frequency?: string | null
+          id?: string
+          last_occurred_at?: string | null
+          next_expected_at?: string | null
+          occurrences?: number | null
+          pattern?: Json
+          proposed_at?: string
+          responded_at?: string | null
+          routine_type: string
+          status?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          automation_rule_id?: string | null
+          confidence?: number | null
+          created_at?: string
+          description?: string | null
+          fingerprint?: string
+          frequency?: string | null
+          id?: string
+          last_occurred_at?: string | null
+          next_expected_at?: string | null
+          occurrences?: number | null
+          pattern?: Json
+          proposed_at?: string
+          responded_at?: string | null
+          routine_type?: string
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       life_correlations: {
         Row: {
           confidence_score: number
@@ -2517,6 +2637,57 @@ export type Database = {
           last_updated_at?: string | null
           pattern_description?: string
           sample_data?: Json | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      life_score_commentary: {
+        Row: {
+          commentary: string
+          contributing_factors: Json | null
+          created_at: string
+          current_score: number | null
+          delta: number | null
+          headline: string
+          id: string
+          is_read: boolean | null
+          observation_date: string
+          previous_score: number | null
+          pushed_to_telegram: boolean | null
+          suggestions: Json | null
+          trend: string | null
+          user_id: string
+        }
+        Insert: {
+          commentary: string
+          contributing_factors?: Json | null
+          created_at?: string
+          current_score?: number | null
+          delta?: number | null
+          headline: string
+          id?: string
+          is_read?: boolean | null
+          observation_date: string
+          previous_score?: number | null
+          pushed_to_telegram?: boolean | null
+          suggestions?: Json | null
+          trend?: string | null
+          user_id: string
+        }
+        Update: {
+          commentary?: string
+          contributing_factors?: Json | null
+          created_at?: string
+          current_score?: number | null
+          delta?: number | null
+          headline?: string
+          id?: string
+          is_read?: boolean | null
+          observation_date?: string
+          previous_score?: number | null
+          pushed_to_telegram?: boolean | null
+          suggestions?: Json | null
+          trend?: string | null
           user_id?: string
         }
         Relationships: []
