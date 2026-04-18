@@ -16,6 +16,8 @@ import { WeatherCard } from './WeatherCard';
 import { ContractAlertsCard } from './ContractAlertsCard';
 import { ContactRemindersCard } from './ContactRemindersCard';
 import { DashboardPrayerCard } from './DashboardPrayerCard';
+import { ConflictAlertsCard } from './ConflictAlertsCard';
+import { EmailActionPipelineCard } from './EmailActionPipelineCard';
 import { StaggerContainer, StaggerItem } from '@/components/ui/page-transition';
 import { PanelSkeleton } from '@/components/ui/panel-skeleton';
 import { useSmartTaskSuggestions } from '@/hooks/useSmartTaskSuggestions';
@@ -225,6 +227,8 @@ export function DashboardPanel({ userId, onNavigate }: DashboardPanelProps) {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 pt-2">
+                <div className="md:col-span-3"><ConflictAlertsCard /></div>
+                <div className="md:col-span-3"><EmailActionPipelineCard /></div>
                 <div className="md:col-span-2"><DailyBriefingCard /></div>
                 <div className="md:col-span-1">
                   <SmartInsightCard tasks={tasks} emails={emails} contracts={contractAlerts} contacts={overdueContacts} events={events} />
