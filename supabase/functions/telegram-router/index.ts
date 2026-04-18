@@ -290,6 +290,8 @@ Deno.serve(async (req) => {
         'Authorization': `Bearer ${SERVICE_KEY}`,
         'Content-Type': 'application/json',
         'x-telegram-user-id': userForChat,
+        'x-dori-channel': 'tg_family',
+        'x-dori-channel-ref': String(chat_id),
       },
       body: JSON.stringify({
         messages: conversationMessages,
