@@ -1778,38 +1778,64 @@ This avoids wrong actions on big asks. Skip propose_plan for simple 1–3 action
       }
     }
 
-    // ===== SERVER-SIDE EXECUTION BRANCH (for Telegram & non-browser surfaces) =====
+    // ===== SERVER-SIDE EXECUTION BRANCH (Telegram, voice, agent loop) =====
+    // Multi-step agentic loop: AI proposes tools → we execute → feed results back → AI decides next step.
+    // Stops when AI returns no new tool calls, or after MAX_AGENT_ROUNDS.
     if (executeServerSide) {
-      const fullResp = await callAI(allMessages, false);
-      if (!fullResp.ok) {
-        const t = await fullResp.text();
-        console.error('Lovable AI (non-stream) error:', fullResp.status, t);
-        return new Response(JSON.stringify({ error: 'AI service error', detail: t }), {
-          status: fullResp.status === 429 ? 429 : fullResp.status === 402 ? 402 : 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      const MAX_AGENT_ROUNDS = 4;
+      const conversationMsgs: { role: string; content: string | any[] }[] = [...allMessages];
+      const allExecResults: ToolExecResult[] = [];
+      let finalText = '';
+      let totalPromptTokens = 0;
+      let totalCompletionTokens = 0;
+
+      for (let round = 0; round < MAX_AGENT_ROUNDS; round++) {
+        const fullResp = await callAI(conversationMsgs, false);
+        if (!fullResp.ok) {
+          const t = await fullResp.text();
+          console.error(`Lovable AI (agent round ${round}) error:`, fullResp.status, t);
+          if (round === 0) {
+            return new Response(JSON.stringify({ error: 'AI service error', detail: t }), {
+              status: fullResp.status === 429 ? 429 : fullResp.status === 402 ? 402 : 500,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          break;
+        }
+        const aiData = await fullResp.json();
+        const roundText: string = aiData.choices?.[0]?.message?.content || '';
+        finalText = roundText;
+        totalPromptTokens += aiData.usage?.prompt_tokens || 0;
+        totalCompletionTokens += aiData.usage?.completion_tokens || 0;
+
+        const roundResults = await executeToolsServerSide(roundText, userId, supabaseAdmin);
+        allExecResults.push(...roundResults);
+
+        if (roundResults.length === 0) break;
+
+        conversationMsgs.push({ role: 'assistant', content: roundText });
+        const observation = roundResults.map((r, i) =>
+          `[${i + 1}] ${r.tool} → ${r.ok ? 'OK' : 'FAIL'}: ${r.message}`
+        ).join('\n');
+        conversationMsgs.push({
+          role: 'system',
+          content: `Tool results from your last turn:\n${observation}\n\nIf the user's request is fully satisfied, reply with a brief natural-language confirmation and DO NOT emit more tools. If more steps are needed, emit the next tool(s).`,
         });
       }
-      const aiData = await fullResp.json();
-      const fullText: string = aiData.choices?.[0]?.message?.content || '';
 
-      // Execute all tools server-side
-      const execResults = await executeToolsServerSide(fullText, userId, supabaseAdmin);
+      const cleanText = stripAllToolTags(finalText);
 
-      // Strip all tool XML tags from the displayed reply
-      const cleanText = stripAllToolTags(fullText);
+      await logAIUsage(supabaseAdmin, userId, 'chat-agent-loop', model,
+        totalPromptTokens || Math.ceil((fullSystemPrompt + JSON.stringify(messages)).length / 4),
+        totalCompletionTokens || Math.ceil(finalText.length / 4),
+        (totalPromptTokens + totalCompletionTokens) || Math.ceil((fullSystemPrompt + finalText).length / 4),
+        'success', { personality, executeServerSide: true, agentResultsCount: allExecResults.length });
 
-      await logAIUsage(supabaseAdmin, userId, 'chat-server-exec', model,
-        Math.ceil((fullSystemPrompt + JSON.stringify(messages)).length / 4),
-        Math.ceil(fullText.length / 4),
-        Math.ceil((fullSystemPrompt + fullText).length / 4),
-        'success', { personality, executeServerSide: true });
-
-      // Persist assistant turn to unified log
       logDoriTurn(supabaseAdmin, userId, currentChannel, 'assistant', cleanText.trim(), tgChannelRef);
 
       return new Response(JSON.stringify({
         reply: cleanText.trim(),
-        toolResults: execResults,
+        toolResults: allExecResults,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
