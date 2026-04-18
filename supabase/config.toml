@@ -128,3 +128,6 @@ verify_jwt = false
 
 [functions.email-autopilot]
 verify_jwt = false
+
+[functions.gmail-sync-cron]
+verify_jwt = false
