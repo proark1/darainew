@@ -50,6 +50,7 @@ export function HealthTrackingPanel() {
 
   return (
     <div className="space-y-4">
+      <FamilyHealthSafetyCard />
       {/* Refill Alerts */}
       {refillAlerts.length > 0 && (
         <Card className="p-3 border-amber-500/50 bg-amber-500/10">
