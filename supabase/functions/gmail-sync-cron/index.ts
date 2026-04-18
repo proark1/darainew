@@ -1,4 +1,4 @@
-// Scheduled Gmail sync — runs every 2 hours via pg_cron.
+// Scheduled Gmail sync — triggered every 2 hours via pg_cron.
 // Iterates over all users with a Google connection and triggers gmail-sync per user.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -16,7 +16,6 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const admin = createClient(supabaseUrl, serviceRoleKey);
 
-    // Get all users with a google connection + sync enabled
     const { data: connections, error } = await admin
       .from('external_calendar_connections')
       .select('user_id')
@@ -28,18 +27,11 @@ serve(async (req) => {
     const uniqueUserIds = Array.from(new Set((connections || []).map(c => c.user_id)));
     console.log(`[gmail-sync-cron] Syncing ${uniqueUserIds.length} users`);
 
-    const results: { userId: string; status: string; error?: string }[] = [];
+    const results: { userId: string; status: string; newEmails?: number; error?: string }[] = [];
 
-    // Process sequentially to avoid overwhelming Gmail API and AI rate limits
     for (const userId of uniqueUserIds) {
       try {
-        // Mint a service-role JWT impersonation by calling gmail-sync with service role key
-        // gmail-sync expects user JWT — instead we replicate its logic here would be huge,
-        // so we invoke it with a forged user context via x-user-id header is not supported.
-        // Simpler: call the function with service role key — but function uses getClaims which
-        // requires a user token. So we use admin.auth.admin to generate a session... not allowed.
-        // Best path: invoke gmail-sync via fetch using service role + a custom internal header.
-        const resp = await fetch(`${supabaseUrl}/functions/v1/gmail-sync-internal`, {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/gmail-sync`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${serviceRoleKey}`,
@@ -53,15 +45,22 @@ serve(async (req) => {
         if (!resp.ok) {
           results.push({ userId, status: 'error', error: json?.message || `HTTP ${resp.status}` });
         } else {
-          results.push({ userId, status: 'ok' });
+          results.push({ userId, status: 'ok', newEmails: json?.newEmails || 0 });
         }
       } catch (e) {
         console.error(`[gmail-sync-cron] User ${userId} failed:`, e);
         results.push({ userId, status: 'error', error: String(e) });
       }
+
+      // Tiny delay to be polite to Gmail/AI APIs
+      await new Promise(r => setTimeout(r, 500));
     }
 
-    return new Response(JSON.stringify({ total: uniqueUserIds.length, results }), {
+    const okCount = results.filter(r => r.status === 'ok').length;
+    const totalNew = results.reduce((sum, r) => sum + (r.newEmails || 0), 0);
+    console.log(`[gmail-sync-cron] Done: ${okCount}/${uniqueUserIds.length} synced, ${totalNew} new emails`);
+
+    return new Response(JSON.stringify({ total: uniqueUserIds.length, ok: okCount, totalNew, results }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e) {
