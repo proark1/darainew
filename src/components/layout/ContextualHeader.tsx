@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Search, Bell, Menu } from 'lucide-react';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
 import { DoriNotificationIcon } from '@/components/assistant/DoriNotificationIcon';
+import { AgentActionInbox } from '@/components/assistant/AgentActionInbox';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -56,6 +57,7 @@ export function ContextualHeader({
           </Button>
         )}
         <DoriNotificationIcon />
+        <AgentActionInbox />
         <NotificationCenter
           notifications={notifications}
           onMarkRead={onMarkRead}
