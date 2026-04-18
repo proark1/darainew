@@ -1087,6 +1087,60 @@ export type Database = {
         }
         Relationships: []
       }
+      detected_trips: {
+        Row: {
+          contacts_in_destination: Json | null
+          created_at: string
+          destination: string
+          destination_country: string | null
+          end_date: string
+          fingerprint: string
+          id: string
+          notes: string | null
+          packing_reminder_sent: boolean | null
+          source: string
+          source_ref: string | null
+          start_date: string
+          status: string
+          travel_blocks_added: boolean | null
+          user_id: string
+        }
+        Insert: {
+          contacts_in_destination?: Json | null
+          created_at?: string
+          destination: string
+          destination_country?: string | null
+          end_date: string
+          fingerprint: string
+          id?: string
+          notes?: string | null
+          packing_reminder_sent?: boolean | null
+          source?: string
+          source_ref?: string | null
+          start_date: string
+          status?: string
+          travel_blocks_added?: boolean | null
+          user_id: string
+        }
+        Update: {
+          contacts_in_destination?: Json | null
+          created_at?: string
+          destination?: string
+          destination_country?: string | null
+          end_date?: string
+          fingerprint?: string
+          id?: string
+          notes?: string | null
+          packing_reminder_sent?: boolean | null
+          source?: string
+          source_ref?: string | null
+          start_date?: string
+          status?: string
+          travel_blocks_added?: boolean | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       dhikr_logs: {
         Row: {
           completed_count: number | null
@@ -2606,6 +2660,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      meeting_briefs: {
+        Row: {
+          attendees: Json | null
+          brief_text: string
+          created_at: string
+          delivered_at: string | null
+          delivered_channel: string | null
+          event_id: string
+          id: string
+          related_contacts: Json | null
+          related_contracts: Json | null
+          related_emails: Json | null
+          user_id: string
+        }
+        Insert: {
+          attendees?: Json | null
+          brief_text: string
+          created_at?: string
+          delivered_at?: string | null
+          delivered_channel?: string | null
+          event_id: string
+          id?: string
+          related_contacts?: Json | null
+          related_contracts?: Json | null
+          related_emails?: Json | null
+          user_id: string
+        }
+        Update: {
+          attendees?: Json | null
+          brief_text?: string
+          created_at?: string
+          delivered_at?: string | null
+          delivered_channel?: string | null
+          event_id?: string
+          id?: string
+          related_contacts?: Json | null
+          related_contracts?: Json | null
+          related_emails?: Json | null
+          user_id?: string
+        }
+        Relationships: []
       }
       meeting_reminders_sent: {
         Row: {
