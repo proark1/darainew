@@ -1,6 +1,7 @@
 // Classifies inbound Telegram group messages and writes to the right module.
 // Called by telegram-poll for messages from a linked family group.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { sendDoriReply } from '../_shared/telegram-voice.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -326,8 +327,19 @@ Deno.serve(async (req) => {
       console.error('Failed to persist assistant reply', e);
     }
 
-    // Telegram has a 4096 char limit
-    await tgSend(chat_id, finalMsg.slice(0, 4000));
+    // Look up voice-reply preference for the sender (or owner if sender unknown)
+    let preferVoice = false;
+    try {
+      const prefUser = senderUserId || group.owner_user_id;
+      const { data: ps } = await supabase.from('proactive_settings')
+        .select('prefer_voice_replies').eq('user_id', prefUser).maybeSingle();
+      preferVoice = !!ps?.prefer_voice_replies;
+    } catch (_) { /* ignore */ }
+
+    await sendDoriReply({
+      chatId: chat_id, text: finalMsg.slice(0, 4000), preferVoice,
+      lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+    });
     return new Response('{"ok":true}', { headers: corsHeaders });
   } catch (e) {
     console.error('router error', e);
