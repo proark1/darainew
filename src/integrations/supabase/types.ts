@@ -1042,6 +1042,51 @@ export type Database = {
         }
         Relationships: []
       }
+      detected_conflicts: {
+        Row: {
+          conflict_type: string
+          description: string | null
+          detected_at: string
+          entities: Json
+          fingerprint: string
+          id: string
+          resolved_at: string | null
+          severity: string
+          status: string
+          suggested_resolution: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          conflict_type: string
+          description?: string | null
+          detected_at?: string
+          entities?: Json
+          fingerprint: string
+          id?: string
+          resolved_at?: string | null
+          severity?: string
+          status?: string
+          suggested_resolution?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          conflict_type?: string
+          description?: string | null
+          detected_at?: string
+          entities?: Json
+          fingerprint?: string
+          id?: string
+          resolved_at?: string | null
+          severity?: string
+          status?: string
+          suggested_resolution?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       dhikr_logs: {
         Row: {
           completed_count: number | null
@@ -1221,6 +1266,51 @@ export type Database = {
           sent_at?: string
           trigger_key?: string
           trigger_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      email_classifications: {
+        Row: {
+          applied_at: string | null
+          category: string
+          confidence: number | null
+          created_at: string
+          dismissed_at: string | null
+          email_id: string
+          id: string
+          reasoning: string | null
+          status: string
+          suggested_action: string | null
+          suggested_payload: Json | null
+          user_id: string
+        }
+        Insert: {
+          applied_at?: string | null
+          category: string
+          confidence?: number | null
+          created_at?: string
+          dismissed_at?: string | null
+          email_id: string
+          id?: string
+          reasoning?: string | null
+          status?: string
+          suggested_action?: string | null
+          suggested_payload?: Json | null
+          user_id: string
+        }
+        Update: {
+          applied_at?: string | null
+          category?: string
+          confidence?: number | null
+          created_at?: string
+          dismissed_at?: string | null
+          email_id?: string
+          id?: string
+          reasoning?: string | null
+          status?: string
+          suggested_action?: string | null
+          suggested_payload?: Json | null
           user_id?: string
         }
         Relationships: []
@@ -2877,6 +2967,42 @@ export type Database = {
           message_id?: string
           message_type?: string
           pinned_by?: string
+        }
+        Relationships: []
+      }
+      proactive_feedback: {
+        Row: {
+          channel: string
+          context: Json | null
+          created_at: string
+          id: string
+          message_excerpt: string | null
+          rating: number
+          trigger_key: string | null
+          trigger_type: string
+          user_id: string
+        }
+        Insert: {
+          channel?: string
+          context?: Json | null
+          created_at?: string
+          id?: string
+          message_excerpt?: string | null
+          rating: number
+          trigger_key?: string | null
+          trigger_type: string
+          user_id: string
+        }
+        Update: {
+          channel?: string
+          context?: Json | null
+          created_at?: string
+          id?: string
+          message_excerpt?: string | null
+          rating?: number
+          trigger_key?: string | null
+          trigger_type?: string
+          user_id?: string
         }
         Relationships: []
       }
