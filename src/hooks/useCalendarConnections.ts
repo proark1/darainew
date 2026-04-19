@@ -6,13 +6,16 @@ import { useToast } from '@/hooks/use-toast';
 export interface CalendarConnection {
   id: string;
   user_id: string;
-  provider: 'google' | 'outlook' | 'ics';
+  provider: 'google' | 'outlook' | 'apple' | 'ics';
+  auth_type?: 'oauth' | 'caldav' | 'ics';
   name: string;
   color: string | null;
   calendar_id: string | null;
   external_calendar_id: string | null;
   sync_enabled: boolean;
+  sync_direction?: 'one_way_pull' | 'one_way_push' | 'two_way';
   last_synced_at: string | null;
+  last_sync_error?: string | null;
   created_at: string;
 }
 
