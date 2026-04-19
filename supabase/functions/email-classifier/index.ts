@@ -20,10 +20,31 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { user_id, limit = 25 } = await req.json().catch(() => ({}));
-    if (!user_id) return new Response(JSON.stringify({ error: "user_id required" }), { status: 400, headers: corsHeaders });
-
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
+
+    // Authenticate: accept either a logged-in user JWT (classify own emails)
+    // or the service role key (cron/internal calls with explicit user_id).
+    const authHeader = req.headers.get('Authorization') ?? '';
+    const isServiceRole = authHeader === `Bearer ${SERVICE_KEY}`;
+
+    const body = await req.json().catch(() => ({}));
+    const limit: number = body.limit ?? 25;
+    let user_id: string | undefined = body.user_id;
+
+    if (!isServiceRole) {
+      // Validate JWT and force user_id to the caller.
+      const token = authHeader.replace(/^Bearer\s+/i, '');
+      if (!token) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+      }
+      const { data, error } = await supabase.auth.getUser(token);
+      if (error || !data?.user) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+      }
+      user_id = data.user.id;
+    }
+
+    if (!user_id) return new Response(JSON.stringify({ error: "user_id required" }), { status: 400, headers: corsHeaders });
 
     // Fetch unclassified recent emails
     const { data: emails } = await supabase
