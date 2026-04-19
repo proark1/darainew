@@ -36,6 +36,11 @@ export interface ProactiveSettings {
   meeting_prep_enabled?: boolean;
   telegram_proactive_enabled?: boolean;
   telegram_group_enabled?: boolean;
+  birthday_reminders_enabled?: boolean;
+  birthday_reminder_days?: number[];
+  prayer_reminders_enabled?: boolean;
+  prayer_reminder_minutes?: number;
+  evening_dua_enabled?: boolean;
 }
 
 const DEFAULT_SETTINGS: Omit<ProactiveSettings, 'user_id'> = {
