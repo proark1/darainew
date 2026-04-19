@@ -147,22 +147,31 @@ export function useCalendarConnections() {
       return { success: false };
     }
   };
+
+  const syncCalendar = async (connectionId: string) => {
     if (syncing) return;
-    
+
+    const conn = connections.find(c => c.id === connectionId);
+    const fnName = conn?.provider === 'outlook'
+      ? 'outlook-sync'
+      : conn?.provider === 'apple'
+        ? 'apple-caldav-sync'
+        : 'calendar-sync';
+
     setSyncing(connectionId);
     try {
-      const { data, error } = await supabase.functions.invoke('calendar-sync', {
+      const { data, error } = await supabase.functions.invoke(fnName, {
         body: { connectionId },
       });
 
       if (error) throw error;
 
+      const pushed = data?.pushed || 0;
       toast({
         title: 'Calendar synced',
-        description: `Imported ${data.imported || 0} new events, updated ${data.updated || 0} events.`,
+        description: `Imported ${data?.imported || 0}, updated ${data?.updated || 0}${pushed ? `, pushed ${pushed}` : ''}.`,
       });
 
-      // Refresh connections to update last_synced_at
       await fetchConnections();
     } catch (error: any) {
       console.error('Error syncing calendar:', error);
