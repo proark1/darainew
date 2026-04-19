@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Note, LinkedItem } from '@/hooks/useNotes';
 import { cn } from '@/lib/utils';
+import DOMPurify from 'dompurify';
 
 interface NoteEditorProps {
   note: Note;
@@ -100,12 +101,23 @@ export function NoteEditor({ note, onUpdate, onDelete, onBack }: NoteEditorProps
         if (!line.trim()) {
           return <br key={i} />;
         }
-        // Regular text with bold/italic
-        let formatted = line
+        // Regular text with bold/italic — escape HTML first, then apply formatting, then sanitize.
+        const escaped = line
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+        const formatted = escaped
           .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
           .replace(/\*(.*?)\*/g, '<em>$1</em>')
           .replace(/`(.*?)`/g, '<code class="bg-muted px-1 rounded">$1</code>');
-        return <p key={i} className="mb-1" dangerouslySetInnerHTML={{ __html: formatted }} />;
+        const safe = DOMPurify.sanitize(formatted, {
+          ALLOWED_TAGS: ['strong', 'em', 'code'],
+          ALLOWED_ATTR: ['class'],
+          ALLOW_DATA_ATTR: false,
+        });
+        return <p key={i} className="mb-1" dangerouslySetInnerHTML={{ __html: safe }} />;
       });
   };
 

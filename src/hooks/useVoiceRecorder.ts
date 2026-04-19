@@ -102,11 +102,13 @@ export function useVoiceRecorder(userId: string) {
       
       if (uploadError) throw uploadError;
       
-      const { data: { publicUrl } } = supabase.storage
+      // Bucket is private — generate a long-lived signed URL (7 days).
+      const { data: signed, error: signErr } = await supabase.storage
         .from('chat-attachments')
-        .getPublicUrl(filePath);
+        .createSignedUrl(filePath, 60 * 60 * 24 * 7);
+      if (signErr || !signed?.signedUrl) throw signErr ?? new Error('Could not create signed URL');
       
-      return { url: publicUrl, duration };
+      return { url: signed.signedUrl, duration };
     } catch (error) {
       console.error('Error uploading voice message:', error);
       toast({
