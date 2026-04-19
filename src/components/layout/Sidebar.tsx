@@ -232,6 +232,7 @@ export function Sidebar({
 
           {/* Life */}
           <NavGroup title="Life" collapsed={collapsed}>
+            <NavItem icon={Mail} label={t('nav.email') || 'Email'} panel="email" activePanel={activePanel} collapsed={collapsed} onClick={handlePanelClick} badge={unreadCount || undefined} />
             <NavItem icon={Heart} label={t('nav.health') || 'Health'} panel="health" activePanel={activePanel} collapsed={collapsed} onClick={handlePanelClick} />
             <NavItem icon={Pill} label="Personal Health" panel="personal-health" activePanel={activePanel} collapsed={collapsed} onClick={handlePanelClick} />
             <NavItem icon={Flame} label={t('nav.habits')} panel="habits" activePanel={activePanel} collapsed={collapsed} onClick={handlePanelClick} />
@@ -245,15 +246,14 @@ export function Sidebar({
           <NavGroup title="Money & Assets" collapsed={collapsed}>
             <NavItem icon={Wallet} label="Finances" panel="finances" activePanel={activePanel} collapsed={collapsed} onClick={handlePanelClick} />
             <NavItem icon={Plane} label="Travel" panel="travel" activePanel={activePanel} collapsed={collapsed} onClick={handlePanelClick} />
+            <NavItem icon={Building2} label={t('nav.properties') || 'Properties'} panel="properties" activePanel={activePanel} collapsed={collapsed} onClick={handlePanelClick} />
             <NavItem icon={Home} label="Properties & Vehicles" panel="assets" activePanel={activePanel} collapsed={collapsed} onClick={handlePanelClick} />
           </NavGroup>
 
           {/* Business */}
           <NavGroup title="Business" collapsed={collapsed}>
-            <NavItem icon={Mail} label={t('nav.email') || 'Email'} panel="email" activePanel={activePanel} collapsed={collapsed} onClick={handlePanelClick} badge={unreadCount || undefined} />
             <NavItem icon={BookUser} label={t('nav.contacts')} panel="contacts" activePanel={activePanel} collapsed={collapsed} onClick={handlePanelClick} />
             <NavItem icon={FileText} label={t('nav.contracts')} panel="contracts" activePanel={activePanel} collapsed={collapsed} onClick={handlePanelClick} />
-            <NavItem icon={Building2} label={t('nav.properties') || 'Properties'} panel="properties" activePanel={activePanel} collapsed={collapsed} onClick={handlePanelClick} />
             <NavItem icon={Briefcase} label={t('nav.startups') || 'Startups'} panel="startups" activePanel={activePanel} collapsed={collapsed} onClick={handlePanelClick} />
             <NavItem icon={Newspaper} label={t('nav.news') || 'Tech News'} panel="news" activePanel={activePanel} collapsed={collapsed} onClick={handlePanelClick} />
           </NavGroup>
