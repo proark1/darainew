@@ -80,6 +80,7 @@ const DEFAULT_SETTINGS: Omit<ProactiveSettings, 'user_id'> = {
   prayer_reminders_enabled: false,
   prayer_reminder_minutes: 10,
   evening_dua_enabled: false,
+  email_action_alerts_enabled: true,
 };
 
 export function useProactiveSettings() {
