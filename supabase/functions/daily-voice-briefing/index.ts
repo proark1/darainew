@@ -40,14 +40,38 @@ serve(async (req) => {
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-    // Fetch cross-module data in parallel
+    // Resolve household (family_agent_members) so the briefing can name spouses
+    // when 2+ adults are connected to the same household.
+    const { data: myGroups } = await db
+      .from("family_agent_members")
+      .select("group_id")
+      .eq("user_id", userId)
+      .eq("status", "accepted");
+    const groupIds = (myGroups || []).map((g: any) => g.group_id);
+    let household: { user_id: string; display_name: string }[] = [];
+    if (groupIds.length > 0) {
+      const { data: members } = await db
+        .from("family_agent_members")
+        .select("user_id")
+        .in("group_id", groupIds)
+        .eq("status", "accepted");
+      const ids = Array.from(new Set([userId, ...((members || []).map((m: any) => m.user_id))]));
+      const { data: profs } = await db.from("profiles").select("user_id, display_name").in("user_id", ids);
+      const map = new Map((profs || []).map((p: any) => [p.user_id, p.display_name || "Member"]));
+      household = ids.map(id => ({ user_id: id, display_name: map.get(id) || "Member" }));
+    }
+    const isShared = household.length >= 2;
+    const householdUserIds = isShared ? household.map(h => h.user_id) : [userId];
+    const ownerNameById = new Map(household.map(h => [h.user_id, (h.display_name || "").split(/\s+/)[0]]));
+
+    // Fetch cross-module data in parallel — across the household when shared
     const [tasksRes, eventsRes, emailsRes, contractsRes, contactsRes, checkinsRes, habitsRes, habitLogsRes, profileRes] = await Promise.all([
-      db.from("tasks").select("id, title, priority, completed, due_date").eq("user_id", userId).eq("completed", false).order("priority", { ascending: true }).limit(10),
-      db.from("events").select("id, title, start_time, end_time, location").eq("user_id", userId).gte("start_time", todayStart).lte("start_time", todayEnd).order("start_time"),
-      db.from("user_emails").select("id, from_name, subject, priority_score, is_read, category").eq("user_id", userId).eq("is_read", false).eq("user_archived", false).order("priority_score").limit(10),
-      db.from("contracts").select("id, name, renewal_date, cancellation_notice_days, auto_renews, cost_amount, cost_frequency").eq("user_id", userId).eq("is_active", true).not("renewal_date", "is", null).lte("renewal_date", sevenDaysFromNow).gte("renewal_date", today),
-      db.from("user_contacts").select("id, name, last_contacted_at").eq("user_id", userId).lt("last_contacted_at", thirtyDaysAgo).order("last_contacted_at").limit(5),
-      db.from("daily_checkins").select("mood, energy_level, sleep_hours").eq("user_id", userId).eq("checkin_date", new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().split("T")[0]).limit(1),
+      db.from("tasks").select("id, title, priority, completed, due_date, user_id").in("user_id", householdUserIds).eq("completed", false).order("priority", { ascending: true }).limit(15),
+      db.from("events").select("id, title, start_time, end_time, location, user_id").in("user_id", householdUserIds).gte("start_time", todayStart).lte("start_time", todayEnd).order("start_time"),
+      db.from("user_emails").select("id, from_name, subject, priority_score, is_read, category, user_id").in("user_id", householdUserIds).eq("is_read", false).eq("user_archived", false).order("priority_score").limit(15),
+      db.from("contracts").select("id, name, renewal_date, cancellation_notice_days, auto_renews, cost_amount, cost_frequency, user_id").in("user_id", householdUserIds).eq("is_active", true).not("renewal_date", "is", null).lte("renewal_date", sevenDaysFromNow).gte("renewal_date", today),
+      db.from("user_contacts").select("id, name, last_contacted_at, user_id").in("user_id", householdUserIds).lt("last_contacted_at", thirtyDaysAgo).order("last_contacted_at").limit(8),
+      db.from("daily_checkins").select("mood, energy_level, sleep_hours, user_id").in("user_id", householdUserIds).eq("checkin_date", new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().split("T")[0]),
       db.from("habits").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("is_active", true),
       db.from("habit_logs").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("log_date", today),
       db.from("profiles").select("display_name").eq("user_id", userId).single(),
@@ -58,13 +82,17 @@ serve(async (req) => {
     const unreadEmails = emailsRes.data || [];
     const contracts = contractsRes.data || [];
     const overdueContacts = contactsRes.data || [];
-    const yesterdayCheckin = checkinsRes.data?.[0] || null;
+    const yesterdayCheckin = checkinsRes.data?.find((c: any) => c.user_id === userId) || null;
     const totalHabits = habitsRes.count || 0;
     const habitsLogged = habitLogsRes.count || 0;
     const userName = profileRes.data?.display_name || "there";
 
     const highPriorityTasks = tasks.filter((t: any) => t.priority === "high");
     const priorityEmails = unreadEmails.filter((e: any) => e.priority_score <= 2);
+
+    // Helper: prefix with owner name when household is shared
+    const owner = (uid: string) => isShared ? `${ownerNameById.get(uid) || "Member"}'s ` : "";
+    const ownerSuffix = (uid: string) => isShared ? ` (${ownerNameById.get(uid) || "Member"})` : "";
 
     // Build highlights
     const highlights: any[] = [];
@@ -78,30 +106,41 @@ serve(async (req) => {
     // Build context for AI
     const contextParts: string[] = [];
     contextParts.push(`User name: ${userName}`);
+    if (isShared) {
+      contextParts.push(`Household members connected: ${household.map(h => h.display_name).join(", ")}. When mentioning tasks/events/emails/health/contacts that belong to a specific person, ALWAYS name them explicitly (e.g. "Sarah has a 10am dentist appointment", "Asad has 3 priority emails") instead of saying "you".`);
+    }
     contextParts.push(`Current time: ${now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`);
     contextParts.push(`Day: ${now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}`);
 
     if (tasks.length > 0) {
-      const topTasks = tasks.slice(0, 3).map((t: any) => `"${t.title}" (${t.priority} priority${t.due_date ? `, due ${t.due_date}` : ""})`).join(", ");
+      const topTasks = tasks.slice(0, 5).map((t: any) => `${owner(t.user_id)}"${t.title}" (${t.priority} priority${t.due_date ? `, due ${t.due_date}` : ""})`).join(", ");
       contextParts.push(`Pending tasks (${tasks.length} total): ${topTasks}`);
     }
     if (events.length > 0) {
-      const eventList = events.map((e: any) => `"${e.title}" at ${new Date(e.start_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}${e.location ? ` (${e.location})` : ""}`).join(", ");
+      const eventList = events.map((e: any) => `${owner(e.user_id)}"${e.title}" at ${new Date(e.start_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}${e.location ? ` (${e.location})` : ""}`).join(", ");
       contextParts.push(`Today's events: ${eventList}`);
     }
     if (unreadEmails.length > 0) {
-      const emailList = priorityEmails.slice(0, 3).map((e: any) => `"${e.subject}" from ${e.from_name || "unknown"}`).join(", ");
+      const emailList = priorityEmails.slice(0, 4).map((e: any) => `${owner(e.user_id)}"${e.subject}" from ${e.from_name || "unknown"}`).join(", ");
       contextParts.push(`Unread emails: ${unreadEmails.length} total. Priority: ${emailList || "none"}`);
     }
     if (contracts.length > 0) {
-      const contractList = contracts.map((c: any) => `"${c.name}" renews ${c.renewal_date}${c.cost_amount ? ` (${c.cost_amount}€/${c.cost_frequency})` : ""}`).join(", ");
+      const contractList = contracts.map((c: any) => `${owner(c.user_id)}"${c.name}" renews ${c.renewal_date}${c.cost_amount ? ` (${c.cost_amount}€/${c.cost_frequency})` : ""}`).join(", ");
       contextParts.push(`Contract alerts: ${contractList}`);
     }
     if (overdueContacts.length > 0) {
-      const contactList = overdueContacts.map((c: any) => c.name).join(", ");
+      const contactList = overdueContacts.map((c: any) => `${c.name}${ownerSuffix(c.user_id)}`).join(", ");
       contextParts.push(`Contacts to follow up: ${contactList}`);
     }
-    if (yesterdayCheckin) {
+    if (isShared) {
+      const checkinByUser = new Map((checkinsRes.data || []).map((c: any) => [c.user_id, c]));
+      const lines = household.map(h => {
+        const c: any = checkinByUser.get(h.user_id);
+        if (!c) return null;
+        return `${h.display_name}: mood=${c.mood || "unknown"}, energy=${c.energy_level || "unknown"}, sleep=${c.sleep_hours ? c.sleep_hours + "h" : "unknown"}`;
+      }).filter(Boolean);
+      if (lines.length > 0) contextParts.push(`Yesterday's check-ins (per person):\n${lines.join("\n")}`);
+    } else if (yesterdayCheckin) {
       contextParts.push(`Yesterday's check-in: mood=${yesterdayCheckin.mood || "unknown"}, energy=${yesterdayCheckin.energy_level || "unknown"}, sleep=${yesterdayCheckin.sleep_hours ? yesterdayCheckin.sleep_hours + "h" : "unknown"}`);
     }
     if (totalHabits > 0) {

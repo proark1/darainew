@@ -15,6 +15,11 @@ const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
 const TELEGRAM_API_KEY = Deno.env.get('TELEGRAM_API_KEY')!;
 
+interface HouseholdMember {
+  user_id: string;
+  display_name: string;
+}
+
 interface UserCtx {
   userId: string;
   chatId: number;
@@ -23,6 +28,46 @@ interface UserCtx {
   tz: string;
   nowLocal: Date;
   todayKey: string; // YYYY-MM-DD in user's tz
+  displayName: string;
+  household: HouseholdMember[]; // includes self; length>=2 means shared household
+}
+
+// Resolve all accepted family-agent members the user shares a group with,
+// including the user themselves. Used to attribute messages by name when
+// 2+ adults are connected (shared household context).
+async function resolveHousehold(supabase: any, userId: string): Promise<HouseholdMember[]> {
+  // Find groups the user belongs to (accepted)
+  const { data: myGroups } = await supabase
+    .from('family_agent_members')
+    .select('group_id')
+    .eq('user_id', userId)
+    .eq('status', 'accepted');
+
+  const groupIds = (myGroups || []).map((g: any) => g.group_id);
+  if (groupIds.length === 0) {
+    // Solo: just self
+    const { data: prof } = await supabase.from('profiles').select('display_name').eq('user_id', userId).maybeSingle();
+    return [{ user_id: userId, display_name: prof?.display_name || 'You' }];
+  }
+
+  const { data: members } = await supabase
+    .from('family_agent_members')
+    .select('user_id')
+    .in('group_id', groupIds)
+    .eq('status', 'accepted');
+
+  const userIds = Array.from(new Set([userId, ...((members || []).map((m: any) => m.user_id))]));
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('user_id, display_name')
+    .in('user_id', userIds);
+
+  const map = new Map((profiles || []).map((p: any) => [p.user_id, p.display_name || 'Member']));
+  return userIds.map(uid => ({ user_id: uid, display_name: map.get(uid) || 'Member' }));
+}
+
+function firstName(name: string): string {
+  return (name || '').trim().split(/\s+/)[0] || name;
 }
 
 function localNow(tz: string): { date: Date; hour: number; minute: number; dayKey: string; dow: number } {
@@ -177,6 +222,8 @@ async function birthdayReminders(supabase: any, ctx: UserCtx) {
   if (ctx.nowLocal.getHours() < 9 || ctx.nowLocal.getHours() > 11) return;
 
   const days: number[] = ctx.settings.birthday_reminder_days || [7, 1];
+  const isShared = ctx.household.length >= 2;
+  const ownerLabel = isShared ? ` (${firstName(ctx.displayName)}'s contact)` : '';
 
   const { data: contacts } = await supabase.from('user_contacts')
     .select('id, name, birth_date')
@@ -195,10 +242,10 @@ async function birthdayReminders(supabase: any, ctx: UserCtx) {
     if (await alreadySent(supabase, ctx.userId, 'birthday_reminder', key)) continue;
 
     const msg = daysLeft === 0
-      ? `🎂 Today is <b>${c.name}</b>'s birthday! Send them a quick message or voice note.`
+      ? `🎂 Today is <b>${c.name}</b>'s birthday!${ownerLabel} Send them a quick message or voice note.`
       : daysLeft === 1
-      ? `🎂 Tomorrow is <b>${c.name}</b>'s birthday. Got a gift or card ready?`
-      : `🎁 In <b>${daysLeft} days</b> it's <b>${c.name}</b>'s birthday. Time to plan a gift or card.`;
+      ? `🎂 Tomorrow is <b>${c.name}</b>'s birthday${ownerLabel}. Got a gift or card ready?`
+      : `🎁 In <b>${daysLeft} days</b> it's <b>${c.name}</b>'s birthday${ownerLabel}. Time to plan a gift or card.`;
     await send(ctx, msg);
     await logSent(supabase, ctx, 'birthday_reminder', key, msg);
   }
@@ -352,7 +399,7 @@ async function emailActionItems(supabase: any, ctx: UserCtx) {
     return `${icon[it.action_type] || '•'} <b>${from}</b>${urg}\n   ${it.action_summary}`;
   }).join('\n\n');
 
-  const msg = `📬 <b>${items.length} email${items.length > 1 ? 's' : ''} need your attention today:</b>\n\n${lines}`;
+  const msg = `📬 <b>${items.length} email${items.length > 1 ? 's' : ''} need ${ctx.household.length >= 2 ? firstName(ctx.displayName) + "'s" : 'your'} attention today:</b>\n\n${lines}`;
   await send(ctx, msg);
   await logSent(supabase, ctx, 'email_actions', key, msg);
 
@@ -394,7 +441,8 @@ async function staleContacts(supabase: any, ctx: UserCtx) {
 
   if (!contacts || contacts.length === 0) return;
   const names = contacts.map((c: any) => c.name).join(', ');
-  const msg = `👋 You haven't talked to <b>${names}</b> in a while. Want to send a quick voice note or schedule a call?`;
+  const subject = ctx.household.length >= 2 ? `<b>${firstName(ctx.displayName)}</b>, you` : 'You';
+  const msg = `👋 ${subject} haven't talked to <b>${names}</b> in a while. Want to send a quick voice note or schedule a call?`;
   await send(ctx, msg);
   await logSent(supabase, ctx, 'stale_contact', key, msg);
 }
@@ -443,9 +491,14 @@ Deno.serve(async (req) => {
       const now = localNow(tz);
       if (inQuietHours(now, s)) continue;
 
+      const household = await resolveHousehold(supabase, s.user_id);
+      const self = household.find(h => h.user_id === s.user_id);
+
       const ctx: UserCtx = {
         userId: s.user_id, chatId: Number(link.chat_id), settings: s,
         preferVoice: !!s.prefer_voice_replies, tz, nowLocal: now.date, todayKey: now.dayKey,
+        displayName: self?.display_name || 'You',
+        household,
       };
 
       const before = sent;
