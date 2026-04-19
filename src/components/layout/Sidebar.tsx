@@ -49,7 +49,7 @@ import { useUnreadEmailCount } from '@/hooks/useUnreadEmailCount';
 
 
 export type SidebarFilter = TaskCategory | 'all' | 'shared';
-export type ActivePanel = 'tasks' | 'social' | 'calendar' | 'assistant' | 'dashboard' | 'projects' | 'contacts' | 'contracts' | 'activity' | 'settings' | 'notes' | 'habits' | 'admin' | 'family' | 'islam' | 'properties' | 'startups' | 'news' | 'health' | 'email' | 'finances' | 'travel' | 'assets' | 'personal-health' | 'relationships-plus' | 'learning' | 'journal' | null;
+export type ActivePanel = 'tasks' | 'social' | 'calendar' | 'assistant' | 'dashboard' | 'projects' | 'contacts' | 'contracts' | 'activity' | 'settings' | 'notes' | 'habits' | 'admin' | 'family' | 'cooking' | 'islam' | 'properties' | 'startups' | 'news' | 'health' | 'email' | 'finances' | 'travel' | 'assets' | 'personal-health' | 'relationships-plus' | 'learning' | 'journal' | null;
 
 interface SidebarProps {
   onEditProfile?: () => void;

@@ -173,6 +173,7 @@ export function StandardMode({
   
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [activePanel, setActivePanel] = useState<ActivePanel>('tasks');
+  const [familyDefaultTab, setFamilyDefaultTab] = useState<string>('tasks');
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
   const isMobile = useIsMobile();
   const { celebrate } = useCelebration();
