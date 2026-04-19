@@ -256,6 +256,8 @@ export function useCalendarConnections() {
     loading,
     syncing,
     connectGoogle,
+    connectOutlook,
+    connectApple,
     syncCalendar,
     disconnectCalendar,
     toggleSync,
