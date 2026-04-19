@@ -441,7 +441,8 @@ async function staleContacts(supabase: any, ctx: UserCtx) {
 
   if (!contacts || contacts.length === 0) return;
   const names = contacts.map((c: any) => c.name).join(', ');
-  const msg = `👋 You haven't talked to <b>${names}</b> in a while. Want to send a quick voice note or schedule a call?`;
+  const subject = ctx.household.length >= 2 ? `<b>${firstName(ctx.displayName)}</b>, you` : 'You';
+  const msg = `👋 ${subject} haven't talked to <b>${names}</b> in a while. Want to send a quick voice note or schedule a call?`;
   await send(ctx, msg);
   await logSent(supabase, ctx, 'stale_contact', key, msg);
 }
