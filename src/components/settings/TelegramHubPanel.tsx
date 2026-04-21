@@ -57,6 +57,14 @@ interface DiagnosticsResult {
   timestamp: string;
 }
 
+interface DbStatusResult {
+  bot_state: { update_offset: number | null; updated_at: string | null; last_tick_seconds: number | null };
+  cron_job_exists: boolean | null;
+  link: { is_active: boolean; chat_id: number | null; telegram_username: string | null; linked_at: string | null } | null;
+  group_link: { is_active: boolean; chat_id: number | null; title: string | null; linked_at: string | null } | null;
+  checked_at: string;
+}
+
 export function TelegramHubPanel() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -74,6 +82,8 @@ export function TelegramHubPanel() {
   const [diagnostics, setDiagnostics] = useState<DiagnosticsResult | null>(null);
   const [diagnosing, setDiagnosing] = useState(false);
   const [rawDiagnostics, setRawDiagnostics] = useState<unknown>(null);
+  const [dbStatus, setDbStatus] = useState<DbStatusResult | null>(null);
+  const [dbChecking, setDbChecking] = useState(false);
 
   const fetchLink = async () => {
     if (!user) return;
@@ -142,6 +152,20 @@ export function TelegramHubPanel() {
   const copy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast({ title: `${label} copied` });
+  };
+
+  const checkDbStatus = async () => {
+    setDbChecking(true);
+    try {
+      // Cast: telegram_status is new; types haven't regenerated yet.
+      const { data, error } = await (supabase as unknown as { rpc: (fn: string) => Promise<{ data: unknown; error: unknown }> }).rpc('telegram_status');
+      if (error) throw error as Error;
+      setDbStatus(data as DbStatusResult);
+    } catch (e) {
+      toast({ title: 'DB check failed', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+    } finally {
+      setDbChecking(false);
+    }
   };
 
   const runDiagnostics = async (runPoll: boolean) => {
@@ -463,7 +487,43 @@ export function TelegramHubPanel() {
               {diagnosing ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <RefreshCw className="w-3 h-3 mr-2" />}
               Poll now
             </Button>
+            <Button size="sm" variant="outline" onClick={checkDbStatus} disabled={dbChecking}>
+              {dbChecking ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <Activity className="w-3 h-3 mr-2" />}
+              Check DB state
+            </Button>
           </div>
+
+          {dbStatus && (
+            <div className="space-y-2 pt-2 border-t border-border text-sm">
+              <p className="text-xs font-medium text-muted-foreground">Database state (deploys reliably via migration):</p>
+              <DiagnosticRow
+                label="Cron job scheduled"
+                ok={dbStatus.cron_job_exists === true}
+                detail={dbStatus.cron_job_exists === true
+                  ? 'poll-telegram-updates is in cron.job'
+                  : dbStatus.cron_job_exists === false
+                    ? 'NOT scheduled — migration 20260421090000 has not run'
+                    : 'unable to check (cron schema inaccessible)'}
+              />
+              <DiagnosticRow
+                label="Cron is ticking"
+                ok={dbStatus.bot_state.last_tick_seconds !== null && dbStatus.bot_state.last_tick_seconds < 180}
+                detail={dbStatus.bot_state.updated_at
+                  ? `last tick ${dbStatus.bot_state.last_tick_seconds}s ago (offset ${dbStatus.bot_state.update_offset})`
+                  : 'bot_state never updated — cron has never successfully run'}
+              />
+              <DiagnosticRow
+                label="Personal link"
+                ok={dbStatus.link?.is_active === true}
+                detail={dbStatus.link?.is_active
+                  ? `chat_id ${dbStatus.link.chat_id} @${dbStatus.link.telegram_username ?? '—'}`
+                  : dbStatus.link
+                    ? 'row exists, is_active=false'
+                    : 'no link row'}
+              />
+              <p className="text-xs text-muted-foreground pt-1">Checked {new Date(dbStatus.checked_at).toLocaleTimeString()}</p>
+            </div>
+          )}
 
           {diagnostics && (
             <div className="space-y-2 pt-2 border-t border-border text-sm">
