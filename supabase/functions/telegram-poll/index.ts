@@ -152,9 +152,19 @@ async function callDori(userId: string, message: string, supabaseUrl: string, se
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
-  // Internal/cron-only: require service role key
-  const auth = req.headers.get('Authorization');
-  if (auth !== `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`) {
+  // Internal/cron-only. The gateway does not verify JWT (config.toml sets
+  // verify_jwt = false), so this in-function check is the only gate. Accept
+  // the service role key or a shared TELEGRAM_CRON_SECRET — never the public
+  // anon key, which is bundled in the frontend and would let anyone trigger
+  // long-polling + AI transcription.
+  const auth = req.headers.get('Authorization') ?? '';
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const cronSecret = Deno.env.get('TELEGRAM_CRON_SECRET') ?? '';
+  const token = auth.replace(/^Bearer\s+/i, '').trim();
+  const authorized =
+    (serviceKey && token === serviceKey) ||
+    (cronSecret && token === cronSecret);
+  if (!authorized) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -164,7 +174,6 @@ Deno.serve(async (req) => {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
   const TELEGRAM_API_KEY = Deno.env.get('TELEGRAM_API_KEY')!;
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, serviceKey);
 
   const { data: state } = await supabase
@@ -175,6 +184,7 @@ Deno.serve(async (req) => {
 
   let currentOffset = state?.update_offset ?? 0;
   let processed = 0;
+  console.log(`[telegram-poll] tick: offset=${currentOffset}`);
 
   while (Date.now() - startTime < MAX_RUNTIME_MS - MIN_REMAINING_MS) {
     const remainingMs = MAX_RUNTIME_MS - (Date.now() - startTime);

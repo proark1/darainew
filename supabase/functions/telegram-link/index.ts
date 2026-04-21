@@ -19,9 +19,14 @@ async function getBotUsername(lovableKey: string, tgKey: string): Promise<string
       },
       body: '{}',
     });
-    const data = await r.json();
+    const data = await r.json().catch(() => null);
+    if (!r.ok) {
+      console.error('[telegram-link] getMe failed', r.status, data);
+      return null;
+    }
     return data?.result?.username ?? null;
-  } catch {
+  } catch (e) {
+    console.error('[telegram-link] getMe threw', e);
     return null;
   }
 }
