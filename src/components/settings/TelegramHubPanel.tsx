@@ -147,6 +147,19 @@ export function TelegramHubPanel() {
     try {
       const { data, error } = await supabase.functions.invoke('telegram-link', { body: { action: 'diagnose', runPoll } });
       if (error) throw error;
+      // If the deployed function doesn't yet have the 'diagnose' branch, it
+      // will fall through to the generate path and return {code, deepLink}.
+      // Detect that and show a clear message instead of crashing on undefined.
+      if (!data || !data.botInfo || !data.envVars) {
+        toast({
+          title: 'Diagnostics not ready yet',
+          description: 'The backend is still deploying the diagnose endpoint. Try again in a minute.',
+          variant: 'destructive',
+        });
+        // Re-fetch links in case the fallthrough upsert disconnected us.
+        await fetchLink();
+        return;
+      }
       setDiagnostics(data as DiagnosticsResult);
       if (runPoll) await fetchLink();
     } catch (e) {

@@ -59,6 +59,17 @@ Deno.serve(async (req) => {
     const action = body.action || 'generate';
     const scope = body.scope || 'personal'; // 'personal' | 'group'
 
+    // Reject unknown actions explicitly so we don't silently fall through to
+    // the generate path (which upserts is_active:false and can disconnect a
+    // linked user when a newer frontend calls an action the deployed backend
+    // doesn't yet understand).
+    const KNOWN_ACTIONS = new Set(['generate', 'unlink', 'diagnose']);
+    if (!KNOWN_ACTIONS.has(action)) {
+      return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (action === 'unlink') {
       if (scope === 'group') {
         await admin.from('telegram_group_links').delete().eq('owner_user_id', user.id);
