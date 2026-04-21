@@ -1248,7 +1248,7 @@ serve(async (req) => {
       userId = telegramUserId;
     } else {
       const supabase = createClient(supabaseUrl, supabaseKey);
-      const { data, error } = await supabase.auth.getClaims(token);
+      const { data, error } = await (supabase.auth as any).getClaims(token);
       if (error || !data?.claims?.sub) throw new Error('No user');
       userId = data.claims.sub;
     }
