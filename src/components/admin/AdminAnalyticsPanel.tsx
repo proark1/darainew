@@ -197,7 +197,7 @@ export function AdminAnalyticsPanel({ userId }: AdminAnalyticsPanelProps) {
           </TabsContent>
 
           <TabsContent value="users" className="mt-0">
-            <UserAnalyticsTable userStats={userStats} />
+            <UserAnalyticsTable userStats={userStats} onChanged={handleRefresh} />
           </TabsContent>
 
           <TabsContent value="events" className="mt-0">
