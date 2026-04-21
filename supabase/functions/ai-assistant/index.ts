@@ -97,7 +97,8 @@ serve(async (req) => {
       global: { headers: { Authorization: authHeader } }
     });
     const token = authHeader.replace(/^Bearer\s+/i, '');
-    const { data, error } = await supabase.auth.getClaims(token);
+    // getClaims exists at runtime on supabase-js v2 in Deno; cast to any to bypass stale lib types.
+    const { data, error } = await (supabase.auth as any).getClaims(token);
     if (error || !data?.claims?.sub) throw new Error('No user');
     userId = data.claims.sub;
   } catch (e) {
