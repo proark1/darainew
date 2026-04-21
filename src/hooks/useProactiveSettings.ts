@@ -96,9 +96,9 @@ export function useProactiveSettings() {
         .from('proactive_settings')
         .select('*')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') {
+      if (error) {
         console.error('Error fetching proactive settings:', error);
       }
 
