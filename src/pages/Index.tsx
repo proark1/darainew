@@ -310,9 +310,13 @@ const Index = () => {
 
   const sendLockRef = useRef(false);
 
-  // Wake word detection - "Hey Dori" opens voice mode
+  // Wake word detection - "Hey Dori" opens voice mode.
+  // IMPORTANT: disabled by default to avoid the microphone permission
+  // prompt firing automatically on page load (which crashes mobile Safari).
+  // The user can opt-in via voice mode itself; we no longer auto-listen
+  // for the wake word on the dashboard.
   const { isListening: isWakeWordListening } = useWakeWordDetection({
-    enabled: mode === 'standard', // Only listen when not already in voice mode
+    enabled: false,
     onWakeWordDetected: useCallback(() => {
       console.log('[WakeWord] "Hey Dori" detected, opening voice mode');
       setMode('ghost');
