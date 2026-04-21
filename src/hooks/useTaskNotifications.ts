@@ -212,9 +212,8 @@ export function useTaskNotifications({
   }, [isNative, playNotificationSound, scheduleLocalNotification]);
 
   useEffect(() => {
-    if (!enabled) return;
-    requestPermission();
-  }, [enabled, requestPermission]);
+    permissionGranted.current = false;
+  }, [enabled]);
 
   useEffect(() => {
     if (!enabled || !permissionGranted.current) return;
