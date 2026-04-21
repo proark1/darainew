@@ -124,7 +124,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.telegram-diagnostics]
-verify_jwt = true
+verify_jwt = false
 
 [functions.dori-proactive]
 verify_jwt = false
