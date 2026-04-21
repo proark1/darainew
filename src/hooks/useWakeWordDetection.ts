@@ -181,18 +181,20 @@ export const useWakeWordDetection = ({
     isActiveRef.current = false;
   }, []);
 
-  // Start/stop based on enabled prop
+  // NOTE: We intentionally do NOT auto-start on mount.
+  // Calling recognition.start() without a user gesture triggers the
+  // microphone permission prompt on page load (especially on mobile),
+  // and on iOS Safari can crash the tab. Consumers must call
+  // startListening() from an explicit user interaction (e.g. a toggle
+  // in settings or a button press).
   useEffect(() => {
-    if (enabled && isSupported) {
-      startListening();
-    } else {
+    if (!enabled) {
       stopListening();
     }
-
     return () => {
       stopListening();
     };
-  }, [enabled, isSupported, startListening, stopListening]);
+  }, [enabled, stopListening]);
 
   return {
     isListening,
