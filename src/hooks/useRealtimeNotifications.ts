@@ -112,17 +112,6 @@ export function useRealtimeNotifications(userId: string | undefined) {
     }
   }, [userId]);
 
-  // Request browser notification permission
-  const requestPermission = useCallback(async () => {
-    const BrowserNotification = (typeof window !== 'undefined'
-      ? (window as any).Notification
-      : undefined) as any;
-
-    if (BrowserNotification?.permission === 'default' && typeof BrowserNotification.requestPermission === 'function') {
-      await BrowserNotification.requestPermission();
-    }
-  }, []);
-
   // Play notification sound
   const playNotificationSound = useCallback(() => {
     try {
@@ -218,7 +207,6 @@ export function useRealtimeNotifications(userId: string | undefined) {
     markAllRead,
     deleteNotification,
     clearAll,
-    requestPermission,
     refetch: fetchNotifications,
   };
 }

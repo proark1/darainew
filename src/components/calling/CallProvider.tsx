@@ -7,7 +7,6 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   showCallNotification, 
   stopRingtone,
-  requestNotificationPermission,
   setupServiceWorkerListener
 } from '@/lib/notificationSounds';
 import { supabase } from '@/integrations/supabase/client';
