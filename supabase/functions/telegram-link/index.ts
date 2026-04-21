@@ -68,6 +68,89 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    if (action === 'diagnose') {
+      // Surface status for Settings → Telegram → Diagnose. Folded into this
+      // function (rather than a separate one) because it is already deployed
+      // and has the same env vars + admin client on hand.
+      const runPoll = body.runPoll === true;
+
+      // 1. getMe — validates bot token + gateway reachability
+      let botInfo: { ok: boolean; username?: string; first_name?: string; id?: number; error?: string } = { ok: false };
+      if (LOVABLE_API_KEY && TELEGRAM_API_KEY) {
+        try {
+          const r = await fetch(`${GATEWAY_URL}/getMe`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+              'X-Connection-Api-Key': TELEGRAM_API_KEY,
+              'Content-Type': 'application/json',
+            },
+            body: '{}',
+          });
+          const data = await r.json().catch(() => null);
+          if (!r.ok) {
+            botInfo = { ok: false, error: `gateway ${r.status}: ${JSON.stringify(data).slice(0, 200)}` };
+          } else if (data?.result) {
+            botInfo = { ok: true, username: data.result.username, first_name: data.result.first_name, id: data.result.id };
+          } else {
+            botInfo = { ok: false, error: 'unexpected response shape' };
+          }
+        } catch (e) {
+          botInfo = { ok: false, error: e instanceof Error ? e.message : String(e) };
+        }
+      } else {
+        botInfo = { ok: false, error: 'missing LOVABLE_API_KEY or TELEGRAM_API_KEY' };
+      }
+
+      // 2. bot_state — cron freshness
+      const { data: botState } = await admin
+        .from('telegram_bot_state')
+        .select('update_offset, updated_at')
+        .eq('id', 1)
+        .maybeSingle();
+      const lastTickSeconds = botState?.updated_at
+        ? Math.round((Date.now() - new Date(botState.updated_at).getTime()) / 1000)
+        : null;
+
+      // 3. user's links
+      const [{ data: link }, { data: group }] = await Promise.all([
+        admin.from('telegram_links')
+          .select('is_active, chat_id, telegram_username, telegram_first_name, linked_at')
+          .eq('user_id', user.id).maybeSingle(),
+        admin.from('telegram_group_links')
+          .select('is_active, chat_id, title, linked_at')
+          .eq('owner_user_id', user.id).maybeSingle(),
+      ]);
+
+      // 4. optional manual poll
+      let pollResult: { ok: boolean; status?: number; body?: unknown; error?: string } | null = null;
+      if (runPoll) {
+        try {
+          const r = await fetch(`${supabaseUrl}/functions/v1/telegram-poll`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+          });
+          const text = await r.text();
+          let parsed: unknown = text;
+          try { parsed = JSON.parse(text); } catch { /* keep as text */ }
+          pollResult = { ok: r.ok, status: r.status, body: parsed };
+        } catch (e) {
+          pollResult = { ok: false, error: e instanceof Error ? e.message : String(e) };
+        }
+      }
+
+      return new Response(JSON.stringify({
+        envVars: { LOVABLE_API_KEY: Boolean(LOVABLE_API_KEY), TELEGRAM_API_KEY: Boolean(TELEGRAM_API_KEY) },
+        botInfo,
+        botState: botState ? { ...botState, lastTickSeconds } : null,
+        link,
+        group,
+        pollResult,
+        timestamp: new Date().toISOString(),
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     // Generate code
     const code = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
     const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();

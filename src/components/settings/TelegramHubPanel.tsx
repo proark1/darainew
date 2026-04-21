@@ -145,7 +145,7 @@ export function TelegramHubPanel() {
   const runDiagnostics = async (runPoll: boolean) => {
     setDiagnosing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('telegram-diagnostics', { body: { runPoll } });
+      const { data, error } = await supabase.functions.invoke('telegram-link', { body: { action: 'diagnose', runPoll } });
       if (error) throw error;
       setDiagnostics(data as DiagnosticsResult);
       if (runPoll) await fetchLink();
