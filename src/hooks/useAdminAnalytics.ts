@@ -70,13 +70,15 @@ export function useAdminAnalytics() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from('admin_users')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
+      const { data, error } = await supabase.rpc('is_admin', {
+        check_user_id: user.id,
+      });
 
-      setIsAdmin(!!data && !error);
+      if (error) {
+        console.error('Error checking admin access:', error);
+      }
+
+      setIsAdmin(Boolean(data));
       setLoading(false);
     };
 
