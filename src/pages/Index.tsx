@@ -230,7 +230,7 @@ const Index = () => {
   const { todayHabits, createHabit, logHabit, deleteHabit } = useHabits(user?.id);
 
   // Emails for AI context
-  const { allEmails, unreadCount: unreadEmailCount } = useEmails();
+  const { allEmails, unreadCount: unreadEmailCount } = useEmails({ enabled: false, autoSync: false });
 
   // Contract reminders - creates tasks for contracts ending within 3 months
   useContractReminders({

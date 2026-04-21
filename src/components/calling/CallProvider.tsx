@@ -7,7 +7,6 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   showCallNotification, 
   stopRingtone,
-  requestNotificationPermission,
   setupServiceWorkerListener
 } from '@/lib/notificationSounds';
 import { supabase } from '@/integrations/supabase/client';
@@ -50,11 +49,6 @@ export function CallProvider({ userId, userName, children }: CallProviderProps) 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [incomingCallerName, setIncomingCallerName] = useState('');
   const [pendingSession, setPendingSession] = useState<CallSession | null>(null);
-
-  // Request notification permission on mount
-  useEffect(() => {
-    requestNotificationPermission();
-  }, []);
 
   const handleIncomingCall = useCallback((session: CallSession, callerName: string) => {
     console.log('Incoming call from:', callerName);

@@ -175,11 +175,9 @@ export function useEventNotifications({
     notifiedEvents.current.set(event.id, eventNotifications);
   }, [isNative, playNotificationSound]);
 
-  // Request permission on mount
   useEffect(() => {
-    if (!enabled) return;
-    requestPermission();
-  }, [enabled, requestPermission]);
+    permissionGranted.current = false;
+  }, [enabled]);
 
   // Check events periodically
   useEffect(() => {

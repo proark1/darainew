@@ -43,7 +43,7 @@ import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { showMessageNotification, requestNotificationPermission } from '@/lib/notificationSounds';
+import { showMessageNotification } from '@/lib/notificationSounds';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 interface TeamChatPanelProps {
@@ -105,11 +105,6 @@ export function TeamChatPanel({ userId }: TeamChatPanelProps) {
     userId,
     userName: 'You',
   });
-
-  // Request notification permission on mount
-  useEffect(() => {
-    requestNotificationPermission();
-  }, []);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {

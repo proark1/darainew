@@ -45,10 +45,15 @@ export type EmailView = 'smart' | 'all' | 'flagged';
 const SYNC_INTERVAL = 5 * 60 * 1000;
 const SYNC_KEY = 'email_last_sync';
 
-export function useEmails() {
+interface UseEmailsOptions {
+  enabled?: boolean;
+  autoSync?: boolean;
+}
+
+export function useEmails({ enabled = true, autoSync = true }: UseEmailsOptions = {}) {
   const { user } = useAuth();
   const [emails, setEmails] = useState<Email[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [syncing, setSyncing] = useState(false);
   const [view, setView] = useState<EmailView>('smart');
   const [searchQuery, setSearchQuery] = useState('');
@@ -59,7 +64,11 @@ export function useEmails() {
   const [handledToday, setHandledToday] = useState(0);
 
   const fetchEmails = useCallback(async () => {
-    if (!user) return;
+    if (!user || !enabled) {
+      setEmails([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -106,11 +115,11 @@ export function useEmails() {
   }, [user, syncing, fetchEmails]);
 
   useEffect(() => {
-    if (!user || autoSyncDone.current) return;
+    if (!enabled || !autoSync || !user || autoSyncDone.current) return;
     autoSyncDone.current = true;
     const lastSync = parseInt(localStorage.getItem(SYNC_KEY) || '0');
     if (Date.now() - lastSync > SYNC_INTERVAL) syncEmails();
-  }, [user, syncEmails]);
+  }, [enabled, autoSync, user, syncEmails]);
 
   const lastSyncTime = useMemo(() => {
     const ts = parseInt(localStorage.getItem(SYNC_KEY) || '0');
