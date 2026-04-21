@@ -8,12 +8,12 @@ interface PresenceState {
   }[];
 }
 
-export function useOnlinePresence(userId: string | null, spaceMemberIds: string[] = []) {
+export function useOnlinePresence(userId: string | null, spaceMemberIds: string[] = [], enabled = true) {
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
   const [channelRef, setChannelRef] = useState<ReturnType<typeof supabase.channel> | null>(null);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !enabled) return;
 
     const channel = supabase.channel('online-presence', {
       config: {
@@ -67,7 +67,7 @@ export function useOnlinePresence(userId: string | null, spaceMemberIds: string[
       channel.unsubscribe();
       supabase.removeChannel(channel);
     };
-  }, [userId]);
+  }, [userId, enabled]);
 
   const isOnline = useCallback((memberId: string) => {
     return onlineUsers.has(memberId);
