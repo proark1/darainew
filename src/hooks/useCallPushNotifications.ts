@@ -23,9 +23,10 @@ const loadPushNotifications = async () => {
 interface UseCallPushNotificationsOptions {
   userId: string | null;
   onIncomingCall?: (callerId: string, callerName: string, sessionId: string) => void;
+  enabled?: boolean;
 }
 
-export function useCallPushNotifications({ userId, onIncomingCall }: UseCallPushNotificationsOptions) {
+export function useCallPushNotifications({ userId, onIncomingCall, enabled = true }: UseCallPushNotificationsOptions) {
   const { toast } = useToast();
   const tokenRef = useRef<string | null>(null);
 
@@ -138,14 +139,14 @@ export function useCallPushNotifications({ userId, onIncomingCall }: UseCallPush
   }, []);
 
   useEffect(() => {
-    if (userId) {
+    if (enabled && userId) {
       initializePushNotifications();
     }
 
     return () => {
       cleanup();
     };
-  }, [userId, initializePushNotifications, cleanup]);
+  }, [userId, enabled, initializePushNotifications, cleanup]);
 
   return {
     token: tokenRef.current,

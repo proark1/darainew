@@ -18,9 +18,10 @@ interface CallSession {
 interface UseWebRTCCallOptions {
   userId: string;
   onIncomingCall?: (session: CallSession, callerName: string) => void;
+  enabled?: boolean;
 }
 
-export function useWebRTCCall({ userId, onIncomingCall }: UseWebRTCCallOptions) {
+export function useWebRTCCall({ userId, onIncomingCall, enabled = true }: UseWebRTCCallOptions) {
   const { toast } = useToast();
   const [callStatus, setCallStatus] = useState<CallStatus>('idle');
   const [callType, setCallType] = useState<CallType>('video');
@@ -602,7 +603,7 @@ export function useWebRTCCall({ userId, onIncomingCall }: UseWebRTCCallOptions) 
 
   // Listen for incoming calls
   useEffect(() => {
-    if (!userId) {
+    if (!enabled || !userId) {
       console.log('[WebRTC] No userId, skipping incoming call subscription');
       return;
     }
@@ -657,7 +658,7 @@ export function useWebRTCCall({ userId, onIncomingCall }: UseWebRTCCallOptions) 
       channel.unsubscribe();
       supabase.removeChannel(channel);
     };
-  }, [userId, callStatus, onIncomingCall]);
+  }, [userId, enabled, callStatus, onIncomingCall]);
 
   return {
     callStatus,
