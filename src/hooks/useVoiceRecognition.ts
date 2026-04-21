@@ -54,6 +54,79 @@ export function useVoiceRecognition({
   const onTranscriptRef = useRef(onTranscript);
   const onErrorRef = useRef(onError);
 
+  const ensureRecognition = useCallback(() => {
+    if (recognitionRef.current) return recognitionRef.current;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return null;
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = continuous;
+    recognition.interimResults = true;
+    recognition.lang = lang;
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      if (isPausedRef.current) return;
+
+      let interimTranscript = '';
+      let finalTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          finalTranscript += result[0].transcript;
+        } else {
+          interimTranscript += result[0].transcript;
+        }
+      }
+
+      const currentTranscript = finalTranscript || interimTranscript;
+      setTranscript(currentTranscript);
+      onTranscriptRef.current?.(currentTranscript, !!finalTranscript);
+    };
+
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      console.error('Speech recognition error:', event.error);
+      if (event.error !== 'no-speech' && event.error !== 'aborted') {
+        onErrorRef.current?.(event.error);
+      }
+      if (event.error !== 'no-speech' && event.error !== 'aborted') {
+        setIsListening(false);
+      }
+    };
+
+    recognition.onend = () => {
+      if (isPausedRef.current) return;
+
+      if (continuous && shouldRestartRef.current) {
+        setTimeout(() => {
+          if (isPausedRef.current) return;
+          if (shouldRestartRef.current && recognitionRef.current) {
+            try {
+              recognitionRef.current.start();
+            } catch {
+              setTimeout(() => {
+                if (isPausedRef.current) return;
+                if (shouldRestartRef.current && recognitionRef.current) {
+                  try {
+                    recognitionRef.current.start();
+                  } catch {
+                    setIsListening(false);
+                  }
+                }
+              }, 500);
+            }
+          }
+        }, 100);
+      } else {
+        setIsListening(false);
+      }
+    };
+
+    recognitionRef.current = recognition;
+    return recognition;
+  }, [continuous, lang]);
+
   // Keep refs in sync
   useEffect(() => {
     onTranscriptRef.current = onTranscript;
@@ -68,91 +141,17 @@ export function useVoiceRecognition({
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     setIsSupported(!!SpeechRecognition);
 
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = continuous;
-      recognition.interimResults = true;
-      recognition.lang = lang;
-
-      recognition.onresult = (event: SpeechRecognitionEvent) => {
-        // Don't process results if paused (AI is speaking)
-        if (isPausedRef.current) return;
-
-        let interimTranscript = '';
-        let finalTranscript = '';
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          if (result.isFinal) {
-            finalTranscript += result[0].transcript;
-          } else {
-            interimTranscript += result[0].transcript;
-          }
-        }
-
-        const currentTranscript = finalTranscript || interimTranscript;
-        setTranscript(currentTranscript);
-        onTranscriptRef.current?.(currentTranscript, !!finalTranscript);
-      };
-
-      recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-        console.error('Speech recognition error:', event.error);
-        if (event.error !== 'no-speech' && event.error !== 'aborted') {
-          onErrorRef.current?.(event.error);
-        }
-        // Don't set isListening to false on no-speech, just restart
-        if (event.error === 'no-speech' && shouldRestartRef.current) {
-          // Will be restarted in onend
-        } else if (event.error !== 'no-speech' && event.error !== 'aborted') {
-          setIsListening(false);
-        }
-      };
-
-      recognition.onend = () => {
-        // If we're paused (e.g. AI is speaking or mic muted), do NOT auto-restart.
-        // We'll resume explicitly via resumeListening().
-        if (isPausedRef.current) return;
-
-        // Always restart if continuous and should be listening
-        if (continuous && shouldRestartRef.current) {
-          setTimeout(() => {
-            if (isPausedRef.current) return;
-            if (shouldRestartRef.current && recognitionRef.current) {
-              try {
-                recognitionRef.current.start();
-              } catch (e) {
-                console.log('Recognition restart delayed, will retry');
-                // Try again after a short delay
-                setTimeout(() => {
-                  if (isPausedRef.current) return;
-                  if (shouldRestartRef.current && recognitionRef.current) {
-                    try {
-                      recognitionRef.current.start();
-                    } catch (e2) {
-                      setIsListening(false);
-                    }
-                  }
-                }, 500);
-              }
-            }
-          }, 100);
-        } else {
-          setIsListening(false);
-        }
-      };
-
-      recognitionRef.current = recognition;
-    }
-
     return () => {
       if (recognitionRef.current) {
         recognitionRef.current.abort();
+        recognitionRef.current = null;
       }
     };
-  }, [continuous, lang]);
+  }, []);
 
   const startListening = useCallback(() => {
-    if (!recognitionRef.current) {
+    const recognition = ensureRecognition();
+    if (!recognition) {
       onError?.('Speech recognition not supported');
       return;
     }
@@ -160,14 +159,14 @@ export function useVoiceRecognition({
     setTranscript('');
     shouldRestartRef.current = true;
     try {
-      recognitionRef.current.start();
+      recognition.start();
       setIsListening(true);
       setIsPaused(false);
     } catch (e) {
       console.error('Failed to start recognition:', e);
       onError?.('Failed to start voice recognition');
     }
-  }, [onError]);
+  }, [ensureRecognition, onError]);
 
   const stopListening = useCallback(() => {
     shouldRestartRef.current = false;
