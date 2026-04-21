@@ -16,6 +16,9 @@ import {
   CheckCircle2,
   AtSign,
   Bot,
+  Activity,
+  XCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -43,6 +46,16 @@ interface GroupLink {
 // app stays correct if the bot is renamed.
 const DEFAULT_BOT_USERNAME = 'daraibot_bot';
 
+interface DiagnosticsResult {
+  envVars: { LOVABLE_API_KEY: boolean; TELEGRAM_API_KEY: boolean };
+  botInfo: { ok: boolean; username?: string; first_name?: string; id?: number; error?: string };
+  botState: { update_offset: number; updated_at: string; lastTickSeconds: number | null } | null;
+  link: { is_active: boolean; chat_id: number | null; telegram_username: string | null; linked_at: string | null } | null;
+  group: { is_active: boolean; chat_id: number | null; title: string | null; linked_at: string | null } | null;
+  pollResult: { ok: boolean; status?: number; body?: unknown; error?: string } | null;
+  timestamp: string;
+}
+
 export function TelegramHubPanel() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -57,6 +70,8 @@ export function TelegramHubPanel() {
   const [groupAddUrl, setGroupAddUrl] = useState<string | null>(null);
   const [botUsername, setBotUsername] = useState<string>(DEFAULT_BOT_USERNAME);
   const [error, setError] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<DiagnosticsResult | null>(null);
+  const [diagnosing, setDiagnosing] = useState(false);
 
   const fetchLink = async () => {
     if (!user) return;
@@ -125,6 +140,20 @@ export function TelegramHubPanel() {
   const copy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast({ title: `${label} copied` });
+  };
+
+  const runDiagnostics = async (runPoll: boolean) => {
+    setDiagnosing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('telegram-diagnostics', { body: { runPoll } });
+      if (error) throw error;
+      setDiagnostics(data as DiagnosticsResult);
+      if (runPoll) await fetchLink();
+    } catch (e) {
+      toast({ title: 'Diagnostics failed', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+    } finally {
+      setDiagnosing(false);
+    }
   };
 
   if (loading) {
@@ -395,6 +424,88 @@ export function TelegramHubPanel() {
         </CardContent>
       </Card>
 
+      {/* Diagnostics */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Activity className="w-4 h-4 text-primary" />
+            Diagnose
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Not getting a reply from the bot? Run diagnostics to see what's broken, or force a poll cycle to process any queued messages.
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            <Button size="sm" variant="outline" onClick={() => runDiagnostics(false)} disabled={diagnosing}>
+              {diagnosing ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <Activity className="w-3 h-3 mr-2" />}
+              Run diagnostics
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => runDiagnostics(true)} disabled={diagnosing}>
+              {diagnosing ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <RefreshCw className="w-3 h-3 mr-2" />}
+              Poll now
+            </Button>
+          </div>
+
+          {diagnostics && (
+            <div className="space-y-2 pt-2 border-t border-border text-sm">
+              <DiagnosticRow
+                label="Bot token valid (getMe)"
+                ok={diagnostics.botInfo.ok}
+                detail={diagnostics.botInfo.ok
+                  ? `@${diagnostics.botInfo.username} (${diagnostics.botInfo.first_name})`
+                  : diagnostics.botInfo.error ?? 'failed'}
+              />
+              <DiagnosticRow
+                label="LOVABLE_API_KEY set"
+                ok={diagnostics.envVars.LOVABLE_API_KEY}
+                detail={diagnostics.envVars.LOVABLE_API_KEY ? 'yes' : 'missing — set in Edge Function secrets'}
+              />
+              <DiagnosticRow
+                label="TELEGRAM_API_KEY set"
+                ok={diagnostics.envVars.TELEGRAM_API_KEY}
+                detail={diagnostics.envVars.TELEGRAM_API_KEY ? 'yes' : 'missing — set in Edge Function secrets'}
+              />
+              <DiagnosticRow
+                label="Cron is running"
+                ok={diagnostics.botState?.lastTickSeconds !== null && diagnostics.botState !== null && diagnostics.botState.lastTickSeconds < 180}
+                detail={diagnostics.botState?.updated_at
+                  ? `last tick ${diagnostics.botState.lastTickSeconds}s ago (offset ${diagnostics.botState.update_offset})`
+                  : 'no bot_state row — migrations may not have run'}
+              />
+              <DiagnosticRow
+                label="Personal link active"
+                ok={diagnostics.link?.is_active === true}
+                detail={diagnostics.link?.is_active
+                  ? `chat_id ${diagnostics.link.chat_id} @${diagnostics.link.telegram_username ?? '—'}`
+                  : diagnostics.link ? 'row exists but is_active=false (code not consumed yet)' : 'no link row — click Connect Telegram'}
+              />
+              {diagnostics.group && (
+                <DiagnosticRow
+                  label="Family group link"
+                  ok={diagnostics.group.is_active === true}
+                  detail={diagnostics.group.is_active
+                    ? `chat_id ${diagnostics.group.chat_id} (${diagnostics.group.title ?? 'untitled'})`
+                    : 'row exists but is_active=false'}
+                />
+              )}
+              {diagnostics.pollResult && (
+                <DiagnosticRow
+                  label="Manual poll"
+                  ok={diagnostics.pollResult.ok}
+                  detail={diagnostics.pollResult.ok
+                    ? `ok (${JSON.stringify(diagnostics.pollResult.body).slice(0, 100)})`
+                    : `http ${diagnostics.pollResult.status ?? '?'}: ${diagnostics.pollResult.error ?? JSON.stringify(diagnostics.pollResult.body).slice(0, 100)}`}
+                />
+              )}
+              <p className="text-xs text-muted-foreground pt-1">
+                Checked {new Date(diagnostics.timestamp).toLocaleTimeString()}
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Troubleshooting */}
       <Card>
         <CardHeader>
@@ -440,6 +551,20 @@ export function TelegramHubPanel() {
       <div className="flex items-start gap-2 text-xs text-muted-foreground border-t border-border pt-4">
         <ShieldCheck className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary/70" />
         <p>Dori only reads messages you send to it directly or in linked groups, and only acts on items addressed to it. You can disconnect at any time.</p>
+      </div>
+    </div>
+  );
+}
+
+function DiagnosticRow({ label, ok, detail }: { label: string; ok: boolean; detail: string }) {
+  return (
+    <div className="flex items-start gap-2">
+      {ok
+        ? <CheckCircle2 className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+        : <XCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />}
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium">{label}</div>
+        <div className="text-xs text-muted-foreground break-words">{detail}</div>
       </div>
     </div>
   );
