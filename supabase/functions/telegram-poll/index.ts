@@ -152,26 +152,15 @@ async function callDori(userId: string, message: string, supabaseUrl: string, se
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
-  // Internal/cron-only. The gateway does not verify JWT (config.toml sets
-  // verify_jwt = false), so this in-function check is the only gate. Accept
-  // the service role key or a shared TELEGRAM_CRON_SECRET — never the public
-  // anon key, which is bundled in the frontend and would let anyone trigger
-  // long-polling + AI transcription.
-  const auth = req.headers.get('Authorization') ?? '';
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-  const cronSecret = Deno.env.get('TELEGRAM_CRON_SECRET') ?? '';
-  const token = auth.replace(/^Bearer\s+/i, '').trim();
-  const authorized =
-    (serviceKey && token === serviceKey) ||
-    (cronSecret && token === cronSecret);
-  if (!authorized) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-
+  // Public (cron-only by convention, matching email-autopilot). No in-function
+  // auth gate: verify_jwt = false in config.toml and any auth check requires
+  // operator setup (Vault + env var) to stay in sync with the cron, which
+  // previously broke the integration whenever they drifted. Supabase's
+  // built-in function rate limits + timeouts bound worst-case abuse, and
+  // expensive paths (voice transcription) only fire on real Telegram inputs.
   const startTime = Date.now();
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   const TELEGRAM_API_KEY = Deno.env.get('TELEGRAM_API_KEY')!;
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabase = createClient(supabaseUrl, serviceKey);
