@@ -14,7 +14,6 @@ import { XPBadgeProvider } from "@/components/ui/xp-badge";
 
 import { useMorningAutoPlay } from "@/hooks/useMorningAutoPlay";
 import { TopLoader } from "@/components/ui/top-loader";
-import Index from "@/pages/Index";
 import Landing from "@/pages/Landing";
 import CalendarCallback from "@/pages/CalendarCallback";
 import {
@@ -26,6 +25,7 @@ import {
   LazyContractsPage,
   LazyNotFound,
   LazyOnboarding,
+  LazyIndex,
   PageFallback,
 } from "@/components/lazy";
 
@@ -105,7 +105,7 @@ function AppContent() {
             path="/"
             element={
               <ProtectedRoute>
-                <Index />
+                <LazyIndex />
               </ProtectedRoute>
             }
           />
