@@ -66,7 +66,9 @@ read it. Send a <b>voice note</b> and I'll act on what you said.
 <b>🧑‍🤝‍🧑 Team (workspace groups)</b>
 /standup — per-member yesterday / today / blockers
 /recap — weekly recap
+/comment &lt;task&gt; :: &lt;text&gt; — comment on a task
 /linkworkspace &lt;code&gt; — bind this chat to a workspace
+<i>In private chat: <code>/workspace Acme</code> to scope your next commands to that workspace.</i>
 
 <b>➕ Quick add</b>
 /add &lt;task&gt; · /buy &lt;item&gt; · /event &lt;title&gt; @ &lt;time&gt;
@@ -708,6 +710,62 @@ Deno.serve(async (req) => {
       await tgSend(chat_id, '🧑‍🤝‍🧑 /standup works in workspace-linked groups. Try /linkworkspace <code> first.');
     } else {
       await tgSend(chat_id, await handleStandup(supabase, workspace_id, userTimezone));
+    }
+    return new Response('{"ok":true}', { headers: corsHeaders });
+  }
+
+  // ─── /comment — post a comment on a workspace task ──────
+  // Syntax: /comment <search-text> :: <comment body>
+  // We split on '::' so the search can contain spaces. If no '::' is
+  // given we treat the last ~80% of the text as the body once a single
+  // unambiguous task match is found.
+  if (lower.startsWith('/comment')) {
+    if (!workspace_id) {
+      await tgSend(chat_id, '💬 /comment only works in workspace-linked groups.');
+      return new Response('{"ok":true}', { headers: corsHeaders });
+    }
+    const rest = trimmed.slice('/comment'.length).trim();
+    if (!rest) {
+      await tgSend(chat_id, 'Usage: <code>/comment &lt;task title&gt; :: &lt;your comment&gt;</code>');
+      return new Response('{"ok":true}', { headers: corsHeaders });
+    }
+    const sep = rest.indexOf('::');
+    let query = '';
+    let body = '';
+    if (sep >= 0) {
+      query = rest.slice(0, sep).trim();
+      body = rest.slice(sep + 2).trim();
+    } else {
+      // Naive split: first 4 words as search, rest as body. Works for
+      // short titles like "pitch deck review".
+      const parts = rest.split(/\s+/);
+      query = parts.slice(0, Math.min(4, parts.length - 1)).join(' ');
+      body = parts.slice(Math.min(4, parts.length - 1)).join(' ');
+    }
+    if (!query || !body) {
+      await tgSend(chat_id, 'Usage: <code>/comment &lt;task title&gt; :: &lt;your comment&gt;</code>');
+      return new Response('{"ok":true}', { headers: corsHeaders });
+    }
+    const { data: matches } = await supabase.from('tasks')
+      .select('id, title').eq('workspace_id', workspace_id).eq('trashed', false)
+      .ilike('title', `%${query}%`).order('updated_at', { ascending: false }).limit(3);
+    if (!matches?.length) {
+      await tgSend(chat_id, `🔍 No task matches "${query}" in this workspace.`);
+      return new Response('{"ok":true}', { headers: corsHeaders });
+    }
+    if (matches.length > 1) {
+      const opts = matches.map((m: any, i: number) => `${i + 1}. ${m.title}`).join('\n');
+      await tgSend(chat_id, `🤔 Multiple tasks match "${query}":\n${opts}\n\nBe more specific.`);
+      return new Response('{"ok":true}', { headers: corsHeaders });
+    }
+    const task = matches[0];
+    const { error } = await supabase.from('task_comments').insert({
+      task_id: task.id, author_id: userForChat, body, source: 'tg_workspace',
+    });
+    if (error) {
+      await tgSend(chat_id, `⚠️ Could not save comment: ${error.message}`);
+    } else {
+      await tgSend(chat_id, `💬 Commented on <b>${task.title}</b>.`);
     }
     return new Response('{"ok":true}', { headers: corsHeaders });
   }

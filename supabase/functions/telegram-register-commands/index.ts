@@ -25,6 +25,8 @@ const COMMANDS = [
   { command: 'remind',     description: 'Set a reminder — /remind <text>' },
   { command: 'undo',       description: '↩️ Undo the last action (5-min window)' },
   { command: 'focus',      description: '🔇 Focus mode — /focus on 2h · /focus off' },
+  { command: 'workspace',  description: '🧑‍🤝‍🧑 Switch scope — /workspace Acme · /workspace off · /workspace list' },
+  { command: 'comment',    description: '💬 Comment on a workspace task — /comment <title> :: <text>' },
   { command: 'birthdays',  description: 'Upcoming birthdays (30 days)' },
   { command: 'contacts',   description: 'Search contacts — /contacts <name>' },
   { command: 'contracts',  description: 'Active contracts & subscriptions' },

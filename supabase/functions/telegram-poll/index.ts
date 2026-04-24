@@ -184,6 +184,7 @@ async function callDori(
   serviceKey: string,
   imageUrl?: string | null,
   streamCbs?: StreamCallbacks,
+  workspaceId?: string | null,
 ): Promise<DoriCallResult> {
   const streaming = !!streamCbs;
   async function doRequest(): Promise<Response> {
@@ -203,6 +204,7 @@ async function callDori(
         actionSource: 'tg_private',
         actionSourceRef: String(chatId),
         streamFinalText: streaming,
+        ...(workspaceId ? { workspaceId } : {}),
         ...(imageUrl ? { imageUrl } : {}),
       }),
     });
@@ -990,13 +992,92 @@ Deno.serve(async (req) => {
       // ---------- 1:1 PRIVATE CHAT ----------
       const { data: link } = await supabase
         .from('telegram_links')
-        .select('user_id, is_active')
+        .select('user_id, is_active, active_workspace_id')
         .eq('chat_id', chatId)
         .maybeSingle();
 
       if (!link || !link.is_active) {
         await sendMessage(chatId, '🔒 This chat isn\'t linked yet. Open Dori → Settings → Telegram to connect.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
         continue;
+      }
+
+      // /workspace — scope the next commands to a workspace the user belongs
+      // to. "/workspace Acme" looks up a member-visible workspace by name
+      // (case-insensitive contains), stores it on telegram_links, and the
+      // subsequent callDori calls pass it into the chat function. "/workspace
+      // off" (or "/workspace personal") clears it.
+      {
+        const wsMatch = text.trim().match(/^\/workspace(?:\s+(.+))?$/i);
+        if (wsMatch) {
+          const arg = (wsMatch[1] || '').trim();
+          if (!arg || arg.toLowerCase() === 'list' || arg === '?') {
+            // Show current + available.
+            const [{ data: current }, { data: memberRows }] = await Promise.all([
+              supabase.from('telegram_links').select('active_workspace_id').eq('user_id', link.user_id).maybeSingle(),
+              supabase.from('workspace_members').select('workspace_id').eq('user_id', link.user_id),
+            ]);
+            const wsIds = (memberRows || []).map((m: any) => m.workspace_id);
+            const { data: wsList } = wsIds.length
+              ? await supabase.from('workspaces').select('id, name, icon').in('id', wsIds).eq('archived', false)
+              : { data: [] } as any;
+            const activeId = (current as any)?.active_workspace_id as string | null;
+            const lines = ['<b>🧑‍🤝‍🧑 Workspaces</b>'];
+            lines.push(`Current scope: ${activeId ? `<b>${(wsList as any[])?.find((w) => w.id === activeId)?.name || activeId.slice(0, 8)}</b>` : '<b>Personal</b>'}`);
+            if ((wsList as any[])?.length) {
+              lines.push('\nSwitch with <code>/workspace &lt;name&gt;</code>:');
+              (wsList as any[]).forEach((w: any) => {
+                lines.push(`• ${w.icon || '📁'} ${w.name}`);
+              });
+            } else {
+              lines.push('\nYou\'re not in any workspaces yet. Create or join one in the app.');
+            }
+            lines.push('\nUse <code>/workspace off</code> to return to Personal.');
+            await sendDoriReply({
+              chatId, text: lines.join('\n'), preferVoice: wasVoiceMessage,
+              lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+            });
+          } else if (['off', 'personal', 'none', 'clear'].includes(arg.toLowerCase())) {
+            await supabase.from('telegram_links').update({ active_workspace_id: null }).eq('user_id', link.user_id);
+            await sendDoriReply({
+              chatId, text: '✅ Cleared — next commands run in your Personal space.',
+              preferVoice: wasVoiceMessage,
+              lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+            });
+          } else {
+            // Resolve name → id against workspaces the user is actually a member of.
+            const { data: memberRows } = await supabase.from('workspace_members')
+              .select('workspace_id').eq('user_id', link.user_id);
+            const wsIds = (memberRows || []).map((m: any) => m.workspace_id);
+            let match: any = null;
+            if (wsIds.length) {
+              const { data: wsList } = await supabase.from('workspaces')
+                .select('id, name, icon').in('id', wsIds).eq('archived', false);
+              const needle = arg.toLowerCase();
+              match = (wsList || []).find((w: any) => (w.name || '').toLowerCase() === needle)
+                || (wsList || []).find((w: any) => (w.name || '').toLowerCase().includes(needle));
+            }
+            if (!match) {
+              await sendDoriReply({
+                chatId, text: `🤔 I don't see a workspace named "${arg}" you're a member of. Try <code>/workspace list</code>.`,
+                preferVoice: wasVoiceMessage,
+                lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+              });
+            } else {
+              await supabase.from('telegram_links')
+                .update({ active_workspace_id: match.id }).eq('user_id', link.user_id);
+              await sendDoriReply({
+                chatId, text: `✅ Switched to <b>${match.icon || '📁'} ${match.name}</b>. New tasks / events / notes I create here will live in that workspace. <code>/workspace off</code> to go back to Personal.`,
+                preferVoice: wasVoiceMessage,
+                lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+              });
+            }
+          }
+          await supabase.from('telegram_messages').upsert({
+            update_id: u.update_id, chat_id: chatId, text, raw_update: u, processed: true,
+          }, { onConflict: 'update_id' });
+          processed++;
+          continue;
+        }
       }
 
       // /focus — silence Dori's proactive sends for a bounded window.
@@ -1182,7 +1263,21 @@ Deno.serve(async (req) => {
           }
         : undefined;
 
-      const dori = await callDori(link.user_id, text, chatId, supabaseUrl, serviceKey, photoDataUrl, streamCbs);
+      // Respect the user's /workspace selection for this chat (default: Personal).
+      // Re-verify membership at read-time so a stale id from a workspace the
+      // user left can't leak data — if they're no longer a member, fall back
+      // to Personal and silently clear the stored id.
+      let activeWsForChat: string | null = (link as any).active_workspace_id || null;
+      if (activeWsForChat) {
+        const { data: mem } = await supabase.from('workspace_members')
+          .select('user_id').eq('workspace_id', activeWsForChat).eq('user_id', link.user_id).maybeSingle();
+        if (!mem) {
+          await supabase.from('telegram_links').update({ active_workspace_id: null }).eq('user_id', link.user_id);
+          activeWsForChat = null;
+        }
+      }
+
+      const dori = await callDori(link.user_id, text, chatId, supabaseUrl, serviceKey, photoDataUrl, streamCbs, activeWsForChat);
       if (pendingEdit) { clearTimeout(pendingEdit); pendingEdit = null; }
 
       // Voice reply if user prefers OR if they sent a voice message

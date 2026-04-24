@@ -14,6 +14,7 @@ import { SmartInsightCard } from './SmartInsightCard';
 import { DailyBriefingCard } from './DailyBriefingCard';
 import { QuickActionsBar } from './QuickActionsBar';
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist';
+import { useWorkspaceRealtime } from '@/hooks/useWorkspaceRealtime';
 import { WeatherCard } from './WeatherCard';
 import { ContractAlertsCard } from './ContractAlertsCard';
 import { ContactRemindersCard } from './ContactRemindersCard';
@@ -74,6 +75,8 @@ export function DashboardPanel({ userId, onNavigate }: DashboardPanelProps) {
   };
 
   const workspaceId = useActiveWorkspaceId();
+  // Live teammates-are-doing-stuff toasts + `workspace:changed` event bus.
+  useWorkspaceRealtime();
 
   const fetchAll = useCallback(async () => {
     if (!userId) return;

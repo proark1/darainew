@@ -927,6 +927,42 @@ interface ServerExecOpts {
   timezone?: string;
 }
 
+// Fire-and-forget notification to a teammate when something gets assigned
+// to them — push-delivery handles the quiet-hours/focus gate so we don't
+// replicate those checks here. The caller never waits on this.
+async function notifyAssignee(
+  userId: string,
+  entityType: 'task' | 'event',
+  entityId: string,
+  title: string,
+  assigneeName: string | null,
+  fromDisplayName: string | null,
+): Promise<void> {
+  if (!userId) return;
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !serviceKey) return;
+  const from = fromDisplayName ? ` from ${fromDisplayName}` : '';
+  const body = entityType === 'task'
+    ? `New task${from}: ${title}`
+    : `You've been added to an event${from}: ${title}`;
+  try {
+    await fetch(`${supabaseUrl}/functions/v1/push-delivery`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_ids: [userId],
+        title: assigneeName ? `For ${assigneeName}` : 'You were tagged',
+        body,
+        data: { entity_type: entityType, entity_id: entityId, source: 'assignment' },
+      }),
+    });
+  } catch (e) { console.warn('notifyAssignee failed', e); }
+}
+
 // Match an "assignee"-like field in the AI's payload against the workspace
 // member list. Accepts user_id, display_name, or @handle. Returns null if no
 // member matches — caller keeps assignee_id NULL in that case.
@@ -1056,6 +1092,12 @@ async function executeToolsServerSide(
         const assigneeName = assigneeId
           ? (opts?.workspaceMembers?.find((m) => m.user_id === assigneeId)?.display_name || 'teammate')
           : null;
+        // Ping the assignee so they actually find out — previously assignee_id
+        // was set silently and the teammate had to notice the new row.
+        if (assigneeId && assigneeId !== userId) {
+          const self = opts?.workspaceMembers?.find((m) => m.user_id === userId)?.display_name || null;
+          notifyAssignee(assigneeId, 'task', t.id, t.title, assigneeName, self);
+        }
         out.push({
           tool: 'manage_task', ok: true,
           message: `✅ Added task: ${t.title}${t.due_date ? ` (due ${new Date(t.due_date).toLocaleString()})` : ''}${assigneeName ? ` — for ${assigneeName}` : ''}`,
@@ -1109,6 +1151,11 @@ async function executeToolsServerSide(
       }).select('id, title, start_time').single();
       if (error) throw error;
       const undoId = await undoCreate('events', e.id, `scheduled "${e.title}"`, 'event');
+      if (assigneeId && assigneeId !== userId) {
+        const self = opts?.workspaceMembers?.find((m) => m.user_id === userId)?.display_name || null;
+        const assigneeName = opts?.workspaceMembers?.find((m) => m.user_id === assigneeId)?.display_name || null;
+        notifyAssignee(assigneeId, 'event', e.id, e.title, assigneeName, self);
+      }
       out.push({ tool: 'schedule_event', ok: true, message: `📅 Scheduled: ${e.title} — ${new Date(e.start_time).toLocaleString()}`, data: e, undoId, entityId: e.id });
     } catch (e) { out.push({ tool: 'schedule_event', ok: false, message: `Failed: ${(e as Error).message}` }); }
   }

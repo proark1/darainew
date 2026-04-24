@@ -7209,6 +7209,36 @@ export type Database = {
         }
         Relationships: []
       }
+      task_comments: {
+        Row: {
+          author_id: string | null
+          body: string
+          created_at: string
+          id: string
+          source: string
+          task_id: string
+          workspace_id: string | null
+        }
+        Insert: {
+          author_id?: string | null
+          body: string
+          created_at?: string
+          id?: string
+          source?: string
+          task_id: string
+          workspace_id?: string | null
+        }
+        Update: {
+          author_id?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          source?: string
+          task_id?: string
+          workspace_id?: string | null
+        }
+        Relationships: []
+      }
       task_tags: {
         Row: {
           created_at: string
@@ -7498,6 +7528,7 @@ export type Database = {
       }
       telegram_links: {
         Row: {
+          active_workspace_id: string | null
           chat_id: number | null
           created_at: string
           id: string
@@ -7511,6 +7542,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          active_workspace_id?: string | null
           chat_id?: number | null
           created_at?: string
           id?: string
@@ -7524,6 +7556,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          active_workspace_id?: string | null
           chat_id?: number | null
           created_at?: string
           id?: string
