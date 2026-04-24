@@ -2,8 +2,15 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Bell, Brain, Calendar, Clock, FileText, Heart, Moon, Users, Zap, Cake, Sparkles } from 'lucide-react';
-import { useProactiveSettings } from '@/hooks/useProactiveSettings';
+import {
+  Bell, Brain, Calendar, Clock, FileText, Heart, Moon, Users, Zap, Cake, Sparkles,
+  ShieldCheck, PlusCircle, Pencil, Trash2,
+} from 'lucide-react';
+import {
+  CONFIRMATION_ENTITIES,
+  useProactiveSettings,
+  type ConfirmationOverrides,
+} from '@/hooks/useProactiveSettings';
 import { useExpoPushNotifications } from '@/hooks/useExpoPushNotifications';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -243,6 +250,75 @@ export function ProactiveSettingsPanel() {
             )}
           </Card>
 
+          {/* Action Confirmations */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4" />
+                    Action Confirmations
+                  </CardTitle>
+                  <CardDescription>
+                    Decide when Dori should ask before doing something for you
+                    — whether it's from the web app, the Telegram bot, or voice.
+                  </CardDescription>
+                </div>
+                <Switch
+                  checked={settings.require_action_confirmation ?? true}
+                  onCheckedChange={(v) => updateSettings({ require_action_confirmation: v })}
+                />
+              </div>
+            </CardHeader>
+            {(settings.require_action_confirmation ?? true) && (
+              <CardContent className="space-y-5">
+                <p className="text-xs text-muted-foreground">
+                  Turn off the master switch above to let Dori add, edit, and delete
+                  anything without asking. Leave it on to review actions first.
+                </p>
+                <SettingRow
+                  icon={<PlusCircle className="h-4 w-4" />}
+                  label="Ask before adding"
+                  description="Confirm new items Dori wants to create (tasks, events, contacts, …)"
+                  checked={settings.confirm_creates ?? false}
+                  onChange={(v) => updateSettings({ confirm_creates: v })}
+                />
+                <SettingRow
+                  icon={<Pencil className="h-4 w-4" />}
+                  label="Ask before editing"
+                  description="Confirm changes Dori wants to make to existing items"
+                  checked={settings.confirm_updates ?? true}
+                  onChange={(v) => updateSettings({ confirm_updates: v })}
+                />
+                <SettingRow
+                  icon={<Trash2 className="h-4 w-4" />}
+                  label="Ask before deleting"
+                  description="Confirm deletions (recommended)"
+                  checked={settings.confirm_deletes ?? true}
+                  onChange={(v) => updateSettings({ confirm_deletes: v })}
+                />
+
+                <div className="pt-2">
+                  <Label className="text-sm font-medium">Per-module overrides</Label>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Need something different for a single module (e.g. auto-add
+                    shopping items but always confirm deletions)? Pick your own
+                    rules below — blank means "use the defaults above".
+                  </p>
+                  <ConfirmationOverrideTable
+                    overrides={settings.confirmation_overrides || {}}
+                    fallback={{
+                      create: settings.confirm_creates ?? false,
+                      update: settings.confirm_updates ?? true,
+                      delete: settings.confirm_deletes ?? true,
+                    }}
+                    onChange={(next) => updateSettings({ confirmation_overrides: next })}
+                  />
+                </div>
+              </CardContent>
+            )}
+          </Card>
+
           {/* Delivery Channels */}
           <Card>
             <CardHeader className="pb-3">
@@ -280,13 +356,13 @@ export function ProactiveSettingsPanel() {
   );
 }
 
-function SettingRow({ 
-  icon, 
-  label, 
-  description, 
-  checked, 
-  onChange 
-}: { 
+function SettingRow({
+  icon,
+  label,
+  description,
+  checked,
+  onChange
+}: {
   icon: React.ReactNode;
   label: string;
   description: string;
@@ -303,6 +379,94 @@ function SettingRow({
         </div>
       </div>
       <Switch checked={checked} onCheckedChange={onChange} />
+    </div>
+  );
+}
+
+type OpKind = 'create' | 'update' | 'delete';
+const OPS: OpKind[] = ['create', 'update', 'delete'];
+const OP_LABELS: Record<OpKind, string> = { create: 'Add', update: 'Edit', delete: 'Delete' };
+
+function ConfirmationOverrideTable({
+  overrides,
+  fallback,
+  onChange,
+}: {
+  overrides: ConfirmationOverrides;
+  fallback: Record<OpKind, boolean>;
+  onChange: (next: ConfirmationOverrides) => void;
+}) {
+  const setOverride = (entity: string, op: OpKind, value: boolean | null) => {
+    const next: ConfirmationOverrides = { ...overrides };
+    const entry = { ...(next[entity] || {}) };
+    if (value === null) {
+      delete entry[op];
+    } else {
+      entry[op] = value;
+    }
+    if (Object.keys(entry).length === 0) {
+      delete next[entity];
+    } else {
+      next[entity] = entry;
+    }
+    onChange(next);
+  };
+
+  return (
+    <div className="rounded-md border border-border overflow-hidden">
+      <div className="grid grid-cols-[1fr_repeat(3,minmax(0,1fr))] gap-0 text-xs font-medium bg-muted/50">
+        <div className="px-3 py-2">Module</div>
+        {OPS.map((op) => (
+          <div key={op} className="px-3 py-2 text-center">{OP_LABELS[op]}</div>
+        ))}
+      </div>
+      {CONFIRMATION_ENTITIES.map(({ key, label }) => {
+        const current = overrides[key] || {};
+        return (
+          <div
+            key={key}
+            className="grid grid-cols-[1fr_repeat(3,minmax(0,1fr))] items-center border-t border-border"
+          >
+            <div className="px-3 py-2 text-sm">{label}</div>
+            {OPS.map((op) => {
+              const override = current[op];
+              const effective = typeof override === 'boolean' ? override : fallback[op];
+              return (
+                <button
+                  key={op}
+                  type="button"
+                  onClick={() => {
+                    if (override === undefined) setOverride(key, op, !fallback[op]);
+                    else if (override === !fallback[op]) setOverride(key, op, null);
+                    else setOverride(key, op, !override);
+                  }}
+                  className={
+                    'mx-auto my-1.5 flex h-7 items-center justify-center rounded-md border px-2 text-[11px] font-medium transition-colors ' +
+                    (override === undefined
+                      ? 'border-dashed border-muted-foreground/40 text-muted-foreground hover:bg-muted'
+                      : effective
+                        ? 'border-primary/40 bg-primary/10 text-primary'
+                        : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400')
+                  }
+                  title={
+                    override === undefined
+                      ? `Uses default (${effective ? 'ask' : 'auto'})`
+                      : override
+                        ? 'Always ask'
+                        : 'Auto-apply'
+                  }
+                >
+                  {override === undefined
+                    ? `default · ${effective ? 'ask' : 'auto'}`
+                    : override
+                      ? 'always ask'
+                      : 'auto'}
+                </button>
+              );
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }

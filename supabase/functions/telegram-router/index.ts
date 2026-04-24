@@ -2,6 +2,14 @@
 // Called by telegram-poll for messages from a linked family group.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { sendDoriReply } from '../_shared/telegram-voice.ts';
+import {
+  approveAndExecutePending,
+  buildConfirmKeyboard,
+  classifyConfirmationText,
+  fetchLatestPendingForChat,
+  rejectPending,
+  tgSendWithKeyboard,
+} from '../_shared/telegram-confirm.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -416,6 +424,22 @@ Deno.serve(async (req) => {
   const trimmed = text.trim();
   const lower = trimmed.toLowerCase();
 
+  // ─── Confirmation shortcut: bare "yes/no" replies ────────
+  // If the sender has a pending queued action from this chat, a plain
+  // "yes"/"do it"/"no"/"cancel" resolves it without another AI round.
+  const confirm = classifyConfirmationText(trimmed);
+  if (confirm) {
+    const pending = await fetchLatestPendingForChat(supabase, userForChat, 'tg_family', String(chat_id));
+    if (pending) {
+      const msg = confirm === 'yes'
+        ? await approveAndExecutePending(supabase, pending, SUPABASE_URL, SERVICE_KEY)
+        : await rejectPending(supabase, pending.id, pending.reason);
+      await tgSend(chat_id, msg);
+      try { await supabase.from('telegram_assistant_replies').insert({ chat_id, reply: msg }); } catch { /* ignore */ }
+      return new Response('{"ok":true}', { headers: corsHeaders });
+    }
+  }
+
   // ─── Help / discoverability ──────────────────────────────
   if (isHelpRequest(lower)) {
     await tgSend(chat_id, HELP_TEXT);
@@ -571,7 +595,11 @@ Deno.serve(async (req) => {
         'x-dori-channel-ref': String(chat_id),
       },
       body: JSON.stringify({
-        messages: conversationMessages, personality: 'balanced', executeServerSide: true,
+        messages: conversationMessages,
+        personality: 'balanced',
+        executeServerSide: true,
+        actionSource: 'tg_family',
+        actionSourceRef: String(chat_id),
       }),
     });
 
@@ -582,29 +610,58 @@ Deno.serve(async (req) => {
 
     const json = await r.json();
     const reply = (json.reply || '').trim();
-    const toolResults = (json.toolResults || []) as { ok: boolean; message: string }[];
+    const toolResults = (json.toolResults || []) as {
+      ok: boolean; message: string; queued?: boolean; actionId?: string; summary?: string;
+    }[];
+
+    // Queued actions are rendered separately, each with its own inline keyboard
+    // so the user can tap ✅ / ❌. Non-queued results are concatenated as a single reply.
+    const queued = toolResults.filter(t => t.queued && t.actionId);
+    const executed = toolResults.filter(t => !t.queued);
 
     const parts: string[] = [];
     if (reply) parts.push(reply);
-    if (toolResults.length > 0) parts.push(toolResults.map(t => t.message).join('\n'));
-    const finalMsg = parts.join('\n\n').trim() || 'Got it.';
+    if (executed.length > 0) parts.push(executed.map(t => t.message).join('\n'));
+    const finalMsg = parts.join('\n\n').trim();
 
-    try {
-      await supabase.from('telegram_assistant_replies').insert({ chat_id, reply: finalMsg });
-    } catch (e) { console.error('Failed to persist assistant reply', e); }
+    if (finalMsg) {
+      try {
+        await supabase.from('telegram_assistant_replies').insert({ chat_id, reply: finalMsg });
+      } catch (e) { console.error('Failed to persist assistant reply', e); }
 
-    let preferVoice = false;
-    try {
-      const prefUser = senderUserId || group.owner_user_id;
-      const { data: ps } = await supabase.from('proactive_settings')
-        .select('prefer_voice_replies').eq('user_id', prefUser).maybeSingle();
-      preferVoice = !!ps?.prefer_voice_replies;
-    } catch (_) { /* ignore */ }
+      let preferVoice = false;
+      try {
+        const prefUser = senderUserId || group.owner_user_id;
+        const { data: ps } = await supabase.from('proactive_settings')
+          .select('prefer_voice_replies').eq('user_id', prefUser).maybeSingle();
+        preferVoice = !!ps?.prefer_voice_replies;
+      } catch (_) { /* ignore */ }
 
-    await sendDoriReply({
-      chatId: chat_id, text: finalMsg.slice(0, 4000), preferVoice,
-      lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
-    });
+      await sendDoriReply({
+        chatId: chat_id, text: finalMsg.slice(0, 4000), preferVoice,
+        lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+      });
+    }
+
+    for (const q of queued) {
+      const prompt = `🤔 <b>Please confirm</b>\n${q.summary || q.message}\n\nReply <b>yes</b> or tap a button below.`;
+      await tgSendWithKeyboard(
+        chat_id,
+        prompt,
+        buildConfirmKeyboard(q.actionId!),
+        LOVABLE_API_KEY,
+        TELEGRAM_API_KEY,
+      );
+      try {
+        await supabase.from('telegram_assistant_replies').insert({ chat_id, reply: prompt });
+      } catch { /* ignore */ }
+    }
+
+    // If there was nothing to say AND nothing queued, keep the old "got it" behaviour.
+    if (!finalMsg && queued.length === 0) {
+      await tgSend(chat_id, 'Got it.');
+    }
+
     return new Response('{"ok":true}', { headers: corsHeaders });
   } catch (e) {
     console.error('router error', e);

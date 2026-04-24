@@ -2,6 +2,16 @@
 // 1:1 chats → Dori chat; group chats linked via /linkfamily → telegram-router.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { sendDoriReply } from '../_shared/telegram-voice.ts';
+import {
+  approveAndExecutePending,
+  buildConfirmKeyboard,
+  classifyConfirmationText,
+  fetchLatestPendingForChat,
+  rejectPending,
+  tgAnswerCallback,
+  tgEditMessageText,
+  tgSendWithKeyboard,
+} from '../_shared/telegram-confirm.ts';
 
 const GATEWAY_URL = 'https://connector-gateway.lovable.dev/telegram';
 const MAX_RUNTIME_MS = 55_000;
@@ -102,7 +112,31 @@ async function transcribeTelegramVoice(
   }
 }
 
-async function callDori(userId: string, message: string, supabaseUrl: string, serviceKey: string): Promise<string> {
+interface ToolResult {
+  ok: boolean;
+  message: string;
+  tool?: string;
+  queued?: boolean;
+  actionId?: string;
+  summary?: string;
+}
+
+interface DoriCallResult {
+  reply: string;
+  toolResults: ToolResult[];
+}
+
+// Calls the chat function in agent-mode so tools actually run for 1:1 Telegram
+// messages (previously the private chat path streamed text without executing
+// tools, so add/edit/delete silently failed). Returns the reply PLUS any
+// tool results, including queued confirmation prompts the bot must surface.
+async function callDori(
+  userId: string,
+  message: string,
+  chatId: number,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<DoriCallResult> {
   try {
     const r = await fetch(`${supabaseUrl}/functions/v1/chat`, {
       method: 'POST',
@@ -110,42 +144,32 @@ async function callDori(userId: string, message: string, supabaseUrl: string, se
         'Authorization': `Bearer ${serviceKey}`,
         'Content-Type': 'application/json',
         'x-telegram-user-id': userId,
+        'x-dori-channel': 'tg_private',
+        'x-dori-channel-ref': String(chatId),
       },
       body: JSON.stringify({
         messages: [{ role: 'user', content: message }],
         personality: 'balanced',
+        executeServerSide: true,
+        actionSource: 'tg_private',
+        actionSourceRef: String(chatId),
       }),
     });
     if (!r.ok) {
       console.error(`Dori call failed for user ${userId}:`, r.status, await r.text());
-      return "Sorry, I'm having trouble reaching Dori right now. Try again in a moment.";
+      return {
+        reply: "Sorry, I'm having trouble reaching Dori right now. Try again in a moment.",
+        toolResults: [],
+      };
     }
-    const reader = r.body?.getReader();
-    if (!reader) return await r.text();
-    const decoder = new TextDecoder();
-    let full = '';
-    let buffer = '';
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const payload = line.slice(6).trim();
-        if (payload === '[DONE]' || !payload) continue;
-        try {
-          const parsed = JSON.parse(payload);
-          const delta = parsed.choices?.[0]?.delta?.content;
-          if (delta) full += delta;
-        } catch { /* ignore */ }
-      }
-    }
-    return full.trim() || "I processed that but didn't have anything to add.";
+    const data = await r.json();
+    return {
+      reply: (data?.reply || '').trim(),
+      toolResults: (data?.toolResults || []) as ToolResult[],
+    };
   } catch (e) {
     console.error('callDori error:', e);
-    return "Something went wrong. Please try again.";
+    return { reply: 'Something went wrong. Please try again.', toolResults: [] };
   }
 }
 
@@ -182,7 +206,12 @@ Deno.serve(async (req) => {
 
     let data: any;
     try {
-      data = await tg('getUpdates', { offset: currentOffset, timeout, allowed_updates: ['message'] }, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+      data = await tg(
+        'getUpdates',
+        { offset: currentOffset, timeout, allowed_updates: ['message', 'callback_query'] },
+        LOVABLE_API_KEY,
+        TELEGRAM_API_KEY,
+      );
       // (voice/audio arrive inside 'message' updates — no extra allowed_updates needed)
     } catch (e) {
       console.error('getUpdates failed:', e);
@@ -193,8 +222,79 @@ Deno.serve(async (req) => {
     if (updates.length === 0) continue;
 
     for (const u of updates) {
+      // ── Callback query (inline-keyboard tap on a confirmation prompt) ───────
+      if (u.callback_query) {
+        const cb = u.callback_query;
+        const raw = String(cb.data || '');
+        const match = raw.match(/^dori_(confirm|reject):(.+)$/);
+        const cbChatId = cb.message?.chat?.id;
+        const cbMessageId = cb.message?.message_id;
+        const cbFromId = cb.from?.id;
+
+        if (match && cbChatId && cbFromId) {
+          const decision = match[1] as 'confirm' | 'reject';
+          const actionId = match[2];
+
+          // Resolve the tapping user to an app user so we enforce ownership.
+          const { data: mapped } = await supabase.from('telegram_user_map')
+            .select('user_id').eq('telegram_user_id', cbFromId).maybeSingle();
+          const tappingUserId = mapped?.user_id as string | undefined;
+
+          const { data: action } = await supabase.from('auto_actions_log')
+            .select('*').eq('id', actionId).maybeSingle();
+
+          if (!action) {
+            await tgAnswerCallback(cb.id, 'That action is no longer available.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          } else if (action.status !== 'pending') {
+            await tgAnswerCallback(cb.id, `Already ${action.status}.`, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          } else if (tappingUserId && tappingUserId !== action.user_id) {
+            await tgAnswerCallback(cb.id, 'Only the person who asked Dori can confirm this.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          } else {
+            const outcome = decision === 'confirm'
+              ? await approveAndExecutePending(supabase, action, supabaseUrl, serviceKey)
+              : await rejectPending(supabase, action.id, action.reason);
+
+            await tgAnswerCallback(
+              cb.id,
+              decision === 'confirm' ? '✅ Done' : '❌ Cancelled',
+              LOVABLE_API_KEY,
+              TELEGRAM_API_KEY,
+            );
+            if (cbMessageId) {
+              await tgEditMessageText(
+                cbChatId,
+                cbMessageId,
+                outcome,
+                LOVABLE_API_KEY,
+                TELEGRAM_API_KEY,
+              );
+            } else {
+              await sendMessage(cbChatId, outcome, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            }
+            try {
+              await supabase.from('telegram_assistant_replies').insert({ chat_id: cbChatId, reply: outcome });
+            } catch { /* ignore */ }
+          }
+        } else {
+          await tgAnswerCallback(cb.id, '', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+        }
+
+        await supabase
+          .from('telegram_bot_state')
+          .update({ update_offset: u.update_id + 1, updated_at: new Date().toISOString() })
+          .eq('id', 1);
+        currentOffset = u.update_id + 1;
+        continue;
+      }
+
       const msg = u.message;
       if (!msg) continue;
+
+      // Per-update try/finally: once we've pulled an update from Telegram we
+      // MUST advance the stored offset before this iteration ends, otherwise
+      // an AI/router crash mid-batch replays the same message on the next
+      // poll and the bot double-acts (extra tasks created, duplicate replies).
+      try {
 
       const chatId = msg.chat.id;
       const chatType = msg.chat.type as string;
@@ -418,8 +518,30 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      // If the user has a pending confirmation and just replied "yes"/"no",
+      // resolve it without another AI round.
+      const confirm = classifyConfirmationText(text);
+      if (confirm) {
+        const pending = await fetchLatestPendingForChat(supabase, link.user_id, 'tg_private', String(chatId));
+        if (pending) {
+          const outcome = confirm === 'yes'
+            ? await approveAndExecutePending(supabase, pending, supabaseUrl, serviceKey)
+            : await rejectPending(supabase, pending.id, pending.reason);
+          await sendDoriReply({
+            chatId, text: outcome, preferVoice: wasVoiceMessage,
+            lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+          });
+          await supabase.from('telegram_messages').upsert({
+            update_id: u.update_id, chat_id: chatId, text, raw_update: u, processed: true,
+          }, { onConflict: 'update_id' });
+          processed++;
+          continue;
+        }
+      }
+
       tg('sendChatAction', { chat_id: chatId, action: 'typing' }, LOVABLE_API_KEY, TELEGRAM_API_KEY).catch(() => {});
-      const reply = await callDori(link.user_id, text, supabaseUrl, serviceKey);
+      const dori = await callDori(link.user_id, text, chatId, supabaseUrl, serviceKey);
+
       // Voice reply if user prefers OR if they sent a voice message
       let preferVoice = wasVoiceMessage;
       try {
@@ -428,20 +550,60 @@ Deno.serve(async (req) => {
           .select('prefer_voice_replies').eq('user_id', link.user_id).maybeSingle();
         if (ps?.prefer_voice_replies) preferVoice = true;
       } catch (_) { /* ignore */ }
-      await sendDoriReply({
-        chatId, text: reply, preferVoice,
-        lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
-      });
+
+      const queued = dori.toolResults.filter((t) => t.queued && t.actionId);
+      const executed = dori.toolResults.filter((t) => !t.queued);
+
+      const bodyParts: string[] = [];
+      if (dori.reply) bodyParts.push(dori.reply);
+      if (executed.length > 0) bodyParts.push(executed.map((t) => t.message).join('\n'));
+      const replyText = bodyParts.join('\n\n').trim();
+
+      if (replyText) {
+        await sendDoriReply({
+          chatId, text: replyText, preferVoice,
+          lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+        });
+      }
+
+      for (const q of queued) {
+        const prompt = `🤔 <b>Please confirm</b>\n${q.summary || q.message}\n\nReply <b>yes</b> or tap a button below.`;
+        await tgSendWithKeyboard(
+          chatId,
+          prompt,
+          buildConfirmKeyboard(q.actionId!),
+          LOVABLE_API_KEY,
+          TELEGRAM_API_KEY,
+        );
+      }
+
+      if (!replyText && queued.length === 0) {
+        await sendDoriReply({
+          chatId, text: "I processed that but didn't have anything to add.", preferVoice,
+          lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+        });
+      }
 
       await supabase.from('telegram_messages').upsert({
         update_id: u.update_id, chat_id: chatId, text, raw_update: u, processed: true,
       }, { onConflict: 'update_id' });
       processed++;
+      } finally {
+        // Even if the try-block above threw, advance the offset past this
+        // update so we don't re-deliver it. We tolerate dropping a reply
+        // far more than we tolerate duplicating actions.
+        const nextOffset = u.update_id + 1;
+        if (nextOffset > currentOffset) {
+          currentOffset = nextOffset;
+          try {
+            await supabase
+              .from('telegram_bot_state')
+              .update({ update_offset: nextOffset, updated_at: new Date().toISOString() })
+              .eq('id', 1);
+          } catch (e) { console.error('offset persist failed', e); }
+        }
+      }
     }
-
-    const newOffset = Math.max(...updates.map((u: any) => u.update_id)) + 1;
-    await supabase.from('telegram_bot_state').update({ update_offset: newOffset, updated_at: new Date().toISOString() }).eq('id', 1);
-    currentOffset = newOffset;
   }
 
   return new Response(JSON.stringify({ ok: true, processed, finalOffset: currentOffset }), {

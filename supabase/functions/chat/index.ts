@@ -646,49 +646,296 @@ function stripAllToolTags(text: string): string {
     .trim();
 }
 
-// High-risk tool patterns — these get queued for explicit approval instead of auto-executing
-// when running server-side (Telegram, voice, agent loop). Web app shows confirm dialogs.
-const HIGH_RISK_PATTERNS: { regex: RegExp; actionType: string; entityType: string; describe: (data: any) => string }[] = [
-  { regex: /<tool>manage_task<\/tool>\s*<action>delete<\/action>\s*<task>(\{[\s\S]*?\})<\/task>/g, actionType: 'delete_task', entityType: 'task', describe: (d) => `Delete task: ${d.title || d.id}` },
-  { regex: /<tool>manage_event<\/tool>\s*<action>delete<\/action>\s*<event>(\{[\s\S]*?\})<\/event>/g, actionType: 'delete_event', entityType: 'event', describe: (d) => `Delete event: ${d.query || d.title}` },
-  { regex: /<tool>manage_contact<\/tool>\s*<action>delete<\/action>\s*<contact>(\{[\s\S]*?\})<\/contact>/g, actionType: 'delete_contact', entityType: 'contact', describe: (d) => `Delete contact: ${d.query}` },
-  { regex: /<tool>manage_contract<\/tool>\s*<action>delete<\/action>\s*<contract>(\{[\s\S]*?\})<\/contract>/g, actionType: 'delete_contract', entityType: 'contract', describe: (d) => `Delete contract: ${d.query}` },
-  { regex: /<tool>manage_property<\/tool>\s*<action>delete<\/action>\s*<property>(\{[\s\S]*?\})<\/property>/g, actionType: 'delete_property', entityType: 'property', describe: (d) => `Delete property: ${d.query}` },
-  { regex: /<tool>manage_business<\/tool>\s*<action>delete<\/action>\s*<business>(\{[\s\S]*?\})<\/business>/g, actionType: 'delete_business', entityType: 'business', describe: (d) => `Delete business: ${d.query}` },
-  { regex: /<tool>manage_contract<\/tool>\s*<action>create<\/action>\s*<contract>(\{[\s\S]*?\})<\/contract>/g, actionType: 'create_contract', entityType: 'contract', describe: (d) => `Add contract: ${d.name}${d.costAmount ? ` (${d.costAmount}/${d.costFrequency || 'mo'})` : ''}` },
+// Every mutating tool Dori can emit. Each entry lets the approval gate
+// recognize the tool, figure out whether it's a create/update/delete, and
+// produce a human-readable summary for the action-confirmation prompt
+// (shown in the web inbox and/or sent as a Telegram confirmation message).
+type OpKind = 'create' | 'update' | 'delete';
+interface MutatingTool {
+  tool: string;
+  entity: string;   // logical module name used for per-entity overrides
+  // Regex capturing (action?, payload?) for the tool XML block.
+  // Groups vary per tool: provide a `parse` to normalize to { action, data, fullMatch }.
+  regex: RegExp;
+  parse: (m: RegExpMatchArray) => { action: string; data: any; fullMatch: string } | null;
+  // Given action + data return OpKind (or null to skip confirmation for that action).
+  classify: (action: string, data: any) => OpKind | null;
+  summarize: (action: string, data: any) => string;
+}
+
+const safeParseJson = (s: string): any => { try { return JSON.parse(s); } catch { return null; } };
+
+const MUTATING_TOOLS: MutatingTool[] = [
+  {
+    tool: 'manage_task', entity: 'task',
+    regex: /<tool>manage_task<\/tool>\s*<action>(\w+)<\/action>\s*<task>(\{[\s\S]*?\})<\/task>/g,
+    parse: (m) => {
+      const data = safeParseJson(m[2]); if (!data) return null;
+      return { action: m[1], data, fullMatch: m[0] };
+    },
+    classify: (action) => action === 'add' ? 'create'
+      : action === 'update' ? 'update'
+      : action === 'delete' ? 'delete'
+      : null, // 'complete' is not a mutation we gate
+    summarize: (action, d) => {
+      const label = d.title || d.id || 'task';
+      if (action === 'add') return `Add task: ${label}${d.dueDate ? ` (due ${d.dueDate})` : ''}`;
+      if (action === 'update') return `Update task: ${label}`;
+      if (action === 'delete') return `Delete task: ${label}`;
+      return `Task action: ${label}`;
+    },
+  },
+  {
+    tool: 'schedule_event', entity: 'event',
+    regex: /<tool>schedule_event<\/tool>\s*<event>(\{[\s\S]*?\})<\/event>/g,
+    parse: (m) => {
+      const data = safeParseJson(m[1]); if (!data) return null;
+      return { action: 'create', data, fullMatch: m[0] };
+    },
+    classify: () => 'create',
+    summarize: (_a, d) => `Schedule event: ${d.title || '(untitled)'}${d.startTime ? ` at ${new Date(d.startTime).toLocaleString()}` : ''}${d.location ? ` (${d.location})` : ''}`,
+  },
+  {
+    tool: 'manage_event', entity: 'event',
+    regex: /<tool>manage_event<\/tool>\s*<action>(\w+)<\/action>\s*<event>(\{[\s\S]*?\})<\/event>/g,
+    parse: (m) => {
+      const data = safeParseJson(m[2]); if (!data) return null;
+      return { action: m[1], data, fullMatch: m[0] };
+    },
+    classify: (action) => action === 'update' ? 'update' : action === 'delete' ? 'delete' : null,
+    summarize: (action, d) => {
+      const who = d.query || d.title || 'event';
+      if (action === 'update') return `Update event: ${who}`;
+      if (action === 'delete') return `Delete event: ${who}`;
+      return `Event action: ${who}`;
+    },
+  },
+  {
+    tool: 'manage_contact', entity: 'contact',
+    regex: /<tool>manage_contact<\/tool>\s*<action>(\w+)<\/action>\s*<contact>(\{[\s\S]*?\})<\/contact>/g,
+    parse: (m) => {
+      const data = safeParseJson(m[2]); if (!data) return null;
+      return { action: m[1], data, fullMatch: m[0] };
+    },
+    classify: (action) => action === 'create' ? 'create' : action === 'update' ? 'update' : action === 'delete' ? 'delete' : null,
+    summarize: (action, d) => {
+      const who = d.name || d.query || 'contact';
+      if (action === 'create') return `Add contact: ${who}${d.company ? ` (${d.company})` : ''}`;
+      if (action === 'update') return `Update contact: ${who}`;
+      if (action === 'delete') return `Delete contact: ${who}`;
+      return `Contact action: ${who}`;
+    },
+  },
+  {
+    tool: 'manage_contract', entity: 'contract',
+    regex: /<tool>manage_contract<\/tool>\s*<action>(\w+)<\/action>\s*<contract>(\{[\s\S]*?\})<\/contract>/g,
+    parse: (m) => {
+      const data = safeParseJson(m[2]); if (!data) return null;
+      return { action: m[1], data, fullMatch: m[0] };
+    },
+    classify: (action) => action === 'create' ? 'create' : action === 'update' ? 'update' : action === 'delete' ? 'delete' : null,
+    summarize: (action, d) => {
+      const who = d.name || d.query || 'contract';
+      const cost = d.costAmount ? ` (€${d.costAmount}/${d.costFrequency || 'mo'})` : '';
+      if (action === 'create') return `Add contract: ${who}${cost}`;
+      if (action === 'update') return `Update contract: ${who}${cost}`;
+      if (action === 'delete') return `Delete contract: ${who}`;
+      return `Contract action: ${who}`;
+    },
+  },
+  {
+    tool: 'manage_property', entity: 'property',
+    regex: /<tool>manage_property<\/tool>\s*<action>(\w+)<\/action>\s*<property>(\{[\s\S]*?\})<\/property>/g,
+    parse: (m) => {
+      const data = safeParseJson(m[2]); if (!data) return null;
+      return { action: m[1], data, fullMatch: m[0] };
+    },
+    classify: (action) => action === 'create' ? 'create' : action === 'update' ? 'update' : action === 'delete' ? 'delete' : null,
+    summarize: (action, d) => {
+      const who = d.name || d.query || 'property';
+      if (action === 'create') return `Add property: ${who}`;
+      if (action === 'update') return `Update property: ${who}`;
+      if (action === 'delete') return `Delete property: ${who}`;
+      return `Property action: ${who}`;
+    },
+  },
+  {
+    tool: 'manage_business', entity: 'business',
+    regex: /<tool>manage_business<\/tool>\s*<action>(\w+)<\/action>\s*<business>(\{[\s\S]*?\})<\/business>/g,
+    parse: (m) => {
+      const data = safeParseJson(m[2]); if (!data) return null;
+      return { action: m[1], data, fullMatch: m[0] };
+    },
+    classify: (action) => action === 'create' ? 'create' : action === 'update' ? 'update' : action === 'delete' ? 'delete' : null,
+    summarize: (action, d) => {
+      const who = d.name || d.query || 'business';
+      if (action === 'create') return `Add business: ${who}`;
+      if (action === 'update') return `Update business: ${who}`;
+      if (action === 'delete') return `Delete business: ${who}`;
+      return `Business action: ${who}`;
+    },
+  },
+  {
+    tool: 'manage_family_member', entity: 'family_member',
+    regex: /<tool>manage_family_member<\/tool>\s*<action>(\w+)<\/action>\s*<member>(\{[\s\S]*?\})<\/member>/g,
+    parse: (m) => {
+      const data = safeParseJson(m[2]); if (!data) return null;
+      return { action: m[1], data, fullMatch: m[0] };
+    },
+    classify: (action) => action === 'create' ? 'create' : action === 'update' ? 'update' : action === 'delete' ? 'delete' : null,
+    summarize: (action, d) => {
+      const who = d.name || d.query || 'family member';
+      if (action === 'create') return `Add family member: ${who}${d.relationship ? ` (${d.relationship})` : ''}`;
+      if (action === 'update') return `Update family member: ${who}`;
+      if (action === 'delete') return `Remove family member: ${who}`;
+      return `Family-member action: ${who}`;
+    },
+  },
+  {
+    tool: 'manage_note', entity: 'note',
+    regex: /<tool>manage_note<\/tool>\s*<action>(\w+)<\/action>\s*<note>(\{[\s\S]*?\})<\/note>/g,
+    parse: (m) => {
+      const data = safeParseJson(m[2]); if (!data) return null;
+      return { action: m[1], data, fullMatch: m[0] };
+    },
+    classify: (action) => action === 'create' ? 'create' : action === 'delete' ? 'delete' : null,
+    summarize: (action, d) => {
+      const who = d.title || d.query || 'note';
+      if (action === 'create') return `Save note: ${who}`;
+      if (action === 'delete') return `Delete note: ${who}`;
+      return `Note action: ${who}`;
+    },
+  },
+  {
+    tool: 'create_note', entity: 'note',
+    regex: /<tool>create_note<\/tool>\s*<note>(\{[\s\S]*?\})<\/note>/g,
+    parse: (m) => {
+      const data = safeParseJson(m[1]); if (!data) return null;
+      return { action: 'create', data, fullMatch: m[0] };
+    },
+    classify: () => 'create',
+    summarize: (_a, d) => `Save note: ${d.title || '(untitled)'}`,
+  },
+  {
+    tool: 'add_shopping_item', entity: 'shopping_item',
+    regex: /<tool>add_shopping_item<\/tool>\s*<item>(\{[\s\S]*?\})<\/item>/g,
+    parse: (m) => {
+      const data = safeParseJson(m[1]); if (!data) return null;
+      return { action: 'create', data, fullMatch: m[0] };
+    },
+    classify: () => 'create',
+    summarize: (_a, d) => `Add to shopping: ${d.quantity && d.quantity > 1 ? `${d.quantity}× ` : ''}${d.name || '(item)'}`,
+  },
+  {
+    tool: 'set_reminder', entity: 'reminder',
+    regex: /<tool>set_reminder<\/tool>\s*<reminder>(\{[\s\S]*?\})<\/reminder>/g,
+    parse: (m) => {
+      const data = safeParseJson(m[1]); if (!data) return null;
+      return { action: 'create', data, fullMatch: m[0] };
+    },
+    classify: () => 'create',
+    summarize: (_a, d) => `Set reminder${d.triggerAt ? ` for ${new Date(d.triggerAt).toLocaleString()}` : ''}: ${d.message || ''}`,
+  },
 ];
 
-interface ToolExecResult { tool: string; ok: boolean; message: string; data?: any; queued?: boolean }
+// Resolve whether a given op on a given entity requires user confirmation.
+// Precedence: per-entity override > global op flag > master toggle.
+function requiresConfirmation(
+  settings: Record<string, any> | null,
+  entity: string,
+  op: OpKind,
+): boolean {
+  if (!settings) return op === 'delete'; // sensible default until prefs are stored
+  if (settings.require_action_confirmation === false) return false;
+  const overrides = (settings.confirmation_overrides as Record<string, Record<string, boolean>> | null) || {};
+  const entOverride = overrides?.[entity];
+  if (entOverride && typeof entOverride[op] === 'boolean') return entOverride[op];
+  if (op === 'create') return !!settings.confirm_creates;
+  if (op === 'update') return settings.confirm_updates !== false; // default true
+  if (op === 'delete') return settings.confirm_deletes !== false; // default true
+  return false;
+}
 
-async function executeToolsServerSide(text: string, userId: string, supabase: any, opts?: { skipApprovalGate?: boolean }): Promise<ToolExecResult[]> {
+async function loadConfirmationSettings(supabase: any, userId: string): Promise<Record<string, any> | null> {
+  try {
+    const { data } = await supabase
+      .from('proactive_settings')
+      .select('require_action_confirmation, confirm_creates, confirm_updates, confirm_deletes, confirmation_overrides')
+      .eq('user_id', userId)
+      .maybeSingle();
+    return data || null;
+  } catch {
+    return null;
+  }
+}
+
+interface ToolExecResult {
+  tool: string;
+  ok: boolean;
+  message: string;
+  data?: any;
+  queued?: boolean;
+  actionId?: string;   // set when the call was queued for approval
+  summary?: string;    // human-readable summary shown in confirmation prompts
+}
+
+interface ServerExecOpts {
+  skipApprovalGate?: boolean;
+  source?: string;       // 'web' | 'tg_private' | 'tg_family' | 'voice' | 'proactive'
+  sourceRef?: string | null;
+}
+
+async function executeToolsServerSide(
+  text: string,
+  userId: string,
+  supabase: any,
+  opts?: ServerExecOpts,
+): Promise<ToolExecResult[]> {
   const out: ToolExecResult[] = [];
   if (!userId || userId === 'anonymous') return out;
 
-  // Approval gate: extract high-risk tool calls, queue them, and strip from text before processing.
+  // Approval gate: inspect every mutating tool, look up the user's confirmation
+  // preferences, and for any op that requires acknowledgment queue it in
+  // auto_actions_log (stripping it from the text so it's NOT executed this round).
   if (!opts?.skipApprovalGate) {
+    const settings = await loadConfirmationSettings(supabase, userId);
     let strippedText = text;
-    for (const pattern of HIGH_RISK_PATTERNS) {
-      const fullRegex = new RegExp(pattern.regex.source, 'g');
+    for (const spec of MUTATING_TOOLS) {
+      const fullRegex = new RegExp(spec.regex.source, 'g');
       const matches = [...text.matchAll(fullRegex)];
       for (const m of matches) {
-        const fullMatch = m[0];
-        const dataStr = m[1];
-        let data: any = {};
-        try { data = JSON.parse(dataStr); } catch {}
+        const parsed = spec.parse(m);
+        if (!parsed) continue;
+        const op = spec.classify(parsed.action, parsed.data);
+        if (!op) continue;
+        if (!requiresConfirmation(settings, spec.entity, op)) continue;
+
+        const summary = spec.summarize(parsed.action, parsed.data);
+        const actionType = `${op}_${spec.entity}`;
         try {
-          await supabase.from('auto_actions_log').insert({
+          const { data: inserted, error } = await supabase.from('auto_actions_log').insert({
             user_id: userId,
-            action_type: pattern.actionType,
-            entity_type: pattern.entityType,
-            action_data: { tool_xml: fullMatch, parsed: data },
-            reason: pattern.describe(data),
+            action_type: actionType,
+            entity_type: spec.entity,
+            action_data: { tool_xml: parsed.fullMatch, parsed: parsed.data, op },
+            reason: summary,
             status: 'pending',
+            source: opts?.source || 'web',
+            source_ref: opts?.sourceRef || null,
+          }).select('id').single();
+          if (error) throw error;
+          out.push({
+            tool: spec.tool,
+            ok: true,
+            queued: true,
+            actionId: inserted?.id,
+            summary,
+            message: `⏸️ Needs your OK: ${summary}`,
           });
-          out.push({ tool: pattern.actionType, ok: true, queued: true, message: `⏸️ Queued for your approval: ${pattern.describe(data)}` });
         } catch (e) {
-          out.push({ tool: pattern.actionType, ok: false, message: `Could not queue: ${(e as Error).message}` });
+          out.push({ tool: spec.tool, ok: false, message: `Could not queue: ${(e as Error).message}` });
         }
-        strippedText = strippedText.replace(fullMatch, '');
+        strippedText = strippedText.replace(parsed.fullMatch, '');
       }
     }
     text = strippedText;
@@ -1289,8 +1536,18 @@ serve(async (req) => {
       executeServerSide = false,
       skipApprovalGate = false,
       preformedToolText,
-    }: ChatRequest & { executeServerSide?: boolean; skipApprovalGate?: boolean; preformedToolText?: string } = reqBody;
-    
+      // Where this request originated. Queued actions carry this so the originating
+      // surface (e.g. a Telegram chat) can be notified back when the user approves.
+      actionSource,
+      actionSourceRef,
+    }: ChatRequest & {
+      executeServerSide?: boolean;
+      skipApprovalGate?: boolean;
+      preformedToolText?: string;
+      actionSource?: string;
+      actionSourceRef?: string | null;
+    } = reqBody;
+
     const personalityAddition = personalityPrompts[personality] || personalityPrompts.balanced;
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
@@ -1300,7 +1557,11 @@ serve(async (req) => {
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
       );
-      const execResults = await executeToolsServerSide(preformedToolText, userId, supabaseAdminEarly, { skipApprovalGate });
+      const execResults = await executeToolsServerSide(preformedToolText, userId, supabaseAdminEarly, {
+        skipApprovalGate,
+        source: actionSource,
+        sourceRef: actionSourceRef ?? null,
+      });
       return new Response(JSON.stringify({ reply: '', toolResults: execResults }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -1892,7 +2153,15 @@ This avoids wrong actions on big asks. Skip propose_plan for simple 1–3 action
         totalPromptTokens += aiData.usage?.prompt_tokens || 0;
         totalCompletionTokens += aiData.usage?.completion_tokens || 0;
 
-        const roundResults = await executeToolsServerSide(roundText, userId, supabaseAdmin);
+        // Default the action source from the channel if caller didn't specify one.
+        const effectiveSource = actionSource || (currentChannel === 'tg_family' ? 'tg_family'
+          : currentChannel === 'tg_private' ? 'tg_private'
+          : 'web');
+        const effectiveSourceRef = actionSourceRef ?? tgChannelRef ?? null;
+        const roundResults = await executeToolsServerSide(roundText, userId, supabaseAdmin, {
+          source: effectiveSource,
+          sourceRef: effectiveSourceRef,
+        });
         allExecResults.push(...roundResults);
 
         if (roundResults.length === 0) break;

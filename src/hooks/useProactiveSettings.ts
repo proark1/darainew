@@ -3,6 +3,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 
+export type ConfirmationOverrides = Record<
+  string,
+  { create?: boolean; update?: boolean; delete?: boolean }
+>;
+
 export interface ProactiveSettings {
   id?: string;
   user_id: string;
@@ -42,7 +47,29 @@ export interface ProactiveSettings {
   prayer_reminder_minutes?: number;
   evening_dua_enabled?: boolean;
   email_action_alerts_enabled?: boolean;
+  // Action-confirmation preferences (add/edit/delete gate).
+  require_action_confirmation?: boolean;
+  confirm_creates?: boolean;
+  confirm_updates?: boolean;
+  confirm_deletes?: boolean;
+  confirmation_overrides?: ConfirmationOverrides;
 }
+
+// Modules the assistant can mutate and therefore the user can override
+// confirmation requirements for. Keep in sync with MUTATING_TOOLS in
+// supabase/functions/chat/index.ts.
+export const CONFIRMATION_ENTITIES: { key: string; label: string }[] = [
+  { key: 'task', label: 'Tasks' },
+  { key: 'event', label: 'Calendar events' },
+  { key: 'contact', label: 'Contacts' },
+  { key: 'contract', label: 'Contracts' },
+  { key: 'property', label: 'Properties' },
+  { key: 'business', label: 'Businesses / ideas' },
+  { key: 'family_member', label: 'Family members' },
+  { key: 'note', label: 'Notes' },
+  { key: 'shopping_item', label: 'Shopping items' },
+  { key: 'reminder', label: 'Reminders' },
+];
 
 const DEFAULT_SETTINGS: Omit<ProactiveSettings, 'user_id'> = {
   enabled: true,
@@ -81,6 +108,11 @@ const DEFAULT_SETTINGS: Omit<ProactiveSettings, 'user_id'> = {
   prayer_reminder_minutes: 10,
   evening_dua_enabled: false,
   email_action_alerts_enabled: true,
+  require_action_confirmation: true,
+  confirm_creates: false,
+  confirm_updates: true,
+  confirm_deletes: true,
+  confirmation_overrides: {},
 };
 
 export function useProactiveSettings() {

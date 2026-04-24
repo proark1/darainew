@@ -335,6 +335,8 @@ export type Database = {
           id: string
           reason: string
           rejected_at: string | null
+          source: string
+          source_ref: string | null
           status: string
           user_id: string
         }
@@ -348,6 +350,8 @@ export type Database = {
           id?: string
           reason: string
           rejected_at?: string | null
+          source?: string
+          source_ref?: string | null
           status?: string
           user_id: string
         }
@@ -361,6 +365,8 @@ export type Database = {
           id?: string
           reason?: string
           rejected_at?: string | null
+          source?: string
+          source_ref?: string | null
           status?: string
           user_id?: string
         }
@@ -5549,6 +5555,10 @@ export type Database = {
           birthday_reminders_enabled: boolean
           calendar_overload_enabled: boolean | null
           calendar_overload_threshold: number | null
+          confirm_creates: boolean
+          confirm_deletes: boolean
+          confirm_updates: boolean
+          confirmation_overrides: Json
           contact_checkin_days: number | null
           contact_checkins_enabled: boolean | null
           contract_reminder_days: number[] | null
@@ -5580,6 +5590,7 @@ export type Database = {
           quiet_hours_enabled: boolean | null
           quiet_hours_end: string | null
           quiet_hours_start: string | null
+          require_action_confirmation: boolean
           stale_contact_days: number | null
           telegram_group_enabled: boolean
           telegram_proactive_enabled: boolean | null
@@ -5596,6 +5607,10 @@ export type Database = {
           birthday_reminders_enabled?: boolean
           calendar_overload_enabled?: boolean | null
           calendar_overload_threshold?: number | null
+          confirm_creates?: boolean
+          confirm_deletes?: boolean
+          confirm_updates?: boolean
+          confirmation_overrides?: Json
           contact_checkin_days?: number | null
           contact_checkins_enabled?: boolean | null
           contract_reminder_days?: number[] | null
@@ -5627,6 +5642,7 @@ export type Database = {
           quiet_hours_enabled?: boolean | null
           quiet_hours_end?: string | null
           quiet_hours_start?: string | null
+          require_action_confirmation?: boolean
           stale_contact_days?: number | null
           telegram_group_enabled?: boolean
           telegram_proactive_enabled?: boolean | null
@@ -5643,6 +5659,10 @@ export type Database = {
           birthday_reminders_enabled?: boolean
           calendar_overload_enabled?: boolean | null
           calendar_overload_threshold?: number | null
+          confirm_creates?: boolean
+          confirm_deletes?: boolean
+          confirm_updates?: boolean
+          confirmation_overrides?: Json
           contact_checkin_days?: number | null
           contact_checkins_enabled?: boolean | null
           contract_reminder_days?: number[] | null
@@ -5674,6 +5694,7 @@ export type Database = {
           quiet_hours_enabled?: boolean | null
           quiet_hours_end?: string | null
           quiet_hours_start?: string | null
+          require_action_confirmation?: boolean
           stale_contact_days?: number | null
           telegram_group_enabled?: boolean
           telegram_proactive_enabled?: boolean | null
