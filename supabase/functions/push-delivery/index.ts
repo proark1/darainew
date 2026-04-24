@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isUserQuietNow } from "../_shared/dori-quiet.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': Deno.env.get('APP_URL') || '*',
@@ -110,6 +111,17 @@ serve(async (req) => {
     const errors: string[] = [];
 
     for (const userId of targetUserIds) {
+      // Gate every channel (push + Telegram) through the shared quiet check
+      // so focus mode, tz-aware quiet hours, and "busy in a meeting" all
+      // silence us uniformly. Respect-events can be relaxed later for the
+      // meeting-preflight caller that NEEDS to fire during a meeting window.
+      const quiet = await isUserQuietNow(supabase, userId);
+      if (quiet.quiet) {
+        console.log(`push-delivery: skipping ${userId} — ${quiet.reason}`);
+        results.push({ userId, skipped: true, reason: quiet.reason });
+        continue;
+      }
+
       // Get user's proactive settings
       const { data: settings } = await supabase
         .from('proactive_settings')

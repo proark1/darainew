@@ -5632,6 +5632,7 @@ export type Database = {
           evening_dua_enabled: boolean
           evening_review_time: string | null
           event_prep_enabled: boolean | null
+          focus_mode_until: string | null
           forgotten_task_days: number | null
           forgotten_tasks_enabled: boolean | null
           habit_streak_warning_hours: number | null
@@ -5643,6 +5644,7 @@ export type Database = {
           meeting_followup_enabled: boolean | null
           meeting_prep_enabled: boolean | null
           morning_briefing_time: string | null
+          onboarding_checklist_dismissed: boolean
           prayer_reminder_minutes: number
           prayer_reminders_enabled: boolean
           prefer_voice_replies: boolean | null
@@ -5652,6 +5654,7 @@ export type Database = {
           quiet_hours_start: string | null
           require_action_confirmation: boolean
           stale_contact_days: number | null
+          suppress_during_events: boolean
           telegram_group_enabled: boolean
           telegram_proactive_enabled: boolean | null
           timezone: string | null
@@ -5684,6 +5687,7 @@ export type Database = {
           evening_dua_enabled?: boolean
           evening_review_time?: string | null
           event_prep_enabled?: boolean | null
+          focus_mode_until?: string | null
           forgotten_task_days?: number | null
           forgotten_tasks_enabled?: boolean | null
           habit_streak_warning_hours?: number | null
@@ -5695,6 +5699,7 @@ export type Database = {
           meeting_followup_enabled?: boolean | null
           meeting_prep_enabled?: boolean | null
           morning_briefing_time?: string | null
+          onboarding_checklist_dismissed?: boolean
           prayer_reminder_minutes?: number
           prayer_reminders_enabled?: boolean
           prefer_voice_replies?: boolean | null
@@ -5704,6 +5709,7 @@ export type Database = {
           quiet_hours_start?: string | null
           require_action_confirmation?: boolean
           stale_contact_days?: number | null
+          suppress_during_events?: boolean
           telegram_group_enabled?: boolean
           telegram_proactive_enabled?: boolean | null
           timezone?: string | null
@@ -5736,6 +5742,7 @@ export type Database = {
           evening_dua_enabled?: boolean
           evening_review_time?: string | null
           event_prep_enabled?: boolean | null
+          focus_mode_until?: string | null
           forgotten_task_days?: number | null
           forgotten_tasks_enabled?: boolean | null
           habit_streak_warning_hours?: number | null
@@ -5747,6 +5754,7 @@ export type Database = {
           meeting_followup_enabled?: boolean | null
           meeting_prep_enabled?: boolean | null
           morning_briefing_time?: string | null
+          onboarding_checklist_dismissed?: boolean
           prayer_reminder_minutes?: number
           prayer_reminders_enabled?: boolean
           prefer_voice_replies?: boolean | null
@@ -5756,6 +5764,7 @@ export type Database = {
           quiet_hours_start?: string | null
           require_action_confirmation?: boolean
           stale_contact_days?: number | null
+          suppress_during_events?: boolean
           telegram_group_enabled?: boolean
           telegram_proactive_enabled?: boolean | null
           timezone?: string | null

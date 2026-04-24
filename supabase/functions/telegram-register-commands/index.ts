@@ -24,6 +24,7 @@ const COMMANDS = [
   { command: 'note',       description: 'Save a note — /note <text>' },
   { command: 'remind',     description: 'Set a reminder — /remind <text>' },
   { command: 'undo',       description: '↩️ Undo the last action (5-min window)' },
+  { command: 'focus',      description: '🔇 Focus mode — /focus on 2h · /focus off' },
   { command: 'birthdays',  description: 'Upcoming birthdays (30 days)' },
   { command: 'contacts',   description: 'Search contacts — /contacts <name>' },
   { command: 'contracts',  description: 'Active contracts & subscriptions' },

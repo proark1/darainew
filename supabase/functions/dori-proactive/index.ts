@@ -4,6 +4,7 @@
 // to prevent duplicates.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { sendDoriReply } from '../_shared/telegram-voice.ts';
+import { isUserQuietNow } from '../_shared/dori-quiet.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -471,6 +472,7 @@ Deno.serve(async (req) => {
              daily_review_enabled, weekly_planning_enabled, meeting_briefing_enabled, meeting_briefing_minutes,
              contract_renewals_enabled, contract_reminder_days, contact_checkins_enabled, stale_contact_days,
              telegram_proactive_enabled, quiet_hours_enabled, quiet_hours_start, quiet_hours_end,
+             focus_mode_until, suppress_during_events,
              birthday_reminders_enabled, birthday_reminder_days,
              prayer_reminders_enabled, prayer_reminder_minutes, evening_dua_enabled,
              email_action_alerts_enabled`)
@@ -491,7 +493,14 @@ Deno.serve(async (req) => {
 
       const tz = s.timezone || 'Europe/Berlin';
       const now = localNow(tz);
-      if (inQuietHours(now, s)) continue;
+      // Quiet hours + focus mode + in-meeting suppression — isUserQuietNow
+      // handles all three so we don't re-implement them per-trigger.
+      // Pass `s` + `tz` in directly: the batch loop already loaded them,
+      // so we avoid 2 redundant round-trips per user.
+      const quiet = await isUserQuietNow(supabase, s.user_id, {
+        prefetched: { timezone: tz, settings: s },
+      });
+      if (quiet.quiet) continue;
 
       const household = await resolveHousehold(supabase, s.user_id);
       const self = household.find(h => h.user_id === s.user_id);

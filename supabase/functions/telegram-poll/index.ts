@@ -941,6 +941,46 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      // /focus — silence Dori's proactive sends for a bounded window.
+      // /focus on 2h | /focus 30m | /focus off
+      {
+        const m = text.trim().match(/^\/focus(?:\s+(on|off|end)?)?(?:\s+(\d+)\s*(m(?:in)?|mins|minutes|h(?:r)?|hrs|hours)?)?$/i);
+        if (m) {
+          const stateArg = (m[1] || '').toLowerCase();
+          const n = m[2] ? Number(m[2]) : null;
+          const unit = (m[3] || '').toLowerCase();
+          let reply = '';
+          if (stateArg === 'off' || stateArg === 'end') {
+            await supabase.from('proactive_settings')
+              .upsert({ user_id: link.user_id, focus_mode_until: null, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+            reply = '🔔 Focus mode off — I\'ll pipe up again as needed.';
+          } else {
+            const mins = n
+              ? (unit.startsWith('h') ? n * 60 : n)
+              : 60;  // default: 1 hour
+            const until = new Date(Date.now() + mins * 60 * 1000).toISOString();
+            await supabase.from('proactive_settings')
+              .upsert({ user_id: link.user_id, focus_mode_until: until, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+            // Edge runtime is UTC — format the resume time in the user's
+            // configured timezone or the reply says "16:00" for a Berlin
+            // 18:00, which is more confusing than helpful.
+            const { data: p } = await supabase.from('profiles').select('timezone').eq('user_id', link.user_id).maybeSingle();
+            const tz = p?.timezone || undefined;
+            const timeStr = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit' }).format(new Date(until));
+            reply = `🔇 Focus mode on for ${mins} min. I'll hold all nudges until ${timeStr}. /focus off to cancel.`;
+          }
+          await sendDoriReply({
+            chatId, text: reply, preferVoice: wasVoiceMessage,
+            lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+          });
+          await supabase.from('telegram_messages').upsert({
+            update_id: u.update_id, chat_id: chatId, text, raw_update: u, processed: true,
+          }, { onConflict: 'update_id' });
+          processed++;
+          continue;
+        }
+      }
+
       // /me — instant personal digest, no AI round-trip.
       if (text.trim().toLowerCase() === '/me') {
         try {

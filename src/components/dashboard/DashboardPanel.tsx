@@ -13,6 +13,7 @@ import { TodayTimeline } from './TodayTimeline';
 import { SmartInsightCard } from './SmartInsightCard';
 import { DailyBriefingCard } from './DailyBriefingCard';
 import { QuickActionsBar } from './QuickActionsBar';
+import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist';
 import { WeatherCard } from './WeatherCard';
 import { ContractAlertsCard } from './ContractAlertsCard';
 import { ContactRemindersCard } from './ContactRemindersCard';
@@ -199,6 +200,11 @@ export function DashboardPanel({ userId, onNavigate }: DashboardPanelProps) {
             onStartTask={handleStartTask}
             onNavigate={onNavigate}
           />
+        </StaggerItem>
+
+        {/* First-day Getting-started checklist (self-hides once dismissed) */}
+        <StaggerItem className="col-span-full">
+          <OnboardingChecklist />
         </StaggerItem>
 
         {/* Quick Actions — immediately after hero */}

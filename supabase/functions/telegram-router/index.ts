@@ -74,6 +74,7 @@ read it. Send a <b>voice note</b> and I'll act on what you said.
 
 <b>↩️ Safety net</b>
 /undo — reverse the last action (within 5 minutes)
+/focus on 2h — silence Dori's nudges (also: /focus off)
 Reply <b>yes</b> / <b>no</b> to confirm any action I propose.
 
 <b>👨‍👩‍👧 Family &amp; people</b>
