@@ -343,6 +343,7 @@ export function SettingsPanelContent({
   // Profile form state
   const [displayName, setDisplayName] = useState('');
   const [birthDate, setBirthDate] = useState('');
+  const [locale, setLocale] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Sync profile data to form
@@ -350,6 +351,7 @@ export function SettingsPanelContent({
     if (profile) {
       setDisplayName(profile.displayName || '');
       setBirthDate(profile.birthDate || '');
+      setLocale(profile.locale || '');
     }
   }, [profile]);
 
@@ -358,6 +360,8 @@ export function SettingsPanelContent({
     const result = await updateProfile({
       displayName: displayName.trim() || undefined,
       birthDate: birthDate || undefined,
+      // Empty string clears the locale (back to auto-detect).
+      locale: locale.trim() === '' ? '' : locale.trim(),
     });
     setIsSavingProfile(false);
     
@@ -457,6 +461,37 @@ export function SettingsPanelContent({
                     />
                     <p className="text-xs text-muted-foreground">
                       Used for age-based health recommendations
+                    </p>
+                  </div>
+
+                  {/* Locale — empty value = auto-detect from messages. */}
+                  <div className="space-y-2">
+                    <Label htmlFor="locale">Language</Label>
+                    <Select value={locale || '__auto__'} onValueChange={(v) => setLocale(v === '__auto__' ? '' : v)}>
+                      <SelectTrigger id="locale">
+                        <SelectValue placeholder="Auto-detect" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__auto__">Auto-detect</SelectItem>
+                        <SelectItem value="en-US">English (US)</SelectItem>
+                        <SelectItem value="en-GB">English (UK)</SelectItem>
+                        <SelectItem value="de-DE">Deutsch</SelectItem>
+                        <SelectItem value="fr-FR">Français</SelectItem>
+                        <SelectItem value="es-ES">Español</SelectItem>
+                        <SelectItem value="it-IT">Italiano</SelectItem>
+                        <SelectItem value="pt-BR">Português (BR)</SelectItem>
+                        <SelectItem value="nl-NL">Nederlands</SelectItem>
+                        <SelectItem value="pl-PL">Polski</SelectItem>
+                        <SelectItem value="ja-JP">日本語</SelectItem>
+                        <SelectItem value="ko-KR">한국어</SelectItem>
+                        <SelectItem value="zh-CN">中文 (简体)</SelectItem>
+                        <SelectItem value="ar-SA">العربية</SelectItem>
+                        <SelectItem value="tr-TR">Türkçe</SelectItem>
+                        <SelectItem value="ru-RU">Русский</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Dori replies in this language by default. Auto-detect mirrors whichever language you write in.
                     </p>
                   </div>
 

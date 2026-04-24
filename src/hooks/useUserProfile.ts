@@ -45,6 +45,7 @@ export function useUserProfile() {
           locationCountry: data.location_country,
           preferredWorkHours: data.preferred_work_hours,
           timezone: data.timezone,
+          locale: data.locale ?? undefined,
         });
       }
     } catch (err) {
@@ -78,6 +79,7 @@ export function useUserProfile() {
       if (updates.locationCountry !== undefined) dbUpdates.location_country = updates.locationCountry;
       if (updates.preferredWorkHours !== undefined) dbUpdates.preferred_work_hours = updates.preferredWorkHours;
       if (updates.timezone !== undefined) dbUpdates.timezone = updates.timezone;
+      if (updates.locale !== undefined) dbUpdates.locale = updates.locale || null;
 
       const { error: updateError } = await supabase
         .from('profiles')

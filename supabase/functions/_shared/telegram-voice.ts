@@ -11,6 +11,36 @@ export interface SendOpts {
   preferVoice?: boolean;
   lovableKey: string;
   telegramKey: string;
+  // IANA-like tag from profiles.locale ("en-US", "de", "fr-FR"…). Used
+  // to pick a Gemini TTS voice that suits the language. Null/undefined
+  // falls back to the default voice.
+  locale?: string | null;
+}
+
+// Best-effort locale → Gemini TTS voice mapping. Gemini's prebuilt voices
+// can speak any input language, but each one has a tonal "accent" that
+// fits some better than others. The defaults below reflect that —
+// callers that pass null/unknown locales get Kore (warm, neutral).
+function pickVoiceForLocale(locale?: string | null): string {
+  if (!locale) return 'Kore';
+  const lang = locale.toLowerCase().split(/[-_]/)[0];
+  switch (lang) {
+    case 'de':  return 'Puck';        // brighter, fits German
+    case 'fr':  return 'Aoede';       // softer, French-friendly
+    case 'es':  return 'Achird';      // warm Spanish lean
+    case 'it':  return 'Charon';      // expressive Italian lean
+    case 'pt':  return 'Algenib';     // Portuguese
+    case 'nl':  return 'Iapetus';     // Dutch
+    case 'pl':  return 'Schedar';     // Polish
+    case 'ru':  return 'Fenrir';      // Russian
+    case 'ar':  return 'Sadachbia';   // Arabic
+    case 'ja':  return 'Despina';     // Japanese — lighter
+    case 'ko':  return 'Laomedeia';   // Korean
+    case 'zh':  return 'Pulcherrima'; // Mandarin
+    case 'tr':  return 'Vindemiatrix';// Turkish
+    case 'en':
+    default:    return 'Kore';
+  }
 }
 
 async function sendText(chatId: number, text: string, lovableKey: string, telegramKey: string) {
@@ -57,7 +87,7 @@ function pcmToWav(pcm: Uint8Array, sampleRate = 24000): Uint8Array {
   return new Uint8Array(buffer);
 }
 
-async function generateVoiceWav(text: string): Promise<Uint8Array | null> {
+async function generateVoiceWav(text: string, voiceName = 'Kore'): Promise<Uint8Array | null> {
   const apiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('LOVABLE_API_KEY');
   if (!apiKey) return null;
   try {
@@ -71,7 +101,7 @@ async function generateVoiceWav(text: string): Promise<Uint8Array | null> {
           generationConfig: {
             responseModalities: ['AUDIO'],
             speechConfig: {
-              voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+              voiceConfig: { prebuiltVoiceConfig: { voiceName } },
             },
           },
         }),
@@ -136,11 +166,11 @@ async function sendVoiceNote(
  * send as a voice note (with original text as caption). Otherwise send as text.
  */
 export async function sendDoriReply(opts: SendOpts): Promise<void> {
-  const { chatId, text, preferVoice, lovableKey, telegramKey } = opts;
+  const { chatId, text, preferVoice, lovableKey, telegramKey, locale } = opts;
   const cleanForVoice = stripHtml(text);
 
   if (preferVoice && cleanForVoice.length > 0 && cleanForVoice.length <= MAX_VOICE_CHARS) {
-    const audio = await generateVoiceWav(cleanForVoice);
+    const audio = await generateVoiceWav(cleanForVoice, pickVoiceForLocale(locale));
     if (audio && audio.length > 0) {
       const ok = await sendVoiceNote(chatId, audio, text, lovableKey, telegramKey);
       if (ok) return;

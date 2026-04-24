@@ -1280,13 +1280,18 @@ Deno.serve(async (req) => {
       const dori = await callDori(link.user_id, text, chatId, supabaseUrl, serviceKey, photoDataUrl, streamCbs, activeWsForChat);
       if (pendingEdit) { clearTimeout(pendingEdit); pendingEdit = null; }
 
-      // Voice reply if user prefers OR if they sent a voice message
+      // Voice reply if user prefers OR if they sent a voice message. Locale
+      // is loaded alongside so the TTS voice matches the user's language.
       let preferVoice = wasVoiceMessage;
+      let userLocale: string | undefined;
       try {
         const supabaseForPref = createClient(supabaseUrl, serviceKey);
-        const { data: ps } = await supabaseForPref.from('proactive_settings')
-          .select('prefer_voice_replies').eq('user_id', link.user_id).maybeSingle();
+        const [{ data: ps }, { data: prof }] = await Promise.all([
+          supabaseForPref.from('proactive_settings').select('prefer_voice_replies').eq('user_id', link.user_id).maybeSingle(),
+          supabaseForPref.from('profiles').select('locale').eq('user_id', link.user_id).maybeSingle(),
+        ]);
         if (ps?.prefer_voice_replies) preferVoice = true;
+        userLocale = prof?.locale || undefined;
       } catch (_) { /* ignore */ }
 
       const queued = dori.toolResults.filter((t) => t.queued && t.actionId);
@@ -1321,7 +1326,7 @@ Deno.serve(async (req) => {
         }
         if (outgoingText) {
           await sendDoriReply({
-            chatId, text: outgoingText, preferVoice,
+            chatId, text: outgoingText, preferVoice, locale: userLocale,
             lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
           });
           if (latestUndoId) {

@@ -56,6 +56,7 @@ export interface UserProfile {
   locationCountry?: string;
   preferredWorkHours?: string;
   timezone?: string;
+  locale?: string;
 }
 
 export interface SmartContext {

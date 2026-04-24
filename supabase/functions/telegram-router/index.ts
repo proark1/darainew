@@ -1064,11 +1064,15 @@ Deno.serve(async (req) => {
       } catch (e) { console.error('Failed to persist assistant reply', e); }
 
       let preferVoice = false;
+      let voiceLocale: string | undefined;
       try {
         const prefUser = senderUserId || group.owner_user_id;
-        const { data: ps } = await supabase.from('proactive_settings')
-          .select('prefer_voice_replies').eq('user_id', prefUser).maybeSingle();
+        const [{ data: ps }, { data: prof }] = await Promise.all([
+          supabase.from('proactive_settings').select('prefer_voice_replies').eq('user_id', prefUser).maybeSingle(),
+          supabase.from('profiles').select('locale').eq('user_id', prefUser).maybeSingle(),
+        ]);
         preferVoice = !!ps?.prefer_voice_replies;
+        voiceLocale = prof?.locale || undefined;
       } catch (_) { /* ignore */ }
 
       if (latestUndoId && !preferVoice) {
@@ -1081,7 +1085,7 @@ Deno.serve(async (req) => {
         );
       } else {
         await sendDoriReply({
-          chatId: chat_id, text: finalMsg.slice(0, 4000), preferVoice,
+          chatId: chat_id, text: finalMsg.slice(0, 4000), preferVoice, locale: voiceLocale,
           lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
         });
         if (latestUndoId) {

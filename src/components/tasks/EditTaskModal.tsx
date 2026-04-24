@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Task, TaskPriority, TaskCategory, Project, ChecklistItem } from '@/types/flux';
+import { TaskComments } from './TaskComments';
 import type { Contact } from '@/hooks/useContacts';
 import { recurrencePresets, toRRuleString, getRecurrenceDescription, parseRRuleString } from '@/lib/recurrence';
 import { X, Calendar as CalendarIcon, Trash2, Repeat, Bell, Clock, User, Users, FolderOpen, Plus, Check, Sparkles } from 'lucide-react';
@@ -565,6 +566,13 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, onAddSubtasks, 
               Get notified before the task is due
             </p>
           </div>
+
+          {/* Comments thread (shared with workspace teammates + Telegram /comment) */}
+          {task?.id && (
+            <div className="pt-4 border-t border-border">
+              <TaskComments taskId={task.id} />
+            </div>
+          )}
         </div>
 
         {/* Footer */}
