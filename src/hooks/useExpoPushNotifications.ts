@@ -184,10 +184,22 @@ export function useExpoPushNotifications() {
           .eq('delivery_channel', 'push');
       }
 
-      // Navigate based on notification type
+      // Deep-link the user to the right entity. We dispatch a window
+      // event instead of calling a router directly so this hook stays
+      // context-free; whichever component mounts the StandardMode shell
+      // listens and routes (see useDeepLinkHandler).
       if (data?.trigger_entity_type && data?.trigger_entity_id) {
-        // Could dispatch navigation event here
-        console.log('Navigate to:', data.trigger_entity_type, data.trigger_entity_id);
+        try {
+          window.dispatchEvent(new CustomEvent('dori:open-entity', {
+            detail: {
+              type: String(data.trigger_entity_type),
+              id: String(data.trigger_entity_id),
+              source: 'push',
+            },
+          }));
+        } catch (e) {
+          console.error('open-entity dispatch failed', e);
+        }
       }
     });
 

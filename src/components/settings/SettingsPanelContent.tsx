@@ -53,6 +53,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useStatusBar } from '@/hooks/useStatusBar';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
 import { usePrayerNotificationSettings } from '@/hooks/usePrayerNotificationSettings';
 
@@ -345,6 +346,59 @@ export function SettingsPanelContent({
   const [birthDate, setBirthDate] = useState('');
   const [locale, setLocale] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Trigger the user-data-export edge function and surface the result as
+  // a download. We POST through the edge function (not direct PostgREST)
+  // so the operator can audit access and apply rate limits later without
+  // touching this component.
+  const handleDownloadExport = async () => {
+    setIsExporting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        toast({ title: 'Sign in required', variant: 'destructive' });
+        return;
+      }
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/user-data-export`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
+        },
+        body: '{}',
+      });
+      if (!res.ok) {
+        toast({ title: 'Export failed', description: `Server returned ${res.status}`, variant: 'destructive' });
+        return;
+      }
+      // res.blob() buffers the full response in memory before resolving.
+      // True browser-side streaming-to-disk needs File System Access or
+      // a Service Worker fetch hand-off; both add complexity for the
+      // typical export size, so we accept the buffer hit here. The edge
+      // function caps each table at 5 000 rows + minifies the output to
+      // keep the payload well within mobile browser limits.
+      const blob = await res.blob();
+      const cd = res.headers.get('Content-Disposition') || '';
+      const fnameMatch = cd.match(/filename="([^"]+)"/);
+      const filename = fnameMatch?.[1] || `dori-export-${new Date().toISOString().slice(0, 10)}.json`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast({ title: 'Export ready', description: `Downloaded as ${filename}` });
+    } catch (e) {
+      toast({ title: 'Export failed', description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // Sync profile data to form
   useEffect(() => {
@@ -512,6 +566,28 @@ export function SettingsPanelContent({
                   </Button>
                 </div>
               )}
+            </div>
+
+            {/* Data export — single button that downloads the full bundle. */}
+            <div className="pt-4 border-t border-border">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                Your data
+              </h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                Download every record Dori keeps for you — tasks, events, notes,
+                contacts, contracts, memories, and the full activity log — as a
+                single JSON file. Workspace data stays with the workspace.
+              </p>
+              <Button size="sm" variant="outline" onClick={handleDownloadExport} disabled={isExporting}>
+                {isExporting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Preparing…
+                  </>
+                ) : (
+                  'Download my data (JSON)'
+                )}
+              </Button>
             </div>
 
             {/* Calendar Connections Section */}

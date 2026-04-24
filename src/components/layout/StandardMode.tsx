@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, Suspense, lazy } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sidebar, SidebarFilter, ActivePanel } from './Sidebar';
+import { useDeepLinkHandler } from '@/hooks/useDeepLinkHandler';
 import { MobileLayout } from './MobileLayout';
 import { RealtimeNotificationCenter } from '../notifications/RealtimeNotificationCenter';
 import { useAuth } from '@/hooks/useAuth';
@@ -178,6 +179,16 @@ export function StandardMode({
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
+
+  // Deep-linking from push notifications, AI replies, etc. — listens for
+  // `dori:open-entity` window events and routes to the right surface.
+  // The options object is memoized so the inner useEffect doesn't tear
+  // down + re-add the window listener on every parent render.
+  const deepLinkOptions = useMemo(() => ({
+    setActivePanel: (p: string) => setActivePanel(p as ActivePanel),
+    setSelectedProjectId,
+  }), [setSelectedProjectId]);
+  useDeepLinkHandler(deepLinkOptions);
   const { celebrate } = useCelebration();
   const { user } = useAuth();
   const { t } = useLanguage();
