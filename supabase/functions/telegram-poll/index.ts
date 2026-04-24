@@ -1,17 +1,30 @@
 // Polls Telegram getUpdates and routes incoming messages.
 // 1:1 chats → Dori chat; group chats linked via /linkfamily → telegram-router.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { encodeBase64 } from 'https://deno.land/std@0.224.0/encoding/base64.ts';
 import { sendDoriReply } from '../_shared/telegram-voice.ts';
 import {
   approveAndExecutePending,
   buildConfirmKeyboard,
   classifyConfirmationText,
   fetchLatestPendingForChat,
+  isActionableNow,
   rejectPending,
+  sweepExpiredPending,
   tgAnswerCallback,
   tgEditMessageText,
   tgSendWithKeyboard,
 } from '../_shared/telegram-confirm.ts';
+import {
+  buildUndoKeyboard,
+  decodeCallback,
+  tgEditReplyMarkup,
+} from '../_shared/telegram-inline.ts';
+import {
+  fetchLatestUndoableForUser,
+  fetchUndoable,
+  runUndo,
+} from '../_shared/dori-undo.ts';
 
 const GATEWAY_URL = 'https://connector-gateway.lovable.dev/telegram';
 const MAX_RUNTIME_MS = 55_000;
@@ -45,6 +58,37 @@ async function sendMessage(chatId: number, text: string, lovableKey: string, tgK
   }
 }
 
+// Download a Telegram file by id and return a base64 data URL suitable for
+// the chat function's multimodal imageUrl field.
+async function downloadTelegramFile(
+  fileId: string,
+  mime: string,
+  lovableKey: string,
+  tgKey: string,
+): Promise<string | null> {
+  try {
+    const fileRes = await tg('getFile', { file_id: fileId }, lovableKey, tgKey);
+    const filePath = fileRes?.result?.file_path;
+    if (!filePath) return null;
+    const dl = await fetch(`${GATEWAY_URL}/file/${filePath}`, {
+      headers: { 'Authorization': `Bearer ${lovableKey}`, 'X-Connection-Api-Key': tgKey },
+    });
+    if (!dl.ok) {
+      console.error('file download failed', dl.status);
+      return null;
+    }
+    const bytes = new Uint8Array(await dl.arrayBuffer());
+    // std/encoding/base64 uses a native fast path, avoids the call-stack
+    // risk of String.fromCharCode.apply(...) on large Uint8Arrays, and doesn't
+    // allocate an intermediate Array.
+    const b64 = encodeBase64(bytes);
+    return `data:${mime || 'application/octet-stream'};base64,${b64}`;
+  } catch (e) {
+    console.error('downloadTelegramFile error', e);
+    return null;
+  }
+}
+
 // Download a Telegram file (voice/audio) and transcribe via Gemini.
 // Returns the transcript text, or null on failure.
 async function transcribeTelegramVoice(
@@ -69,13 +113,8 @@ async function transcribeTelegramVoice(
     }
     const bytes = new Uint8Array(await dl.arrayBuffer());
 
-    // 3) Base64 encode (chunked to avoid stack overflow on large files)
-    let binary = '';
-    const chunkSize = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunkSize)));
-    }
-    const base64Audio = btoa(binary);
+    // 3) Base64 encode via std/encoding/base64 (native, no chunking needed).
+    const base64Audio = encodeBase64(bytes);
 
     // 4) Transcribe via Lovable AI Gateway (Gemini supports audio inline as data URL)
     const audioMime = mime || 'audio/ogg';
@@ -136,9 +175,12 @@ async function callDori(
   chatId: number,
   supabaseUrl: string,
   serviceKey: string,
+  imageUrl?: string | null,
 ): Promise<DoriCallResult> {
-  try {
-    const r = await fetch(`${supabaseUrl}/functions/v1/chat`, {
+  // Small retry helper: if the AI gateway returns 429/402 once, back off briefly
+  // and retry. After that we surface a friendly message to the user.
+  async function doRequest(): Promise<Response> {
+    return fetch(`${supabaseUrl}/functions/v1/chat`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${serviceKey}`,
@@ -153,14 +195,28 @@ async function callDori(
         executeServerSide: true,
         actionSource: 'tg_private',
         actionSourceRef: String(chatId),
+        ...(imageUrl ? { imageUrl } : {}),
       }),
     });
+  }
+
+  try {
+    let r = await doRequest();
+    // Only retry on *transient* failures. 402 (credit exhaustion) won't self-
+    // resolve — retrying just adds latency, so we pass that straight through.
+    if (r.status === 429 || r.status === 503) {
+      await new Promise((res) => setTimeout(res, 1500));
+      r = await doRequest();
+    }
     if (!r.ok) {
-      console.error(`Dori call failed for user ${userId}:`, r.status, await r.text());
-      return {
-        reply: "Sorry, I'm having trouble reaching Dori right now. Try again in a moment.",
-        toolResults: [],
-      };
+      const body = await r.text();
+      console.error(`Dori call failed for user ${userId}:`, r.status, body);
+      const friendly =
+        r.status === 429 ? "I'm getting rate-limited right now. Try again in ~30 seconds."
+        : r.status === 402 ? "I've run out of AI credits for today — please top up or try again tomorrow."
+        : r.status >= 500 ? "My AI service is having a moment. Try again shortly."
+        : "I couldn't process that — please try again in a moment.";
+      return { reply: friendly, toolResults: [] };
     }
     const data = await r.json();
     return {
@@ -170,6 +226,267 @@ async function callDori(
   } catch (e) {
     console.error('callDori error:', e);
     return { reply: 'Something went wrong. Please try again.', toolResults: [] };
+  }
+}
+
+// ── Row-level inline-keyboard action handlers ──────────────────────────────
+// Each handler validates ownership, performs the mutation, then either edits
+// the originating Telegram message to show the outcome or answers the callback
+// with a short toast. They deliberately do NOT go through the AI — row buttons
+// are predictable operations, so we skip the AI round-trip for speed.
+
+// Record an undo row for a callback-driven mutation and return its id (or null
+// if the insert failed). The resulting id is stapled onto the edited message
+// as an ↩️ Undo button so the user can reverse the tap within 5 minutes.
+async function recordCallbackUndo(
+  supabase: any,
+  args: {
+    cb: any;
+    userId: string;
+    op: string;
+    entity: string;
+    entityId: string | null;
+    label: string;
+    snapshot: any;
+  },
+): Promise<string | null> {
+  try {
+    const { data } = await supabase.from('dori_undo_log').insert({
+      user_id: args.userId,
+      op: args.op,
+      entity_type: args.entity,
+      entity_id: args.entityId,
+      label: args.label,
+      inverse_tool_xml: null,
+      snapshot: args.snapshot,
+      source: args.cb.message?.chat?.type === 'private' ? 'tg_private' : 'tg_family',
+      source_ref: args.cb.message?.chat?.id ? String(args.cb.message.chat.id) : null,
+      expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    }).select('id').single();
+    return data?.id || null;
+  } catch (e) {
+    console.error('recordCallbackUndo failed', e);
+    return null;
+  }
+}
+
+async function handleTaskCallback(
+  supabase: any,
+  cb: any,
+  payload: { op: 'complete' | 'snooze1h' | 'snooze1d' | 'delete'; taskId: string },
+  tappingUserId: string | undefined,
+  lovableKey: string,
+  telegramKey: string,
+  supabaseUrl: string,
+  serviceKey: string,
+) {
+  const { data: task } = await supabase.from('tasks')
+    .select('*').eq('id', payload.taskId).maybeSingle();
+  if (!task) {
+    await tgAnswerCallback(cb.id, 'Task not found.', lovableKey, telegramKey);
+    if (cb.message?.message_id) await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, lovableKey, telegramKey);
+    return;
+  }
+  if (tappingUserId && tappingUserId !== task.user_id) {
+    await tgAnswerCallback(cb.id, 'Only the owner can touch this task.', lovableKey, telegramKey);
+    return;
+  }
+
+  // Snapshot for undo (only for reversible ops).
+  const snapshotBefore = { completed: task.completed, completed_at: task.completed_at, due_date: task.due_date };
+
+  let outcome = '';
+  let undoSnap: any = null;
+  if (payload.op === 'complete') {
+    await supabase.from('tasks').update({ completed: true, completed_at: new Date().toISOString() }).eq('id', task.id);
+    outcome = `✅ Done — ${task.title}`;
+    undoSnap = { kind: 'patch', table: 'tasks', id: task.id, patch: snapshotBefore };
+  } else if (payload.op === 'snooze1h' || payload.op === 'snooze1d') {
+    const base = task.due_date ? new Date(task.due_date) : new Date();
+    const newDue = new Date(base.getTime() + (payload.op === 'snooze1h' ? 3600 : 86400) * 1000).toISOString();
+    await supabase.from('tasks').update({ due_date: newDue }).eq('id', task.id);
+    outcome = `⏰ Snoozed — ${task.title} now due ${new Date(newDue).toLocaleString()}`;
+    undoSnap = { kind: 'patch', table: 'tasks', id: task.id, patch: { due_date: task.due_date } };
+  } else if (payload.op === 'delete') {
+    await supabase.from('tasks').delete().eq('id', task.id);
+    outcome = `🗑 Deleted — ${task.title}`;
+    undoSnap = { kind: 'reinsert', table: 'tasks', row: task };
+  }
+
+  const undoId = await recordCallbackUndo(supabase, {
+    cb, userId: task.user_id, op: payload.op, entity: 'task', entityId: task.id,
+    label: `${payload.op} task "${task.title}"`, snapshot: undoSnap,
+  });
+
+  await tgAnswerCallback(cb.id, outcome.slice(0, 180), lovableKey, telegramKey);
+  if (cb.message?.message_id) {
+    await tgEditMessageText(cb.message.chat.id, cb.message.message_id, outcome, lovableKey, telegramKey);
+    if (undoId) {
+      await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, buildUndoKeyboard(undoId), lovableKey, telegramKey);
+    } else {
+      await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, lovableKey, telegramKey);
+    }
+  }
+  // Silence unused-param warning on supabaseUrl/serviceKey — kept for API uniformity.
+  void supabaseUrl; void serviceKey;
+}
+
+async function handleShopCallback(
+  supabase: any,
+  cb: any,
+  payload: { op: 'check' | 'uncheck' | 'remove'; itemId: string },
+  tappingUserId: string | undefined,
+  lovableKey: string,
+  telegramKey: string,
+) {
+  const { data: item } = await supabase.from('shopping_list_items')
+    .select('*').eq('id', payload.itemId).maybeSingle();
+  if (!item) {
+    await tgAnswerCallback(cb.id, 'Item not found.', lovableKey, telegramKey);
+    if (cb.message?.message_id) await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, lovableKey, telegramKey);
+    return;
+  }
+  if (tappingUserId && tappingUserId !== item.user_id) {
+    await tgAnswerCallback(cb.id, 'Only the owner can touch this item.', lovableKey, telegramKey);
+    return;
+  }
+
+  let outcome = '';
+  let undoSnap: any = null;
+  if (payload.op === 'check') {
+    await supabase.from('shopping_list_items').update({ is_checked: true, checked_at: new Date().toISOString() }).eq('id', item.id);
+    outcome = `☑️ Got — ${item.name}`;
+    undoSnap = { kind: 'patch', table: 'shopping_list_items', id: item.id, patch: { is_checked: item.is_checked ?? false, checked_at: item.checked_at ?? null } };
+  } else if (payload.op === 'uncheck') {
+    await supabase.from('shopping_list_items').update({ is_checked: false, checked_at: null }).eq('id', item.id);
+    outcome = `🔲 Unchecked — ${item.name}`;
+    undoSnap = { kind: 'patch', table: 'shopping_list_items', id: item.id, patch: { is_checked: item.is_checked ?? true, checked_at: item.checked_at ?? null } };
+  } else if (payload.op === 'remove') {
+    await supabase.from('shopping_list_items').delete().eq('id', item.id);
+    outcome = `🗑 Removed — ${item.name}`;
+    undoSnap = { kind: 'reinsert', table: 'shopping_list_items', row: item };
+  }
+
+  const undoId = await recordCallbackUndo(supabase, {
+    cb, userId: item.user_id, op: payload.op, entity: 'shopping_item', entityId: item.id,
+    label: `${payload.op} shopping item "${item.name}"`, snapshot: undoSnap,
+  });
+
+  await tgAnswerCallback(cb.id, outcome.slice(0, 180), lovableKey, telegramKey);
+  if (cb.message?.message_id) {
+    await tgEditMessageText(cb.message.chat.id, cb.message.message_id, outcome, lovableKey, telegramKey);
+    if (undoId) {
+      await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, buildUndoKeyboard(undoId), lovableKey, telegramKey);
+    } else {
+      await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, lovableKey, telegramKey);
+    }
+  }
+}
+
+async function handleEventCallback(
+  supabase: any,
+  cb: any,
+  payload: { op: 'details' | 'cancel'; eventId: string },
+  tappingUserId: string | undefined,
+  lovableKey: string,
+  telegramKey: string,
+) {
+  const { data: ev } = await supabase.from('events')
+    .select('*').eq('id', payload.eventId).maybeSingle();
+  if (!ev) {
+    await tgAnswerCallback(cb.id, 'Event not found.', lovableKey, telegramKey);
+    if (cb.message?.message_id) await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, lovableKey, telegramKey);
+    return;
+  }
+  if (tappingUserId && tappingUserId !== ev.user_id) {
+    await tgAnswerCallback(cb.id, 'Only the owner can touch this event.', lovableKey, telegramKey);
+    return;
+  }
+
+  if (payload.op === 'details') {
+    const details = [
+      `<b>${ev.title}</b>`,
+      `🕐 ${new Date(ev.start_time).toLocaleString()} — ${new Date(ev.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+      ev.location ? `📍 ${ev.location}` : '',
+      ev.description ? `\n${ev.description}` : '',
+    ].filter(Boolean).join('\n');
+    await tgAnswerCallback(cb.id, '', lovableKey, telegramKey);
+    if (cb.message?.message_id) {
+      await tgEditMessageText(cb.message.chat.id, cb.message.message_id, details, lovableKey, telegramKey);
+    }
+  } else if (payload.op === 'cancel') {
+    await supabase.from('events').delete().eq('id', ev.id);
+    const undoId = await recordCallbackUndo(supabase, {
+      cb, userId: ev.user_id, op: 'delete', entity: 'event', entityId: ev.id,
+      label: `cancelled event "${ev.title}"`,
+      snapshot: { kind: 'reinsert', table: 'events', row: ev },
+    });
+    await tgAnswerCallback(cb.id, '❌ Cancelled', lovableKey, telegramKey);
+    if (cb.message?.message_id) {
+      await tgEditMessageText(cb.message.chat.id, cb.message.message_id, `❌ Cancelled event: ${ev.title}`, lovableKey, telegramKey);
+      if (undoId) {
+        await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, buildUndoKeyboard(undoId), lovableKey, telegramKey);
+      } else {
+        await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, lovableKey, telegramKey);
+      }
+    }
+  }
+}
+
+async function handleContractCallback(
+  supabase: any,
+  cb: any,
+  payload: { op: 'snooze7' | 'handled' | 'details'; contractId: string },
+  tappingUserId: string | undefined,
+  lovableKey: string,
+  telegramKey: string,
+) {
+  const { data: c } = await supabase.from('contracts')
+    .select('*').eq('id', payload.contractId).maybeSingle();
+  if (!c) {
+    await tgAnswerCallback(cb.id, 'Contract not found.', lovableKey, telegramKey);
+    if (cb.message?.message_id) await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, lovableKey, telegramKey);
+    return;
+  }
+  if (tappingUserId && tappingUserId !== c.user_id) {
+    await tgAnswerCallback(cb.id, 'Only the owner can touch this contract.', lovableKey, telegramKey);
+    return;
+  }
+
+  if (payload.op === 'details') {
+    const details = [
+      `<b>${c.name}</b>${c.provider ? ` — ${c.provider}` : ''}`,
+      c.cost_amount ? `💶 ${c.cost_amount}${c.cost_frequency ? `/${c.cost_frequency}` : ''}` : '',
+      c.renewal_date ? `🔁 Renews ${new Date(c.renewal_date).toLocaleDateString()}` : '',
+      c.end_date ? `🏁 Ends ${new Date(c.end_date).toLocaleDateString()}` : '',
+      c.notes ? `\n${c.notes}` : '',
+    ].filter(Boolean).join('\n');
+    await tgAnswerCallback(cb.id, '', lovableKey, telegramKey);
+    if (cb.message?.message_id) {
+      await tgEditMessageText(cb.message.chat.id, cb.message.message_id, details, lovableKey, telegramKey);
+    }
+  } else if (payload.op === 'handled' || payload.op === 'snooze7') {
+    const newReminder = payload.op === 'handled'
+      ? new Date().toISOString()
+      : new Date(Date.now() + 7 * 86400 * 1000).toISOString();
+    await supabase.from('contracts').update({ last_reminded_at: newReminder }).eq('id', c.id);
+    const undoId = await recordCallbackUndo(supabase, {
+      cb, userId: c.user_id, op: 'update', entity: 'contract', entityId: c.id,
+      label: payload.op === 'handled' ? `marked "${c.name}" handled` : `snoozed "${c.name}" 7 days`,
+      snapshot: { kind: 'patch', table: 'contracts', id: c.id, patch: { last_reminded_at: c.last_reminded_at ?? null } },
+    });
+    const text = payload.op === 'handled'
+      ? `✅ Marked "${c.name}" as handled.`
+      : `⏰ Snoozed "${c.name}" for 7 days.`;
+    await tgAnswerCallback(cb.id, payload.op === 'handled' ? '✅ Marked handled' : '⏰ Snoozed 7 days', lovableKey, telegramKey);
+    if (cb.message?.message_id) {
+      await tgEditMessageText(cb.message.chat.id, cb.message.message_id, text, lovableKey, telegramKey);
+      if (undoId) {
+        await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, buildUndoKeyboard(undoId), lovableKey, telegramKey);
+      } else {
+        await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, lovableKey, telegramKey);
+      }
+    }
   }
 }
 
@@ -221,62 +538,85 @@ Deno.serve(async (req) => {
     const updates = data.result ?? [];
     if (updates.length === 0) continue;
 
+    // Opportunistically expire any pending confirmations whose TTL has passed.
+    // Cheap; prevents stale prompts from quietly succeeding.
+    await sweepExpiredPending(supabase);
+
     for (const u of updates) {
-      // ── Callback query (inline-keyboard tap on a confirmation prompt) ───────
+      // ── Callback query (inline-keyboard tap) ───────────────────────────────
       if (u.callback_query) {
         const cb = u.callback_query;
-        const raw = String(cb.data || '');
-        const match = raw.match(/^dori_(confirm|reject):(.+)$/);
+        const payload = decodeCallback(String(cb.data || ''));
         const cbChatId = cb.message?.chat?.id;
         const cbMessageId = cb.message?.message_id;
         const cbFromId = cb.from?.id;
 
-        if (match && cbChatId && cbFromId) {
-          const decision = match[1] as 'confirm' | 'reject';
-          const actionId = match[2];
-
-          // Resolve the tapping user to an app user so we enforce ownership.
+        // Resolve tapping user → app user (used for ownership checks below).
+        let tappingUserId: string | undefined;
+        if (cbFromId) {
           const { data: mapped } = await supabase.from('telegram_user_map')
             .select('user_id').eq('telegram_user_id', cbFromId).maybeSingle();
-          const tappingUserId = mapped?.user_id as string | undefined;
+          tappingUserId = mapped?.user_id as string | undefined;
+        }
 
-          const { data: action } = await supabase.from('auto_actions_log')
-            .select('*').eq('id', actionId).maybeSingle();
-
-          if (!action) {
-            await tgAnswerCallback(cb.id, 'That action is no longer available.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
-          } else if (action.status !== 'pending') {
-            await tgAnswerCallback(cb.id, `Already ${action.status}.`, LOVABLE_API_KEY, TELEGRAM_API_KEY);
-          } else if (tappingUserId && tappingUserId !== action.user_id) {
-            await tgAnswerCallback(cb.id, 'Only the person who asked Dori can confirm this.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
-          } else {
-            const outcome = decision === 'confirm'
-              ? await approveAndExecutePending(supabase, action, supabaseUrl, serviceKey)
-              : await rejectPending(supabase, action.id, action.reason);
-
-            await tgAnswerCallback(
-              cb.id,
-              decision === 'confirm' ? '✅ Done' : '❌ Cancelled',
-              LOVABLE_API_KEY,
-              TELEGRAM_API_KEY,
-            );
-            if (cbMessageId) {
-              await tgEditMessageText(
-                cbChatId,
-                cbMessageId,
-                outcome,
-                LOVABLE_API_KEY,
-                TELEGRAM_API_KEY,
-              );
+        try {
+          if (!cbChatId) {
+            await tgAnswerCallback(cb.id, '', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          } else if (payload.kind === 'confirm' || payload.kind === 'reject') {
+            const actionId = payload.kind === 'confirm' ? payload.actionId : payload.actionId;
+            const { data: action } = await supabase.from('auto_actions_log')
+              .select('*').eq('id', actionId).maybeSingle();
+            if (!action) {
+              await tgAnswerCallback(cb.id, 'That action is no longer available.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            } else if (!isActionableNow(action as any)) {
+              await tgAnswerCallback(cb.id, `This expired.`, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              if (cbMessageId) {
+                await tgEditMessageText(cbChatId, cbMessageId,
+                  `⏰ This confirmation expired — ask me again if you still want to "${action.reason}".`,
+                  LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              }
+            } else if (tappingUserId && tappingUserId !== action.user_id) {
+              await tgAnswerCallback(cb.id, 'Only the person who asked Dori can confirm this.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
             } else {
-              await sendMessage(cbChatId, outcome, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              const outcome = payload.kind === 'confirm'
+                ? await approveAndExecutePending(supabase, action, supabaseUrl, serviceKey)
+                : await rejectPending(supabase, action.id, action.reason);
+              await tgAnswerCallback(cb.id, payload.kind === 'confirm' ? '✅ Done' : '❌ Cancelled', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              if (cbMessageId) {
+                await tgEditMessageText(cbChatId, cbMessageId, outcome, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              }
+              try { await supabase.from('telegram_assistant_replies').insert({ chat_id: cbChatId, reply: outcome }); } catch { /* ignore */ }
             }
-            try {
-              await supabase.from('telegram_assistant_replies').insert({ chat_id: cbChatId, reply: outcome });
-            } catch { /* ignore */ }
+          } else if (payload.kind === 'undo') {
+            const entry = await fetchUndoable(supabase, payload.undoId);
+            if (!entry) {
+              await tgAnswerCallback(cb.id, '⏰ Undo window expired.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              if (cbMessageId) await tgEditReplyMarkup(cbChatId, cbMessageId, null, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            } else if (tappingUserId && tappingUserId !== entry.user_id) {
+              await tgAnswerCallback(cb.id, 'Only the owner can undo this.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            } else {
+              const res = await runUndo(supabase, entry, supabaseUrl, serviceKey);
+              await tgAnswerCallback(cb.id, res.ok ? '↩️ Undone' : '⚠️', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              if (cbMessageId) await tgEditReplyMarkup(cbChatId, cbMessageId, null, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              await sendMessage(cbChatId, res.message, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            }
+          } else if (payload.kind === 'task') {
+            await handleTaskCallback(supabase, cb, payload, tappingUserId, LOVABLE_API_KEY, TELEGRAM_API_KEY, supabaseUrl, serviceKey);
+          } else if (payload.kind === 'shop') {
+            await handleShopCallback(supabase, cb, payload, tappingUserId, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          } else if (payload.kind === 'event') {
+            await handleEventCallback(supabase, cb, payload, tappingUserId, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          } else if (payload.kind === 'contract') {
+            await handleContractCallback(supabase, cb, payload, tappingUserId, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          } else if (payload.kind === 'dismiss') {
+            await tgAnswerCallback(cb.id, '', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            if (cbMessageId) await tgEditReplyMarkup(cbChatId, cbMessageId, null, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          } else {
+            await tgAnswerCallback(cb.id, '', LOVABLE_API_KEY, TELEGRAM_API_KEY);
           }
-        } else {
-          await tgAnswerCallback(cb.id, '', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+        } catch (e) {
+          console.error('callback handler error', e);
+          await tgAnswerCallback(cb.id, '⚠️ Something went wrong.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
         }
 
         await supabase
@@ -318,7 +658,38 @@ Deno.serve(async (req) => {
         msg.text = textFromVoice;
       }
 
-      if (!msg.text) continue;
+      // ---------- PHOTO / DOCUMENT → download + forward to chat() as a multimodal turn ----------
+      // The user sent a picture (receipt / business card / bill / prescription / whiteboard)
+      // or a file. We download it, encode as a base64 data URL, and hand it off to the
+      // normal chat pipeline via the existing imageUrl field so the AI extracts
+      // structured content and runs the appropriate tools (subject to the user's
+      // confirmation settings). Group chats use the router path which doesn't
+      // accept imageUrl today, so for simplicity photo intake is private-chat only.
+      let photoDataUrl: string | null = null;
+      let photoCaption: string | null = null;
+      const isGroupChat = chatType === 'group' || chatType === 'supergroup';
+      if (!isGroupChat) {
+        if (msg.photo && Array.isArray(msg.photo) && msg.photo.length > 0) {
+          // photo is an array of PhotoSize; pick the highest-resolution option.
+          // Sorting by pixel area avoids mixing units if file_size is missing.
+          const biggest = [...msg.photo].sort(
+            (a: any, b: any) => ((b.width || 0) * (b.height || 0)) - ((a.width || 0) * (a.height || 0)),
+          )[0];
+          photoDataUrl = await downloadTelegramFile(biggest.file_id, 'image/jpeg', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          photoCaption = msg.caption || null;
+        } else if (msg.document && typeof msg.document.mime_type === 'string' && msg.document.mime_type.startsWith('image/')) {
+          photoDataUrl = await downloadTelegramFile(msg.document.file_id, msg.document.mime_type, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          photoCaption = msg.caption || null;
+        }
+        if (photoDataUrl) {
+          // Fabricate the text so the rest of the pipeline treats it as a normal turn.
+          msg.text = photoCaption && photoCaption.trim()
+            ? photoCaption.trim()
+            : 'Please look at this picture and take the appropriate action (add contact / task / expense / reminder / note as makes sense).';
+        }
+      }
+
+      if (!msg.text && !photoDataUrl) continue;
 
       // Track if original message was voice — used later to decide voice vs text reply
       const wasVoiceMessage = !!textFromVoice;
@@ -518,6 +889,29 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      // /undo shortcut: reverses the most recent still-undoable mutation.
+      if (text.trim().toLowerCase() === '/undo' || /^(undo|undo that|revert|revert that|rückgängig)\b/i.test(text.trim())) {
+        const entry = await fetchLatestUndoableForUser(supabase, link.user_id);
+        if (!entry) {
+          await sendDoriReply({
+            chatId, text: "⏰ Nothing to undo — the 5-minute window has passed or you haven't done anything yet.",
+            preferVoice: wasVoiceMessage,
+            lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+          });
+        } else {
+          const res = await runUndo(supabase, entry, supabaseUrl, serviceKey);
+          await sendDoriReply({
+            chatId, text: res.message, preferVoice: wasVoiceMessage,
+            lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+          });
+        }
+        await supabase.from('telegram_messages').upsert({
+          update_id: u.update_id, chat_id: chatId, text, raw_update: u, processed: true,
+        }, { onConflict: 'update_id' });
+        processed++;
+        continue;
+      }
+
       // If the user has a pending confirmation and just replied "yes"/"no",
       // resolve it without another AI round.
       const confirm = classifyConfirmationText(text);
@@ -540,7 +934,7 @@ Deno.serve(async (req) => {
       }
 
       tg('sendChatAction', { chat_id: chatId, action: 'typing' }, LOVABLE_API_KEY, TELEGRAM_API_KEY).catch(() => {});
-      const dori = await callDori(link.user_id, text, chatId, supabaseUrl, serviceKey);
+      const dori = await callDori(link.user_id, text, chatId, supabaseUrl, serviceKey, photoDataUrl);
 
       // Voice reply if user prefers OR if they sent a voice message
       let preferVoice = wasVoiceMessage;
@@ -559,11 +953,38 @@ Deno.serve(async (req) => {
       if (executed.length > 0) bodyParts.push(executed.map((t) => t.message).join('\n'));
       const replyText = bodyParts.join('\n\n').trim();
 
+      // If any executed tool was reversible, grab the most recent undo id so
+      // we can offer the user a one-tap ↩️ Undo button on the outgoing reply.
+      const undoableIds = executed.map((t) => t.undoId).filter(Boolean) as string[];
+      const latestUndoId = undoableIds.length > 0 ? undoableIds[undoableIds.length - 1] : null;
+
       if (replyText) {
-        await sendDoriReply({
-          chatId, text: replyText, preferVoice,
-          lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
-        });
+        if (latestUndoId && !preferVoice) {
+          // Voice replies can't carry inline keyboards, so we only attach the
+          // Undo affordance when we're sending as text (the normal case).
+          await tgSendWithKeyboard(
+            chatId,
+            replyText,
+            buildUndoKeyboard(latestUndoId),
+            LOVABLE_API_KEY,
+            TELEGRAM_API_KEY,
+          );
+        } else {
+          await sendDoriReply({
+            chatId, text: replyText, preferVoice,
+            lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+          });
+          if (latestUndoId) {
+            // Voice path: send the Undo button as a separate follow-up text message.
+            await tgSendWithKeyboard(
+              chatId,
+              '↩️ Tap to undo the last action.',
+              buildUndoKeyboard(latestUndoId),
+              LOVABLE_API_KEY,
+              TELEGRAM_API_KEY,
+            );
+          }
+        }
       }
 
       for (const q of queued) {

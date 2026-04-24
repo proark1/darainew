@@ -128,13 +128,16 @@ export function classifyConfirmationText(text: string): 'yes' | 'no' | null {
   return null;
 }
 
-// Fetch the most recent pending action that was queued from this Telegram surface.
+// Fetch the most recent *still-actionable* pending action queued from this
+// Telegram surface. Actions whose expires_at has passed are filtered out so
+// stale prompts never quietly execute.
 export async function fetchLatestPendingForChat(
   supabase: any,
   userId: string,
   source: string,
   sourceRef: string,
 ): Promise<PendingAction | null> {
+  const nowIso = new Date().toISOString();
   const { data } = await supabase
     .from('auto_actions_log')
     .select('*')
@@ -142,10 +145,33 @@ export async function fetchLatestPendingForChat(
     .eq('status', 'pending')
     .eq('source', source)
     .eq('source_ref', sourceRef)
+    .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
   return (data as PendingAction | null) || null;
+}
+
+export function isActionableNow(action: PendingAction | null | undefined): boolean {
+  if (!action) return false;
+  if (action.status !== 'pending') return false;
+  const exp = (action as any).expires_at as string | null | undefined;
+  if (!exp) return true;
+  return new Date(exp).getTime() > Date.now();
+}
+
+// Best-effort sweep: mark anything whose expires_at has passed as 'expired'.
+// Called from the Telegram poll loop on each tick; cheap and idempotent.
+export async function sweepExpiredPending(supabase: any): Promise<void> {
+  try {
+    await supabase
+      .from('auto_actions_log')
+      .update({ status: 'expired' })
+      .eq('status', 'pending')
+      .lt('expires_at', new Date().toISOString());
+  } catch (e) {
+    console.error('sweepExpiredPending failed', e);
+  }
 }
 
 // Approve a pending action by re-running the captured tool XML through the

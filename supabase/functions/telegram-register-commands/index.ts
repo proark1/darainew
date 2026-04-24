@@ -10,16 +10,16 @@ const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
 const TELEGRAM_API_KEY = Deno.env.get('TELEGRAM_API_KEY')!;
 
 const COMMANDS = [
-  { command: 'help',       description: 'Show all commands & capabilities' },
-  { command: 'today',      description: "Today's events & tasks" },
-  { command: 'tomorrow',   description: "Tomorrow's plan" },
-  { command: 'week',       description: 'Next 7 days' },
-  { command: 'shopping',   description: 'Current shopping list' },
+  { command: 'today',      description: "Today's tappable agenda" },
+  { command: 'tomorrow',   description: "Tomorrow's tappable agenda" },
+  { command: 'week',       description: 'Next 7 days overview' },
+  { command: 'shopping',   description: 'Shopping list (tap to check off)' },
   { command: 'add',        description: 'Add a task — /add <task>' },
   { command: 'buy',        description: 'Add to shopping — /buy <item>' },
   { command: 'event',      description: 'Create event — /event <title> @ <time>' },
   { command: 'note',       description: 'Save a note — /note <text>' },
   { command: 'remind',     description: 'Set a reminder — /remind <text>' },
+  { command: 'undo',       description: '↩️ Undo the last action (5-min window)' },
   { command: 'birthdays',  description: 'Upcoming birthdays (30 days)' },
   { command: 'contacts',   description: 'Search contacts — /contacts <name>' },
   { command: 'contracts',  description: 'Active contracts & subscriptions' },
@@ -34,6 +34,7 @@ const COMMANDS = [
   { command: 'quiet',      description: 'Quiet hours — /quiet on|off' },
   { command: 'voice',      description: 'Voice replies — /voice on|off' },
   { command: 'linkme',     description: 'Link your Telegram to your Dori user' },
+  { command: 'help',       description: 'Show the full command list' },
 ];
 
 Deno.serve(async (req) => {

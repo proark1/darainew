@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { recordUndo } from "../_shared/dori-undo.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": Deno.env.get("APP_URL") || "*",
@@ -877,6 +878,8 @@ interface ToolExecResult {
   queued?: boolean;
   actionId?: string;   // set when the call was queued for approval
   summary?: string;    // human-readable summary shown in confirmation prompts
+  undoId?: string;     // set when the executed mutation can be reversed via /undo or an inline button
+  entityId?: string;   // id of the row this result refers to (for row-level inline buttons)
 }
 
 interface ServerExecOpts {
@@ -922,6 +925,8 @@ async function executeToolsServerSide(
             status: 'pending',
             source: opts?.source || 'web',
             source_ref: opts?.sourceRef || null,
+            // 24h TTL — if the user doesn't respond in a day, the prompt is stale.
+            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           }).select('id').single();
           if (error) throw error;
           out.push({
@@ -944,6 +949,35 @@ async function executeToolsServerSide(
   const safeJSON = (s: string) => { try { return JSON.parse(s); } catch { return null; } };
   const isoOrNull = (s?: string) => { if (!s) return null; const d = new Date(s); return isNaN(d.getTime()) ? null : d.toISOString(); };
 
+  // Per-surface undo bookkeeping. Every successful mutation records a short-TTL
+  // row so the Telegram surface (or the web app) can offer an Undo button.
+  // Returns the undo id to attach to the corresponding ToolExecResult.
+  const undoMeta = {
+    source: opts?.source || 'web',
+    source_ref: opts?.sourceRef || null,
+  };
+  const undoCreate = (table: string, id: string, label: string, entity: string) =>
+    recordUndo(supabase, {
+      user_id: userId, op: 'create', entity_type: entity, entity_id: String(id),
+      label, inverse_tool_xml: null,
+      snapshot: { kind: 'delete_by_id', table, id },
+      ...undoMeta,
+    });
+  const undoDelete = (table: string, row: any, label: string, entity: string) =>
+    recordUndo(supabase, {
+      user_id: userId, op: 'delete', entity_type: entity, entity_id: row?.id ?? null,
+      label, inverse_tool_xml: null,
+      snapshot: { kind: 'reinsert', table, row },
+      ...undoMeta,
+    });
+  const undoPatch = (table: string, id: string, oldPatch: any, label: string, entity: string) =>
+    recordUndo(supabase, {
+      user_id: userId, op: 'update', entity_type: entity, entity_id: String(id),
+      label, inverse_tool_xml: null,
+      snapshot: { kind: 'patch', table, id, patch: oldPatch },
+      ...undoMeta,
+    });
+
   // ---------- manage_task ----------
   for (const m of text.matchAll(/<tool>manage_task<\/tool>\s*<action>(\w+)<\/action>\s*<task>(\{[\s\S]*?\})<\/task>/g)) {
     const action = m[1]; const data = safeJSON(m[2]); if (!data) continue;
@@ -955,21 +989,36 @@ async function executeToolsServerSide(
           recurrence_rule: data.recurrenceRule || null,
         }).select('id, title, due_date').single();
         if (error) throw error;
-        out.push({ tool: 'manage_task', ok: true, message: `✅ Added task: ${t.title}${t.due_date ? ` (due ${new Date(t.due_date).toLocaleString()})` : ''}`, data: t });
+        const undoId = await undoCreate('tasks', t.id, `added task "${t.title}"`, 'task');
+        out.push({ tool: 'manage_task', ok: true, message: `✅ Added task: ${t.title}${t.due_date ? ` (due ${new Date(t.due_date).toLocaleString()})` : ''}`, data: t, undoId, entityId: t.id });
       } else if (action === 'complete' && data.id) {
+        const { data: before } = await supabase.from('tasks')
+          .select('title, completed, completed_at').eq('id', data.id).eq('user_id', userId).maybeSingle();
         await supabase.from('tasks').update({ completed: true, completed_at: new Date().toISOString() }).eq('id', data.id).eq('user_id', userId);
-        out.push({ tool: 'manage_task', ok: true, message: `✅ Marked task complete` });
+        const undoId = await undoPatch('tasks', data.id,
+          { completed: before?.completed ?? false, completed_at: before?.completed_at ?? null },
+          `marked "${before?.title || 'task'}" complete`, 'task');
+        out.push({ tool: 'manage_task', ok: true, message: `✅ Marked task complete`, undoId, entityId: data.id });
       } else if (action === 'delete' && data.id) {
+        const { data: before } = await supabase.from('tasks')
+          .select('*').eq('id', data.id).eq('user_id', userId).maybeSingle();
+        if (!before) { out.push({ tool: 'manage_task', ok: false, message: `Task not found.` }); continue; }
         await supabase.from('tasks').delete().eq('id', data.id).eq('user_id', userId);
-        out.push({ tool: 'manage_task', ok: true, message: `🗑️ Deleted task` });
+        const undoId = await undoDelete('tasks', before, `deleted task "${before.title}"`, 'task');
+        out.push({ tool: 'manage_task', ok: true, message: `🗑️ Deleted task: ${before.title}`, undoId });
       } else if (action === 'update' && data.id) {
         const upd: any = {};
         if (data.title) upd.title = data.title;
         if (data.category) upd.category = data.category;
         if (data.priority) upd.priority = data.priority;
         if (data.dueDate) upd.due_date = isoOrNull(data.dueDate);
+        const { data: before } = await supabase.from('tasks')
+          .select(Object.keys(upd).join(', ') + ', title').eq('id', data.id).eq('user_id', userId).maybeSingle();
         await supabase.from('tasks').update(upd).eq('id', data.id).eq('user_id', userId);
-        out.push({ tool: 'manage_task', ok: true, message: `✏️ Updated task` });
+        const oldPatch: any = {};
+        for (const k of Object.keys(upd)) oldPatch[k] = before?.[k] ?? null;
+        const undoId = await undoPatch('tasks', data.id, oldPatch, `edited task "${before?.title || data.id}"`, 'task');
+        out.push({ tool: 'manage_task', ok: true, message: `✏️ Updated task`, undoId, entityId: data.id });
       }
     } catch (e) { out.push({ tool: 'manage_task', ok: false, message: `Failed: ${(e as Error).message}` }); }
   }
@@ -986,7 +1035,8 @@ async function executeToolsServerSide(
         recurrence_rule: data.recurrenceRule || null, category: data.category || 'personal',
       }).select('id, title, start_time').single();
       if (error) throw error;
-      out.push({ tool: 'schedule_event', ok: true, message: `📅 Scheduled: ${e.title} — ${new Date(e.start_time).toLocaleString()}`, data: e });
+      const undoId = await undoCreate('events', e.id, `scheduled "${e.title}"`, 'event');
+      out.push({ tool: 'schedule_event', ok: true, message: `📅 Scheduled: ${e.title} — ${new Date(e.start_time).toLocaleString()}`, data: e, undoId, entityId: e.id });
     } catch (e) { out.push({ tool: 'schedule_event', ok: false, message: `Failed: ${(e as Error).message}` }); }
   }
 
@@ -996,7 +1046,7 @@ async function executeToolsServerSide(
     try {
       let target: any = null;
       if (data.query) {
-        const { data: rows } = await supabase.from('events').select('id, title, start_time')
+        const { data: rows } = await supabase.from('events').select('*')
           .eq('user_id', userId).ilike('title', `%${data.query}%`)
           .gte('end_time', new Date(Date.now() - 24 * 3600 * 1000).toISOString())
           .order('start_time').limit(1);
@@ -1005,17 +1055,21 @@ async function executeToolsServerSide(
       if (!target) { out.push({ tool: 'manage_event', ok: false, message: `Could not find event matching "${data.query}"` }); continue; }
       if (action === 'delete') {
         await supabase.from('events').delete().eq('id', target.id).eq('user_id', userId);
-        out.push({ tool: 'manage_event', ok: true, message: `🗑️ Deleted event: ${target.title}` });
+        const undoId = await undoDelete('events', target, `deleted event "${target.title}"`, 'event');
+        out.push({ tool: 'manage_event', ok: true, message: `🗑️ Deleted event: ${target.title}`, undoId });
       } else if (action === 'update') {
         const upd: any = {};
         if (data.title) upd.title = data.title;
         if (data.startTime) upd.start_time = isoOrNull(data.startTime);
         if (data.endTime) upd.end_time = isoOrNull(data.endTime);
         if (data.location !== undefined) upd.location = data.location;
+        const oldPatch: any = {};
+        for (const k of Object.keys(upd)) oldPatch[k] = target[k] ?? null;
         await supabase.from('events').update(upd).eq('id', target.id).eq('user_id', userId);
-        out.push({ tool: 'manage_event', ok: true, message: `✏️ Updated event: ${target.title}` });
+        const undoId = await undoPatch('events', target.id, oldPatch, `edited event "${target.title}"`, 'event');
+        out.push({ tool: 'manage_event', ok: true, message: `✏️ Updated event: ${target.title}`, undoId, entityId: target.id });
       } else {
-        out.push({ tool: 'manage_event', ok: true, message: `Found: ${target.title} on ${new Date(target.start_time).toLocaleString()}` });
+        out.push({ tool: 'manage_event', ok: true, message: `Found: ${target.title} on ${new Date(target.start_time).toLocaleString()}`, entityId: target.id });
       }
     } catch (e) { out.push({ tool: 'manage_event', ok: false, message: `Failed: ${(e as Error).message}` }); }
   }
@@ -1032,26 +1086,31 @@ async function executeToolsServerSide(
           notes: data.notes || null,
         }).select('id, name').single();
         if (error) throw error;
-        out.push({ tool: 'manage_contact', ok: true, message: `👤 Added contact: ${c.name}`, data: c });
+        const undoId = await undoCreate('user_contacts', c.id, `added contact ${c.name}`, 'contact');
+        out.push({ tool: 'manage_contact', ok: true, message: `👤 Added contact: ${c.name}`, data: c, undoId, entityId: c.id });
       } else {
-        const { data: rows } = await supabase.from('user_contacts').select('id, name')
+        const { data: rows } = await supabase.from('user_contacts').select('*')
           .eq('user_id', userId)
           .or(`name.ilike.%${data.query}%,email.ilike.%${data.query}%,company.ilike.%${data.query}%`).limit(1);
         const target = rows?.[0];
         if (!target) { out.push({ tool: 'manage_contact', ok: false, message: `No contact matches "${data.query}"` }); continue; }
         if (action === 'delete') {
           await supabase.from('user_contacts').delete().eq('id', target.id).eq('user_id', userId);
-          out.push({ tool: 'manage_contact', ok: true, message: `🗑️ Deleted contact: ${target.name}` });
+          const undoId = await undoDelete('user_contacts', target, `deleted contact ${target.name}`, 'contact');
+          out.push({ tool: 'manage_contact', ok: true, message: `🗑️ Deleted contact: ${target.name}`, undoId });
         } else if (action === 'update') {
           const upd: any = {};
           ['name','email','phone','company','role','city','country','notes'].forEach(k => { if (data[k] !== undefined) upd[k] = data[k]; });
+          const oldPatch: any = {};
+          for (const k of Object.keys(upd)) oldPatch[k] = target[k] ?? null;
           await supabase.from('user_contacts').update(upd).eq('id', target.id).eq('user_id', userId);
-          out.push({ tool: 'manage_contact', ok: true, message: `✏️ Updated contact: ${target.name}` });
+          const undoId = await undoPatch('user_contacts', target.id, oldPatch, `edited contact ${target.name}`, 'contact');
+          out.push({ tool: 'manage_contact', ok: true, message: `✏️ Updated contact: ${target.name}`, undoId, entityId: target.id });
         } else if (action === 'mark_contacted') {
           await supabase.from('contact_interactions').insert({ user_id: userId, contact_id: target.id, interaction_type: 'note', notes: 'Logged via Dori' });
-          out.push({ tool: 'manage_contact', ok: true, message: `✅ Logged interaction with ${target.name}` });
+          out.push({ tool: 'manage_contact', ok: true, message: `✅ Logged interaction with ${target.name}`, entityId: target.id });
         } else {
-          out.push({ tool: 'manage_contact', ok: true, message: `Found contact: ${target.name}` });
+          out.push({ tool: 'manage_contact', ok: true, message: `Found contact: ${target.name}`, entityId: target.id });
         }
       }
     } catch (e) { out.push({ tool: 'manage_contact', ok: false, message: `Failed: ${(e as Error).message}` }); }
@@ -1237,12 +1296,15 @@ async function executeToolsServerSide(
           user_id: userId, title: data.title || 'Note', content: data.content || '', tags: data.tags || null,
         }).select('id, title').single();
         if (error) throw error;
-        out.push({ tool: 'manage_note', ok: true, message: `📝 Saved note: ${n.title}`, data: n });
+        const undoId = await undoCreate('notes', n.id, `saved note "${n.title}"`, 'note');
+        out.push({ tool: 'manage_note', ok: true, message: `📝 Saved note: ${n.title}`, data: n, undoId, entityId: n.id });
       } else if (action === 'delete' && data.query) {
-        const { data: rows } = await supabase.from('notes').select('id, title').eq('user_id', userId).ilike('title', `%${data.query}%`).limit(1);
+        const { data: rows } = await supabase.from('notes').select('*').eq('user_id', userId).ilike('title', `%${data.query}%`).limit(1);
         if (rows?.[0]) {
-          await supabase.from('notes').delete().eq('id', rows[0].id).eq('user_id', userId);
-          out.push({ tool: 'manage_note', ok: true, message: `🗑️ Deleted note: ${rows[0].title}` });
+          const snap = rows[0];
+          await supabase.from('notes').delete().eq('id', snap.id).eq('user_id', userId);
+          const undoId = await undoDelete('notes', snap, `deleted note "${snap.title}"`, 'note');
+          out.push({ tool: 'manage_note', ok: true, message: `🗑️ Deleted note: ${snap.title}`, undoId });
         }
       }
     } catch (e) { out.push({ tool: 'manage_note', ok: false, message: `Failed: ${(e as Error).message}` }); }
@@ -1257,8 +1319,11 @@ async function executeToolsServerSide(
         const { data: newList } = await supabase.from('shopping_lists').insert({ user_id: userId, name: 'Shopping', category: 'grocery' }).select('id').single();
         list = newList;
       }
-      await supabase.from('shopping_list_items').insert({ list_id: list.id, user_id: userId, name: data.name, quantity: data.quantity || 1, category: data.category || null });
-      out.push({ tool: 'add_shopping_item', ok: true, message: `🛒 Added to shopping: ${data.quantity && data.quantity > 1 ? `${data.quantity}× ` : ''}${data.name}` });
+      const { data: item } = await supabase.from('shopping_list_items')
+        .insert({ list_id: list.id, user_id: userId, name: data.name, quantity: data.quantity || 1, category: data.category || null })
+        .select('id, name').single();
+      const undoId = item ? await undoCreate('shopping_list_items', item.id, `added ${data.name} to shopping`, 'shopping_item') : undefined;
+      out.push({ tool: 'add_shopping_item', ok: true, message: `🛒 Added to shopping: ${data.quantity && data.quantity > 1 ? `${data.quantity}× ` : ''}${data.name}`, undoId, entityId: item?.id });
     } catch (e) { out.push({ tool: 'add_shopping_item', ok: false, message: `Failed: ${(e as Error).message}` }); }
   }
 

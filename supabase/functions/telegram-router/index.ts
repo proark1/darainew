@@ -10,6 +10,14 @@ import {
   rejectPending,
   tgSendWithKeyboard,
 } from '../_shared/telegram-confirm.ts';
+import {
+  buildContractRowKeyboard,
+  buildEventRowKeyboard,
+  buildShoppingRowKeyboard,
+  buildTaskRowKeyboard,
+  buildUndoKeyboard,
+} from '../_shared/telegram-inline.ts';
+import { fetchLatestUndoableForUser, runUndo } from '../_shared/dori-undo.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -39,52 +47,46 @@ async function tgSend(chatId: number, text: string) {
 }
 
 // ─── Help / discoverability ──────────────────────────────────────────────
-const HELP_TEXT = `<b>🤖 Dori — Family Assistant</b>
+const HELP_TEXT = `<b>🤖 Dori — Your Assistant</b>
 
-Just talk naturally — I'll save tasks, shopping, events to your shared space.
+Just talk naturally — I'll save tasks, shopping, events, and more.
+Send a <b>photo</b> (receipt, bill, business card, prescription) and I'll
+read it. Send a <b>voice note</b> and I'll act on what you said.
 
 <b>📅 Schedule</b>
-/today — today's agenda
-/tomorrow — tomorrow's plan
-/week — next 7 days
+/today · /tomorrow — tappable cards (✅ Done, ⏰ +1h, 📅 +1d, 🗑)
+/week — next 7 days overview
 /agenda — same as /today
 
 <b>➕ Quick add</b>
-/add &lt;task&gt; — add a task
-/buy &lt;item&gt; — add to shopping list
-/event &lt;title&gt; @ &lt;time&gt; — create event
-/note &lt;text&gt; — save a note
-/remind &lt;text&gt; — set a reminder
+/add &lt;task&gt; · /buy &lt;item&gt; · /event &lt;title&gt; @ &lt;time&gt;
+/note &lt;text&gt; · /remind &lt;text&gt;
+
+<b>↩️ Safety net</b>
+/undo — reverse the last action (within 5 minutes)
+Reply <b>yes</b> / <b>no</b> to confirm any action I propose.
 
 <b>👨‍👩‍👧 Family &amp; people</b>
-/birthdays — upcoming (30 days)
-/contacts &lt;name&gt; — search contacts
-/linkme — link your Telegram to Dori
+/birthdays · /contacts &lt;name&gt; · /linkme
 
 <b>💶 Money &amp; assets</b>
-/contracts — active contracts
-/expiring — renewing in 60 days
-/properties — your properties
-/vehicles — your vehicles
+/contracts · /expiring · /properties · /vehicles
 
 <b>❤️ Health &amp; wellbeing</b>
-/health — latest household metrics
-/checkin — today's check-in status
+/health · /checkin
 
 <b>📧 Email</b>
-/inbox — priority items
-/actions — todos / payments / questions
+/inbox · /actions
 
 <b>🕌 Islam</b>
-/prayers — today's prayer times
+/prayers
 
 <b>⚙️ Settings</b>
-/quiet on|off — quiet hours
-/voice on|off — voice replies
+/quiet on|off · /voice on|off
 
-<i>Tip: just type "add milk to shopping", "what's Sarah doing tomorrow", or "draft an email to…"</i>
+<i>Tip: Try "add milk to shopping", "move dentist to Friday", "what's Sarah doing tomorrow", "delete that task".</i>
 
-<b>🇩🇪 Tipp:</b> Schreib einfach normal — z.B. "Milch auf Einkaufsliste", "Termin morgen 14 Uhr Zahnarzt", "Was steht heute an?".`;
+<b>🇩🇪 Tipp:</b> Schreib einfach normal — "Milch auf Einkaufsliste", "Termin morgen 14 Uhr Zahnarzt", "Was steht heute an?". Antworte mit <b>ja</b> / <b>nein</b>, um Aktionen zu bestätigen, oder schick <b>/undo</b>, um das Letzte rückgängig zu machen.`;
 
 const HELP_TRIGGERS = [
   'dori help', 'dori commands', 'dori menu', 'dori was kannst du',
@@ -202,6 +204,98 @@ async function handleShoppingList(supabase: any, ownerId: string): Promise<strin
     else out.push('  (empty)');
   }
   return out.join('\n');
+}
+
+// Tappable shopping list: one compact message per item with a ☑️ Got it + 🗑 Remove keyboard.
+// Long lists are capped; the plain-text view above stays available for overview.
+async function sendTappableShoppingList(
+  chatId: number,
+  supabase: any,
+  ownerId: string,
+  lovableKey: string,
+  telegramKey: string,
+): Promise<boolean> {
+  const { data: lists } = await supabase.from('shopping_lists')
+    .select('id, name').eq('user_id', ownerId).eq('is_completed', false)
+    .order('created_at', { ascending: true });
+  if (!lists?.length) return false;
+
+  let totalSent = 0;
+  const MAX_TAPPABLE = 12;
+  for (const list of lists) {
+    const { data: items } = await supabase.from('shopping_list_items')
+      .select('id, name, quantity, is_checked')
+      .eq('list_id', list.id).eq('is_checked', false).order('created_at');
+    if (!items?.length) continue;
+    await tgSend(chatId, `<b>🛒 ${list.name}</b> — tap to check off`);
+    for (const item of items) {
+      if (totalSent >= MAX_TAPPABLE) {
+        await tgSend(chatId, `… and ${(items.length - totalSent)} more. Use the app for the full list.`);
+        break;
+      }
+      await tgSendWithKeyboard(
+        chatId,
+        `• ${item.quantity > 1 ? `${item.quantity}× ` : ''}${item.name}`,
+        buildShoppingRowKeyboard(item.id, false),
+        lovableKey,
+        telegramKey,
+      );
+      totalSent++;
+    }
+  }
+  return totalSent > 0;
+}
+
+// Tappable agenda: sends header + one card per task/event with row action buttons.
+async function sendTappableAgenda(
+  chatId: number,
+  supabase: any,
+  memberIds: string[],
+  dayOffset: number,
+  lovableKey: string,
+  telegramKey: string,
+): Promise<boolean> {
+  const start = new Date(); start.setDate(start.getDate() + dayOffset); start.setHours(0, 0, 0, 0);
+  const end = new Date(start); end.setHours(23, 59, 59, 999);
+  const label = dayOffset === 0 ? "Today" : dayOffset === 1 ? "Tomorrow" : start.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short' });
+
+  const [{ data: events }, { data: tasks }] = await Promise.all([
+    supabase.from('events').select('id, title, start_time, location, user_id')
+      .in('user_id', memberIds).gte('start_time', start.toISOString()).lte('start_time', end.toISOString())
+      .order('start_time'),
+    supabase.from('tasks').select('id, title, due_date, priority, user_id')
+      .in('user_id', memberIds).eq('completed', false).eq('trashed', false)
+      .gte('due_date', start.toISOString()).lte('due_date', end.toISOString())
+      .order('due_date').limit(15),
+  ]);
+
+  const totalItems = (events?.length || 0) + (tasks?.length || 0);
+  if (totalItems === 0) {
+    await tgSend(chatId, `<b>📅 ${label}</b>\nNothing scheduled — enjoy. ☕`);
+    return true;
+  }
+
+  await tgSend(chatId, `<b>📅 ${label}</b> — ${events?.length || 0} events, ${tasks?.length || 0} open tasks. Tap a card to act on it.`);
+  let sent = 0;
+  const MAX_CARDS = 12;
+  for (const e of events || []) {
+    if (sent >= MAX_CARDS) break;
+    const t = new Date(e.start_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    const line = `🕐 ${t} — <b>${e.title}</b>${e.location ? `\n📍 ${e.location}` : ''}`;
+    await tgSendWithKeyboard(chatId, line, buildEventRowKeyboard(e.id), lovableKey, telegramKey);
+    sent++;
+  }
+  for (const t of tasks || []) {
+    if (sent >= MAX_CARDS) break;
+    const pr = t.priority === 'high' ? '🔴' : t.priority === 'low' ? '⚪️' : '🟡';
+    const line = `${pr} <b>${t.title}</b>`;
+    await tgSendWithKeyboard(chatId, line, buildTaskRowKeyboard(t.id), lovableKey, telegramKey);
+    sent++;
+  }
+  if (totalItems > sent) {
+    await tgSend(chatId, `… and ${totalItems - sent} more. Ask me about specific items for details.`);
+  }
+  return true;
 }
 
 async function handleBirthdays(supabase: any, ids: string[], household: any): Promise<string> {
@@ -446,13 +540,25 @@ Deno.serve(async (req) => {
     return new Response('{"ok":true}', { headers: corsHeaders });
   }
 
+  // ─── Undo most recent mutation ────────────────────────────
+  if (lower === '/undo') {
+    const entry = await fetchLatestUndoableForUser(supabase, userForChat);
+    if (!entry) {
+      await tgSend(chat_id, '⏰ Nothing to undo — the 5-minute window has passed or you haven\'t done anything yet.');
+    } else {
+      const res = await runUndo(supabase, entry, SUPABASE_URL, SERVICE_KEY);
+      await tgSend(chat_id, res.message);
+    }
+    return new Response('{"ok":true}', { headers: corsHeaders });
+  }
+
   // ─── Schedule ────────────────────────────────────────────
   if (lower === '/today' || lower === '/agenda') {
-    await tgSend(chat_id, await handleAgenda(supabase, memberIds, 0));
+    await sendTappableAgenda(chat_id, supabase, memberIds, 0, LOVABLE_API_KEY, TELEGRAM_API_KEY);
     return new Response('{"ok":true}', { headers: corsHeaders });
   }
   if (lower === '/tomorrow') {
-    await tgSend(chat_id, await handleAgenda(supabase, memberIds, 1));
+    await sendTappableAgenda(chat_id, supabase, memberIds, 1, LOVABLE_API_KEY, TELEGRAM_API_KEY);
     return new Response('{"ok":true}', { headers: corsHeaders });
   }
   if (lower === '/week') {
@@ -460,7 +566,8 @@ Deno.serve(async (req) => {
     return new Response('{"ok":true}', { headers: corsHeaders });
   }
   if (lower === '/shopping' || lower === '/list') {
-    await tgSend(chat_id, await handleShoppingList(supabase, group.owner_user_id));
+    const sent = await sendTappableShoppingList(chat_id, supabase, group.owner_user_id, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+    if (!sent) await tgSend(chat_id, '🛒 No active shopping lists.');
     return new Response('{"ok":true}', { headers: corsHeaders });
   }
 
@@ -488,12 +595,28 @@ Deno.serve(async (req) => {
   }
 
   // ─── Money & assets ──────────────────────────────────────
-  if (lower === '/contracts') {
-    await tgSend(chat_id, await handleContracts(supabase, memberIds, false));
-    return new Response('{"ok":true}', { headers: corsHeaders });
-  }
-  if (lower === '/expiring') {
-    await tgSend(chat_id, await handleContracts(supabase, memberIds, true));
+  if (lower === '/contracts' || lower === '/expiring') {
+    const expiringOnly = lower === '/expiring';
+    let q = supabase.from('contracts')
+      .select('id, name, provider, cost_amount, cost_frequency, renewal_date, end_date, user_id')
+      .in('user_id', memberIds).eq('is_active', true);
+    if (expiringOnly) {
+      const in60 = new Date(); in60.setDate(in60.getDate() + 60);
+      q = q.or(`renewal_date.lte.${in60.toISOString().slice(0, 10)},end_date.lte.${in60.toISOString().slice(0, 10)}`);
+    }
+    const { data: rows } = await q.order('renewal_date', { nullsFirst: false }).limit(12);
+    if (!rows?.length) {
+      await tgSend(chat_id, expiringOnly ? '✅ Nothing expiring in the next 60 days.' : '📄 No active contracts.');
+      return new Response('{"ok":true}', { headers: corsHeaders });
+    }
+    await tgSend(chat_id, `<b>${expiringOnly ? '⏳ Expiring soon (60 days)' : '📄 Active contracts'}</b> — tap for options`);
+    for (const c of rows) {
+      const cost = c.cost_amount ? ` — ${c.cost_amount}€${c.cost_frequency ? '/' + c.cost_frequency : ''}` : '';
+      const due = c.renewal_date || c.end_date;
+      const when = due ? ` (until ${new Date(due).toLocaleDateString('en-GB')})` : '';
+      const line = `• <b>${c.name}</b>${c.provider ? ` — ${c.provider}` : ''}${cost}${when}`;
+      await tgSendWithKeyboard(chat_id, line, buildContractRowKeyboard(c.id), LOVABLE_API_KEY, TELEGRAM_API_KEY);
+    }
     return new Response('{"ok":true}', { headers: corsHeaders });
   }
   if (lower === '/properties') {
@@ -612,6 +735,7 @@ Deno.serve(async (req) => {
     const reply = (json.reply || '').trim();
     const toolResults = (json.toolResults || []) as {
       ok: boolean; message: string; queued?: boolean; actionId?: string; summary?: string;
+      undoId?: string;
     }[];
 
     // Queued actions are rendered separately, each with its own inline keyboard
@@ -623,6 +747,9 @@ Deno.serve(async (req) => {
     if (reply) parts.push(reply);
     if (executed.length > 0) parts.push(executed.map(t => t.message).join('\n'));
     const finalMsg = parts.join('\n\n').trim();
+
+    const undoableIds = executed.map((t) => t.undoId).filter(Boolean) as string[];
+    const latestUndoId = undoableIds.length > 0 ? undoableIds[undoableIds.length - 1] : null;
 
     if (finalMsg) {
       try {
@@ -637,10 +764,29 @@ Deno.serve(async (req) => {
         preferVoice = !!ps?.prefer_voice_replies;
       } catch (_) { /* ignore */ }
 
-      await sendDoriReply({
-        chatId: chat_id, text: finalMsg.slice(0, 4000), preferVoice,
-        lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
-      });
+      if (latestUndoId && !preferVoice) {
+        await tgSendWithKeyboard(
+          chat_id,
+          finalMsg.slice(0, 4000),
+          buildUndoKeyboard(latestUndoId),
+          LOVABLE_API_KEY,
+          TELEGRAM_API_KEY,
+        );
+      } else {
+        await sendDoriReply({
+          chatId: chat_id, text: finalMsg.slice(0, 4000), preferVoice,
+          lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+        });
+        if (latestUndoId) {
+          await tgSendWithKeyboard(
+            chat_id,
+            '↩️ Tap to undo the last action.',
+            buildUndoKeyboard(latestUndoId),
+            LOVABLE_API_KEY,
+            TELEGRAM_API_KEY,
+          );
+        }
+      }
     }
 
     for (const q of queued) {

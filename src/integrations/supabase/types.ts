@@ -332,6 +332,7 @@ export type Database = {
           created_at: string
           entity_id: string | null
           entity_type: string | null
+          expires_at: string | null
           id: string
           reason: string
           rejected_at: string | null
@@ -347,6 +348,7 @@ export type Database = {
           created_at?: string
           entity_id?: string | null
           entity_type?: string | null
+          expires_at?: string | null
           id?: string
           reason: string
           rejected_at?: string | null
@@ -362,12 +364,61 @@ export type Database = {
           created_at?: string
           entity_id?: string | null
           entity_type?: string | null
+          expires_at?: string | null
           id?: string
           reason?: string
           rejected_at?: string | null
           source?: string
           source_ref?: string | null
           status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      dori_undo_log: {
+        Row: {
+          consumed_at: string | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          expires_at: string
+          id: string
+          inverse_tool_xml: string | null
+          label: string
+          op: string
+          snapshot: Json | null
+          source: string
+          source_ref: string | null
+          user_id: string
+        }
+        Insert: {
+          consumed_at?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          expires_at?: string
+          id?: string
+          inverse_tool_xml?: string | null
+          label: string
+          op: string
+          snapshot?: Json | null
+          source?: string
+          source_ref?: string | null
+          user_id: string
+        }
+        Update: {
+          consumed_at?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          expires_at?: string
+          id?: string
+          inverse_tool_xml?: string | null
+          label?: string
+          op?: string
+          snapshot?: Json | null
+          source?: string
+          source_ref?: string | null
           user_id?: string
         }
         Relationships: []
