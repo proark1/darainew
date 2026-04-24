@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNotes, Note } from '@/hooks/useNotes';
 import { NoteEditor } from './NoteEditor';
 import { Button } from '@/components/ui/button';
@@ -32,11 +32,36 @@ interface NotesPanelProps {
 export function NotesPanel({ userId }: NotesPanelProps) {
   const { notes, loading, createNote, updateNote, deleteNote, searchNotes, refetch } = useNotes(userId);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
+  // Pending id for cross-component note-selection (global search → here).
+  // We hold it until the corresponding row appears in `notes`, so the
+  // first render after navigation auto-selects without flicker.
+  const [pendingSelectId, setPendingSelectId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const { t, language } = useLanguage();
   const dateLocale = language === 'de' ? de : enUS;
+
+  // The global-search palette dispatches a `dori:select-note` event when
+  // the user picks a note. We capture the id here; the resolution below
+  // matches it against the loaded notes once they're available.
+  useEffect(() => {
+    const onSelect = (e: Event) => {
+      const detail = (e as CustomEvent<{ id: string }>).detail;
+      if (detail?.id) setPendingSelectId(detail.id);
+    };
+    window.addEventListener('dori:select-note', onSelect as EventListener);
+    return () => window.removeEventListener('dori:select-note', onSelect as EventListener);
+  }, []);
+
+  useEffect(() => {
+    if (!pendingSelectId) return;
+    const match = notes.find((n) => n.id === pendingSelectId);
+    if (match) {
+      setSelectedNote(match);
+      setPendingSelectId(null);
+    }
+  }, [pendingSelectId, notes]);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);

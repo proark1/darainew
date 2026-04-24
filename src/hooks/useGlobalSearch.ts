@@ -1,10 +1,42 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { Task, CalendarEvent } from '@/types/flux';
 
+// Single source of truth for the searchable surface — used by the hook,
+// the filter pills, and any other consumer that wants to enumerate types.
+export const SEARCHABLE_TYPES = [
+  'task',
+  'event',
+  'note',
+  'chat',
+  'contact',
+  'contract',
+  'project',
+  'workspace',
+] as const;
+
+export type SearchableType = (typeof SEARCHABLE_TYPES)[number];
+
+// Narrow row shapes for the supabase queries below — keeps the executor
+// honest about what it's reading and avoids `any` leaks.
+interface NoteRow {
+  id: string;
+  title: string | null;
+  content: string | null;
+  tags: string[] | null;
+  updated_at: string | null;
+}
+interface WorkspaceRow {
+  id: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  archived: boolean | null;
+}
+
 export interface SearchResult {
   id: string;
-  type: 'task' | 'event' | 'chat' | 'contract' | 'contact' | 'project';
+  type: SearchableType;
   title: string;
   description?: string;
   date?: Date;
@@ -15,7 +47,7 @@ export interface SearchResult {
 }
 
 export interface SearchFilters {
-  types: ('task' | 'event' | 'chat' | 'contract' | 'contact' | 'project')[];
+  types: SearchableType[];
   dateRange?: { start: Date; end: Date };
   priority?: string[];
   completed?: boolean;
@@ -32,6 +64,12 @@ export function useGlobalSearch(userId: string | undefined) {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Monotonic request id. Each search() bumps it before doing async work
+  // and discards results when a newer request has been issued in the
+  // meantime — otherwise typing fast lets older queries clobber newer
+  // ones, and the loading flag drops too early after the first resolution.
+  const requestIdRef = useRef(0);
 
   // Fetch recent searches on mount
   useEffect(() => {
@@ -79,13 +117,14 @@ export function useGlobalSearch(userId: string | undefined) {
 
   const search = useCallback(async (
     query: string,
-    filters: SearchFilters = { types: ['task', 'event', 'chat', 'contract', 'contact', 'project'] }
+    filters: SearchFilters = { types: [...SEARCHABLE_TYPES] }
   ) => {
     if (!userId || !query.trim()) {
       setResults([]);
       return;
     }
 
+    const reqId = ++requestIdRef.current;
     setLoading(true);
     const searchResults: SearchResult[] = [];
     const trimmedQuery = query.trim();
@@ -286,6 +325,59 @@ export function useGlobalSearch(userId: string | undefined) {
         }
       }
 
+      // Search notes — RLS already restricts to rows the user can see (own
+      // personal + shared workspaces), so we can run a single ilike instead
+      // of a fuzzy match in JS for speed.
+      //
+      // PostgREST splits the .or() string on commas, so a query like
+      // "New York, NY" would break the filter. We wrap each ilike value in
+      // double quotes and escape any internal quotes per PostgREST rules.
+      if (filters.types.includes('note')) {
+        const escaped = trimmedQuery.replace(/%/g, '\\%').replace(/"/g, '""');
+        const like = `%${escaped}%`;
+        const { data: notes } = await supabase
+          .from('notes')
+          .select('id, title, content, tags, updated_at')
+          .or(`title.ilike."${like}",content.ilike."${like}"`)
+          .eq('trashed', false)
+          .limit(20);
+        if (notes) {
+          (notes as NoteRow[]).forEach((n) => {
+            const matched = (n.title || '').toLowerCase().includes(trimmedQuery.toLowerCase()) ? 'title' : 'content';
+            searchResults.push({
+              id: n.id,
+              type: 'note',
+              title: n.title || '(untitled)',
+              description: typeof n.content === 'string' ? n.content.slice(0, 120) : undefined,
+              date: n.updated_at ? new Date(n.updated_at) : undefined,
+              matchedField: matched,
+            });
+          });
+        }
+      }
+
+      // Search workspaces (so users can jump to a workspace by name).
+      if (filters.types.includes('workspace')) {
+        const like = `%${trimmedQuery.replace(/%/g, '\\%')}%`;
+        const { data: workspaces } = await supabase
+          .from('workspaces')
+          .select('id, name, description, icon, archived')
+          .ilike('name', like)
+          .eq('archived', false)
+          .limit(8);
+        if (workspaces) {
+          (workspaces as WorkspaceRow[]).forEach((w) => {
+            searchResults.push({
+              id: w.id,
+              type: 'workspace',
+              title: `${w.icon || '📁'} ${w.name}`,
+              description: w.description || undefined,
+              matchedField: 'name',
+            });
+          });
+        }
+      }
+
       // Sort by relevance (title matches first, then by date)
       searchResults.sort((a, b) => {
         if (a.matchedField === 'title' && b.matchedField !== 'title') return -1;
@@ -293,6 +385,10 @@ export function useGlobalSearch(userId: string | undefined) {
         if (a.date && b.date) return b.date.getTime() - a.date.getTime();
         return 0;
       });
+
+      // Race guard: if a newer search has been issued while we were
+      // awaiting, drop these stale results and don't touch loading/history.
+      if (reqId !== requestIdRef.current) return;
 
       setResults(searchResults);
 
@@ -312,7 +408,10 @@ export function useGlobalSearch(userId: string | undefined) {
     } catch (error) {
       console.error('Search error:', error);
     } finally {
-      setLoading(false);
+      // Only clear the loading flag if this was the latest in-flight
+      // request — otherwise a stale resolve would unset loading while a
+      // newer query is still running.
+      if (reqId === requestIdRef.current) setLoading(false);
     }
   }, [userId]);
 

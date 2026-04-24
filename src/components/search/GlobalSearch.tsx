@@ -5,22 +5,25 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
-import { 
-  Search, 
-  ListTodo, 
-  Calendar, 
-  MessageSquare, 
-  Clock, 
+import {
+  Search,
+  ListTodo,
+  Calendar,
+  MessageSquare,
+  Clock,
   X,
   ArrowRight,
   CheckCircle2,
   Circle,
   FileText,
   Users,
-  FolderOpen
+  FolderOpen,
+  StickyNote,
+  Building2,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import type { SearchResult, SearchFilters } from '@/hooks/useGlobalSearch';
+import type { SearchResult, SearchFilters, SearchableType } from '@/hooks/useGlobalSearch';
+import { SEARCHABLE_TYPES } from '@/hooks/useGlobalSearch';
 
 interface GlobalSearchProps {
   open: boolean;
@@ -41,6 +44,8 @@ const typeIcons: Record<string, React.ElementType> = {
   contract: FileText,
   contact: Users,
   project: FolderOpen,
+  note: StickyNote,
+  workspace: Building2,
 };
 
 const priorityColors: Record<string, string> = {
@@ -74,7 +79,7 @@ export function GlobalSearch({
 }: GlobalSearchProps) {
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<SearchFilters>({
-    types: ['task', 'event', 'chat', 'contract', 'contact', 'project'],
+    types: [...SEARCHABLE_TYPES],
   });
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<NodeJS.Timeout>();
@@ -108,7 +113,7 @@ export function GlobalSearch({
     };
   }, [query, filters, onSearch, onClearResults]);
 
-  const toggleTypeFilter = (type: 'task' | 'event' | 'chat' | 'contract' | 'contact' | 'project') => {
+  const toggleTypeFilter = (type: SearchableType) => {
     setFilters(prev => ({
       ...prev,
       types: prev.types.includes(type)
@@ -161,12 +166,14 @@ export function GlobalSearch({
           {/* Type Filters */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm text-muted-foreground">Filter:</span>
-            {(['task', 'event', 'chat', 'contract', 'contact', 'project'] as const).map((type) => {
+            {SEARCHABLE_TYPES.map((type) => {
               const Icon = typeIcons[type];
               const isActive = filters.types.includes(type);
-              const label = type === 'contract' ? 'Contracts' : 
-                           type === 'contact' ? 'Contacts' : 
+              const label = type === 'contract' ? 'Contracts' :
+                           type === 'contact' ? 'Contacts' :
                            type === 'project' ? 'Projects' :
+                           type === 'note' ? 'Notes' :
+                           type === 'workspace' ? 'Workspaces' :
                            type.charAt(0).toUpperCase() + type.slice(1) + 's';
               return (
                 <Button

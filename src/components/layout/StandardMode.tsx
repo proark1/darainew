@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, Suspense, lazy } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Sidebar, SidebarFilter, ActivePanel } from './Sidebar';
 import { MobileLayout } from './MobileLayout';
 import { RealtimeNotificationCenter } from '../notifications/RealtimeNotificationCenter';
@@ -176,6 +177,7 @@ export function StandardMode({
   const [familyDefaultTab, setFamilyDefaultTab] = useState<string>('tasks');
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
   const { celebrate } = useCelebration();
   const { user } = useAuth();
   const { t } = useLanguage();
@@ -257,7 +259,9 @@ export function StandardMode({
   // Handle search result selection
   const handleSelectSearchResult = (result: SearchResult) => {
     setShowGlobalSearch(false);
-    // Navigate to the result based on type
+    // Navigate to the result based on type. We prefer the SPA router
+    // (react-router's `navigate`) over window.location.href so the app
+    // doesn't lose state on a full reload.
     if (result.type === 'task') {
       setFilter('all');
       setSelectedProjectId(undefined);
@@ -267,12 +271,20 @@ export function StandardMode({
     } else if (result.type === 'project') {
       setActivePanel('projects');
       setSelectedProjectId(result.id);
+    } else if (result.type === 'note') {
+      // Switch to the notes panel, then dispatch a window event the
+      // panel listens for so it auto-selects the requested note. We
+      // queue with a microtask so the panel mount runs before the event.
+      setActivePanel('notes');
+      queueMicrotask(() => {
+        window.dispatchEvent(new CustomEvent('dori:select-note', { detail: { id: result.id } }));
+      });
+    } else if (result.type === 'workspace') {
+      navigate('/workspaces');
     } else if (result.type === 'contract') {
-      // Navigate to contracts page
-      window.location.href = '/contracts';
+      navigate('/contracts');
     } else if (result.type === 'contact') {
-      // Navigate to contacts page
-      window.location.href = '/contacts';
+      navigate('/contacts');
     }
   };
 
