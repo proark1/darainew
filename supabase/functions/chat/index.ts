@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { recordUndo } from "../_shared/dori-undo.ts";
+import { buildDoriContext, formatContextForAI } from "../_shared/dori-context.ts";
+import { findTimeSlots, rankProposedSlots } from "../_shared/dori-scheduling.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": Deno.env.get("APP_URL") || "*",
@@ -228,6 +230,18 @@ Event JSON fields:
 - "attendees": string[] (optional)
 - "recurrenceRule": RRULE string (optional, e.g., "FREQ=WEEKLY;INTERVAL=2")
 - "assignee": string (OPTIONAL — a teammate's display name when inside a workspace)
+
+TOOL: find_time
+Only meaningful inside an ACTIVE WORKSPACE. Returns 3-5 slots when everyone named is free.
+Format: <tool>find_time</tool><query>JSON_OBJECT</query>
+Query JSON fields:
+- "participants": string[] (required — display names or @handles of workspace members; include the user themselves if they should attend)
+- "durationMinutes": number (required)
+- "withinDays": number (optional, default 7)
+- "workStartHour": number (optional, default 9)
+- "workEndHour": number (optional, default 18)
+
+Use when the user asks to "find a time", "schedule with X and Y", "pick a slot this week". After find_time returns, propose the top 1-3 and ASK the user which to book before emitting schedule_event.
 
 TOOL: create_note
 Use this to save notes or ideas the user wants to remember.
@@ -909,6 +923,8 @@ interface ServerExecOpts {
   workspaceId?: string | null;
   // Member list used to resolve assignee names ("Alice" / "@alice") to user ids.
   workspaceMembers?: WorkspaceMemberCtx[];
+  // User's IANA timezone — makes find_time and date summaries locale-correct.
+  timezone?: string;
 }
 
 // Match an "assignee"-like field in the AI's payload against the workspace
@@ -1405,6 +1421,55 @@ async function executeToolsServerSide(
     out.push({ tool: 'compose_email', ok: true, message: `✉️ Email draft prepared for ${data.to} — Subject: "${data.subject || ''}"\n\n${data.body || ''}`, data });
   }
 
+  // ---------- find_time (workspace scheduling helper) ----------
+  for (const m of text.matchAll(/<tool>find_time<\/tool>\s*<query>(\{[\s\S]*?\})<\/query>/g)) {
+    const data = safeJSON(m[1]);
+    if (!data?.participants?.length || !data.durationMinutes) {
+      out.push({ tool: 'find_time', ok: false, message: '⚠️ find_time needs participants and durationMinutes.' });
+      continue;
+    }
+    if (!opts?.workspaceId || !opts?.workspaceMembers?.length) {
+      out.push({ tool: 'find_time', ok: false, message: 'find_time only works inside a workspace.' });
+      continue;
+    }
+    // Resolve names to user ids via the workspace member list.
+    const participantIds: string[] = [];
+    const missing: string[] = [];
+    for (const raw of data.participants as string[]) {
+      const id = resolveAssignee(raw, opts.workspaceMembers);
+      if (id) participantIds.push(id);
+      else missing.push(String(raw));
+    }
+    if (missing.length) {
+      out.push({ tool: 'find_time', ok: false, message: `⚠️ Not sure who ${missing.join(', ')} is — ask to clarify.` });
+      continue;
+    }
+    try {
+      const slots = await findTimeSlots(supabase, {
+        workspaceId: opts.workspaceId,
+        participants: participantIds,
+        durationMinutes: Number(data.durationMinutes),
+        withinDays: data.withinDays ? Number(data.withinDays) : undefined,
+        workStartHour: data.workStartHour ? Number(data.workStartHour) : undefined,
+        workEndHour: data.workEndHour ? Number(data.workEndHour) : undefined,
+        timezone: opts.timezone,
+      });
+      const ranked = rankProposedSlots(slots).slice(0, 5);
+      if (ranked.length === 0) {
+        out.push({ tool: 'find_time', ok: true, message: `😕 No slot works for all ${participantIds.length} in the next week. Try a different duration or a later window.` });
+      } else {
+        const lines = ranked.map((s, i) => `${i + 1}. ${s.local}`);
+        out.push({
+          tool: 'find_time', ok: true,
+          message: `🗓 Found ${ranked.length} slot${ranked.length === 1 ? '' : 's'} for ${participantIds.length} people:\n${lines.join('\n')}\n\nTap the one that works and I'll book it.`,
+          data: { slots: ranked, participantIds },
+        });
+      }
+    } catch (e) {
+      out.push({ tool: 'find_time', ok: false, message: `find_time failed: ${(e as Error).message}` });
+    }
+  }
+
   // ---------- fetch_emails ----------
   for (const m of text.matchAll(/<tool>fetch_emails<\/tool>\s*<filter>(\{[\s\S]*?\})<\/filter>/g)) {
     const data = safeJSON(m[1]) || {};
@@ -1718,12 +1783,20 @@ serve(async (req) => {
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
       );
+      // Preformed-tool path runs before we've loaded the profile tz, so look
+      // it up once here. Cheap — single row by user id.
+      let preformedTz: string | undefined;
+      try {
+        const { data: p } = await supabaseAdminEarly.from('profiles').select('timezone').eq('user_id', userId).maybeSingle();
+        preformedTz = p?.timezone || undefined;
+      } catch { /* ignore */ }
       const execResults = await executeToolsServerSide(preformedToolText, userId, supabaseAdminEarly, {
         skipApprovalGate,
         source: actionSource,
         sourceRef: actionSourceRef ?? null,
         workspaceId: activeWorkspace?.id ?? null,
         workspaceMembers: activeWorkspace?.members,
+        timezone: preformedTz,
       });
       return new Response(JSON.stringify({ reply: '', toolResults: execResults }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -2172,6 +2245,25 @@ Format: <tool>propose_plan</tool><plan>{"title":"Plan for X","steps":["1. Find c
 After the user approves (any affirmative reply), execute all steps using the normal tools in ONE response. If they say "skip 2", omit step 2.
 This avoids wrong actions on big asks. Skip propose_plan for simple 1–3 action chains — just do those directly.
 `;
+    // Resolve the user's timezone so every timestamp Dori shows (or feeds
+    // into the AI) reflects the user's local clock, not the UTC edge-runtime
+    // default. Fall through if the column is missing.
+    let userTimezone: string | undefined;
+    try {
+      const { data: p } = await supabaseAdmin.from('profiles').select('timezone').eq('user_id', userId).maybeSingle();
+      userTimezone = p?.timezone || undefined;
+    } catch { /* ignore */ }
+
+    // Live context block — one round-trip snapshot of "what's on this user's
+    // plate RIGHT NOW" so the AI never has to ask a follow-up lookup tool.
+    let liveContextBlock = '';
+    try {
+      const ctx = await buildDoriContext(supabaseAdmin, userId, activeWorkspace?.id ?? null, { timezone: userTimezone });
+      liveContextBlock = '\n\n' + formatContextForAI(ctx, userProfile?.displayName);
+    } catch (e) {
+      console.warn('buildDoriContext failed', e);
+    }
+
     let workspaceBlock = '';
     if (activeWorkspace) {
       workspaceBlock = `\n\n## ACTIVE WORKSPACE\nYou are currently acting inside the workspace "${activeWorkspace.name}"${activeWorkspace.icon ? ` (${activeWorkspace.icon})` : ''}${activeWorkspace.description ? ` — ${activeWorkspace.description}` : ''}.\n`;
@@ -2187,7 +2279,7 @@ This avoids wrong actions on big asks. Skip propose_plan for simple 1–3 action
       workspaceBlock = `\n\n## ACTIVE WORKSPACE\nThe user is in their PERSONAL space right now. Do NOT assign things to teammates or reference workspace members; those are only relevant inside a workspace.`;
     }
 
-    const fullSystemPrompt = baseSystemPrompt + '\n\nPersonality: ' + personalityAddition + contextMessage + workspaceBlock + intelligenceAndConfirmAddon;
+    const fullSystemPrompt = baseSystemPrompt + '\n\nPersonality: ' + personalityAddition + contextMessage + liveContextBlock + workspaceBlock + intelligenceAndConfirmAddon;
 
     console.log("Chat request with enhanced context:", {
       hasUserProfile: !!userProfile,
@@ -2341,6 +2433,7 @@ This avoids wrong actions on big asks. Skip propose_plan for simple 1–3 action
           sourceRef: effectiveSourceRef,
           workspaceId: activeWorkspace?.id ?? null,
           workspaceMembers: activeWorkspace?.members,
+          timezone: userTimezone,
         });
         allExecResults.push(...roundResults);
 

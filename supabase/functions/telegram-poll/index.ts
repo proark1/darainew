@@ -20,6 +20,7 @@ import {
   decodeCallback,
   tgEditReplyMarkup,
 } from '../_shared/telegram-inline.ts';
+import { buildDoriContext } from '../_shared/dori-context.ts';
 import {
   fetchLatestUndoableForUser,
   fetchUndoable,
@@ -937,6 +938,54 @@ Deno.serve(async (req) => {
 
       if (!link || !link.is_active) {
         await sendMessage(chatId, '🔒 This chat isn\'t linked yet. Open Dori → Settings → Telegram to connect.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+        continue;
+      }
+
+      // /me — instant personal digest, no AI round-trip.
+      if (text.trim().toLowerCase() === '/me') {
+        try {
+          // Pull the caller's tz so "today" and time strings match their clock.
+          const { data: p } = await supabase.from('profiles').select('timezone').eq('user_id', link.user_id).maybeSingle();
+          const tz = p?.timezone || undefined;
+          const ctx = await buildDoriContext(supabase, link.user_id, null, { timezone: tz });
+          const ymdIn = (iso: string | Date) =>
+            new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+          const todayYmd = ymdIn(new Date());
+          const parts: string[] = ['<b>🌤 Your day</b>'];
+          if (ctx.overdueCount > 0) parts.push(`\n⚠️ <b>${ctx.overdueCount} overdue</b> — tackle first.`);
+          if (ctx.todayEvents.length > 0) {
+            parts.push('\n<b>Today</b>');
+            ctx.todayEvents.forEach((e) => {
+              const t = new Date(e.start_time).toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit' });
+              parts.push(`• ${t} — ${e.title}${e.location ? ` @ ${e.location}` : ''}`);
+            });
+          }
+          const dueToday = ctx.openTasks.filter((t) => t.due_date && ymdIn(t.due_date) === todayYmd);
+          if (dueToday.length > 0) {
+            parts.push('\n<b>Due today</b>');
+            dueToday.slice(0, 8).forEach((t) => {
+              const pr = t.priority === 'high' ? '🔴' : t.priority === 'low' ? '⚪️' : '🟡';
+              parts.push(`${pr} ${t.title}`);
+            });
+          }
+          if (ctx.tomorrowEvents.length > 0) {
+            parts.push(`\n<b>Tomorrow</b> — ${ctx.tomorrowEvents.length} event${ctx.tomorrowEvents.length === 1 ? '' : 's'}.`);
+          }
+          if (ctx.openTasks.length === 0 && ctx.todayEvents.length === 0 && ctx.tomorrowEvents.length === 0) {
+            parts.push('\nNothing on your plate. Enjoy. ☕');
+          }
+          await sendDoriReply({
+            chatId, text: parts.join('\n'), preferVoice: wasVoiceMessage,
+            lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+          });
+        } catch (e) {
+          console.error('/me failed', e);
+          await sendMessage(chatId, '⚠️ Could not build your digest. Try again shortly.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+        }
+        await supabase.from('telegram_messages').upsert({
+          update_id: u.update_id, chat_id: chatId, text, raw_update: u, processed: true,
+        }, { onConflict: 'update_id' });
+        processed++;
         continue;
       }
 

@@ -10,9 +10,13 @@ const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
 const TELEGRAM_API_KEY = Deno.env.get('TELEGRAM_API_KEY')!;
 
 const COMMANDS = [
+  { command: 'me',         description: '🌤 Your day — digest with overdue, today, tomorrow' },
   { command: 'today',      description: "Today's tappable agenda" },
   { command: 'tomorrow',   description: "Tomorrow's tappable agenda" },
   { command: 'week',       description: 'Next 7 days overview' },
+  { command: 'standup',    description: '🧑‍🤝‍🧑 Team standup (workspace group)' },
+  { command: 'recap',      description: '📦 Weekly recap (workspace group)' },
+  { command: 'schedule',   description: '🗓 Find-a-time — /schedule <title> with @a @b for 30m' },
   { command: 'shopping',   description: 'Shopping list (tap to check off)' },
   { command: 'add',        description: 'Add a task — /add <task>' },
   { command: 'buy',        description: 'Add to shopping — /buy <item>' },
@@ -34,6 +38,7 @@ const COMMANDS = [
   { command: 'quiet',      description: 'Quiet hours — /quiet on|off' },
   { command: 'voice',      description: 'Voice replies — /voice on|off' },
   { command: 'linkme',     description: 'Link your Telegram to your Dori user' },
+  { command: 'linkworkspace', description: 'Link this group to a workspace' },
   { command: 'help',       description: 'Show the full command list' },
 ];
 

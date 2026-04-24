@@ -18,6 +18,9 @@ import {
   buildUndoKeyboard,
 } from '../_shared/telegram-inline.ts';
 import { fetchLatestUndoableForUser, runUndo } from '../_shared/dori-undo.ts';
+import { buildDoriContext } from '../_shared/dori-context.ts';
+import { findTimeSlots, rankProposedSlots } from '../_shared/dori-scheduling.ts';
+import { buildWorkspaceWeeklyRecap, formatRecapForTelegram } from '../_shared/dori-recap.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -54,9 +57,16 @@ Send a <b>photo</b> (receipt, bill, business card, prescription) and I'll
 read it. Send a <b>voice note</b> and I'll act on what you said.
 
 <b>📅 Schedule</b>
+/me — your day at a glance
 /today · /tomorrow — tappable cards (✅ Done, ⏰ +1h, 📅 +1d, 🗑)
 /week — next 7 days overview
 /agenda — same as /today
+/schedule &lt;title&gt; with @a @b for 30m — find a time
+
+<b>🧑‍🤝‍🧑 Team (workspace groups)</b>
+/standup — per-member yesterday / today / blockers
+/recap — weekly recap
+/linkworkspace &lt;code&gt; — bind this chat to a workspace
 
 <b>➕ Quick add</b>
 /add &lt;task&gt; · /buy &lt;item&gt; · /event &lt;title&gt; @ &lt;time&gt;
@@ -111,6 +121,142 @@ async function getHouseholdMembers(supabase: any, ownerId: string, partnerId: st
 }
 
 // ─── Slash command handlers ─────────────────────────────────────────────
+// Fast personal digest: what's on this user's plate right now.
+// Purely DB-driven (no AI round-trip) so the reply is instant.
+async function handleMeDigest(
+  supabase: any,
+  userId: string,
+  workspaceId: string | null,
+  tz?: string,
+): Promise<string> {
+  const ctx = await buildDoriContext(supabase, userId, workspaceId, { timezone: tz });
+  const lines: string[] = [];
+  lines.push(`<b>🌤 Your day</b>${workspaceId ? ` <i>(workspace)</i>` : ''}`);
+
+  if (ctx.overdueCount > 0) {
+    lines.push(`\n⚠️ <b>${ctx.overdueCount} overdue</b> — worth tackling first.`);
+  }
+
+  if (ctx.todayEvents.length > 0) {
+    lines.push(`\n<b>Today's events</b>`);
+    ctx.todayEvents.forEach((e) => {
+      const t = new Date(e.start_time).toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit' });
+      lines.push(`• ${t} — ${e.title}${e.location ? ` @ ${e.location}` : ''}`);
+    });
+  }
+
+  // "Due today" uses the caller's tz to decide what "today" means; without
+  // tz the edge runtime's UTC midnight would mis-classify borderline items.
+  const todayYmd = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const dueToday = ctx.openTasks.filter((t) => {
+    if (!t.due_date) return false;
+    const dueYmd = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t.due_date));
+    return dueYmd === todayYmd;
+  });
+  if (dueToday.length > 0) {
+    lines.push(`\n<b>Due today</b>`);
+    dueToday.slice(0, 8).forEach((t) => {
+      const pr = t.priority === 'high' ? '🔴' : t.priority === 'low' ? '⚪️' : '🟡';
+      lines.push(`${pr} ${t.title}`);
+    });
+  }
+
+  if (ctx.tomorrowEvents.length > 0) {
+    lines.push(`\n<b>Tomorrow</b> — ${ctx.tomorrowEvents.length} event${ctx.tomorrowEvents.length === 1 ? '' : 's'}, first at ${new Date(ctx.tomorrowEvents[0].start_time).toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit' })}.`);
+  }
+
+  if (ctx.openTasks.length === 0 && ctx.todayEvents.length === 0 && ctx.tomorrowEvents.length === 0) {
+    lines.push(`\nNothing on your plate. Enjoy. ☕`);
+  } else if (ctx.scope === 'workspace' && ctx.recentCompletedCount > 0) {
+    lines.push(`\n✅ ${ctx.recentCompletedCount} task${ctx.recentCompletedCount === 1 ? '' : 's'} shipped across the team in the last 24h.`);
+  }
+
+  return lines.join('\n');
+}
+
+// Team standup: per-member "yesterday / today / blockers" summary, generated
+// from completed tasks + events + open tasks. Only meaningful inside a
+// linked workspace — the family-group fallback just points to /today.
+async function handleStandup(
+  supabase: any,
+  workspaceId: string,
+  tz?: string,
+): Promise<string> {
+  const { data: members } = await supabase
+    .from('workspace_members')
+    .select('user_id, display_name')
+    .eq('workspace_id', workspaceId);
+  if (!members?.length) return 'No members found for this workspace.';
+
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+  const endOfToday = new Date(startOfToday); endOfToday.setHours(23, 59, 59, 999);
+  const startOfTomorrow = new Date(endOfToday.getTime() + 1);
+  const endOfTomorrow = new Date(startOfTomorrow); endOfTomorrow.setHours(23, 59, 59, 999);
+
+  // Pull the needed data for ALL members in parallel.
+  const memberIds = (members as any[]).map((m: any) => m.user_id);
+  const [{ data: yesterdayDone }, { data: todayTasks }, { data: upcomingEvents }] = await Promise.all([
+    supabase.from('tasks')
+      .select('title, assignee_id, user_id, updated_at')
+      .eq('workspace_id', workspaceId)
+      .eq('completed', true)
+      .gte('updated_at', since.toISOString())
+      .limit(200),
+    supabase.from('tasks')
+      .select('title, assignee_id, user_id, priority, due_date')
+      .eq('workspace_id', workspaceId)
+      .eq('completed', false)
+      .eq('trashed', false)
+      .lte('due_date', endOfToday.toISOString())
+      .limit(200),
+    supabase.from('events')
+      .select('title, start_time, assignee_id, user_id')
+      .eq('workspace_id', workspaceId)
+      .gte('start_time', startOfToday.toISOString())
+      .lte('start_time', endOfTomorrow.toISOString())
+      .order('start_time'),
+  ]);
+
+  // Group by owner (assignee_id if present, else user_id).
+  const byMember = new Map<string, { done: string[]; today: string[]; events: string[] }>();
+  for (const uid of memberIds) byMember.set(uid, { done: [], today: [], events: [] });
+  for (const t of (yesterdayDone || [])) {
+    const m = byMember.get(t.assignee_id || t.user_id);
+    if (m) m.done.push(t.title);
+  }
+  for (const t of (todayTasks || [])) {
+    const m = byMember.get(t.assignee_id || t.user_id);
+    if (m) m.today.push(t.title);
+  }
+  for (const ev of (upcomingEvents || [])) {
+    const m = byMember.get(ev.assignee_id || ev.user_id);
+    if (m) {
+      const when = new Date(ev.start_time).toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit' });
+      m.events.push(`${when} ${ev.title}`);
+    }
+  }
+
+  const lines: string[] = ['<b>🧑‍🤝‍🧑 Standup</b>'];
+  let anyActivity = false;
+  for (const m of members as any[]) {
+    const entry = byMember.get(m.user_id);
+    if (!entry) continue;
+    const block: string[] = [`\n<b>${m.display_name || m.user_id.slice(0, 8)}</b>`];
+    if (entry.done.length === 0 && entry.today.length === 0 && entry.events.length === 0) {
+      block.push('• <i>(no activity)</i>');
+    } else {
+      anyActivity = true;
+      if (entry.done.length) block.push(`✅ <i>Yesterday:</i> ${entry.done.slice(0, 5).join(' · ')}${entry.done.length > 5 ? ` (+${entry.done.length - 5})` : ''}`);
+      if (entry.today.length) block.push(`📌 <i>Today:</i> ${entry.today.slice(0, 5).join(' · ')}${entry.today.length > 5 ? ` (+${entry.today.length - 5})` : ''}`);
+      if (entry.events.length) block.push(`📅 <i>Scheduled:</i> ${entry.events.slice(0, 3).join(' · ')}`);
+    }
+    lines.push(block.join('\n'));
+  }
+  if (!anyActivity) lines.push('\n<i>Quiet standup — nobody has activity logged.</i>');
+  return lines.join('\n');
+}
+
 async function handleAgenda(supabase: any, ids: string[], dayOffset = 0): Promise<string> {
   const start = new Date(); start.setDate(start.getDate() + dayOffset); start.setHours(0,0,0,0);
   const end = new Date(start); end.setHours(23,59,59,999);
@@ -515,6 +661,14 @@ Deno.serve(async (req) => {
   }
   const userForChat = senderUserId || group.owner_user_id;
 
+  // Pull the caller's timezone so every formatted time in digests /
+  // standups / recaps / scheduled slots is in their local clock, not UTC.
+  let userTimezone: string | undefined;
+  try {
+    const { data: p } = await supabase.from('profiles').select('timezone').eq('user_id', userForChat).maybeSingle();
+    userTimezone = p?.timezone || undefined;
+  } catch { /* ignore */ }
+
   const trimmed = text.trim();
   const lower = trimmed.toLowerCase();
 
@@ -538,6 +692,97 @@ Deno.serve(async (req) => {
   // ─── Help / discoverability ──────────────────────────────
   if (isHelpRequest(lower)) {
     await tgSend(chat_id, HELP_TEXT);
+    return new Response('{"ok":true}', { headers: corsHeaders });
+  }
+
+  // ─── /me — personal digest, no AI round-trip ─────────────
+  if (lower === '/me') {
+    await tgSend(chat_id, await handleMeDigest(supabase, userForChat, workspace_id || null, userTimezone));
+    return new Response('{"ok":true}', { headers: corsHeaders });
+  }
+
+  // ─── /standup — per-member summary (workspace groups only) ─
+  if (lower === '/standup') {
+    if (!workspace_id) {
+      await tgSend(chat_id, '🧑‍🤝‍🧑 /standup works in workspace-linked groups. Try /linkworkspace <code> first.');
+    } else {
+      await tgSend(chat_id, await handleStandup(supabase, workspace_id, userTimezone));
+    }
+    return new Response('{"ok":true}', { headers: corsHeaders });
+  }
+
+  // ─── /recap — weekly team recap (workspace-linked groups only) ─
+  if (lower === '/recap') {
+    if (!workspace_id) {
+      await tgSend(chat_id, '📦 /recap works in workspace-linked groups. Link first with /linkworkspace <code>.');
+      return new Response('{"ok":true}', { headers: corsHeaders });
+    }
+    const [{ data: ws }, recap] = await Promise.all([
+      supabase.from('workspaces').select('name').eq('id', workspace_id).maybeSingle(),
+      buildWorkspaceWeeklyRecap(supabase, workspace_id, { timezone: userTimezone }),
+    ]);
+    await tgSend(chat_id, formatRecapForTelegram(recap, ws?.name, userTimezone));
+    return new Response('{"ok":true}', { headers: corsHeaders });
+  }
+
+  // ─── /schedule — find a time for the listed teammates ────
+  // Format: /schedule <title> with @a @b for 30m
+  if (lower.startsWith('/schedule ')) {
+    if (!workspace_id) {
+      await tgSend(chat_id, '🗓 /schedule works in workspace-linked groups. Link the group with /linkworkspace <code> first.');
+      return new Response('{"ok":true}', { headers: corsHeaders });
+    }
+    const body = trimmed.slice('/schedule '.length).trim();
+    // Pull the @mentions and the duration off the end.
+    const mentionRegex = /@([a-zA-Z0-9_\-]+)/g;
+    const mentions = [...body.matchAll(mentionRegex)].map((m) => m[1]);
+    const durMatch = body.match(/\bfor\s+(\d+)\s*(m(?:in)?|mins|minutes|h(?:r)?|hrs|hours)?/i);
+    const durationMinutes = durMatch
+      ? (durMatch[2]?.toLowerCase().startsWith('h') ? Number(durMatch[1]) * 60 : Number(durMatch[1]))
+      : 30;
+    const title = body
+      .replace(/\bwith\s+@[\w\-]+(?:\s+@[\w\-]+)*/i, '')
+      .replace(/\bfor\s+\d+\s*(m(?:in)?|mins|minutes|h(?:r)?|hrs|hours)?/i, '')
+      .trim() || 'Meeting';
+
+    if (mentions.length === 0) {
+      await tgSend(chat_id, 'Usage: <code>/schedule &lt;title&gt; with @a @b for 30m</code>');
+      return new Response('{"ok":true}', { headers: corsHeaders });
+    }
+
+    // Resolve mentions against workspace members.
+    const { data: wsMembers } = await supabase.from('workspace_members')
+      .select('user_id, display_name').eq('workspace_id', workspace_id);
+    const participantIds: string[] = [];
+    const missing: string[] = [];
+    for (const m of mentions) {
+      const match = (wsMembers || []).find((x: any) => (x.display_name || '').toLowerCase() === m.toLowerCase());
+      if (match) participantIds.push(match.user_id);
+      else missing.push(m);
+    }
+    if (missing.length) {
+      await tgSend(chat_id, `⚠️ These folks aren't in the workspace: ${missing.map((x) => `@${x}`).join(', ')}`);
+      return new Response('{"ok":true}', { headers: corsHeaders });
+    }
+    // Include the sender themselves if they're a workspace member.
+    if (senderUserId && !participantIds.includes(senderUserId)) {
+      const selfIsMember = (wsMembers || []).some((x: any) => x.user_id === senderUserId);
+      if (selfIsMember) participantIds.push(senderUserId);
+    }
+
+    const slots = await findTimeSlots(supabase, {
+      workspaceId: workspace_id,
+      participants: participantIds,
+      durationMinutes,
+      timezone: userTimezone,
+    });
+    const ranked = rankProposedSlots(slots).slice(0, 5);
+    if (ranked.length === 0) {
+      await tgSend(chat_id, `😕 No slot works for ${participantIds.length} people in the next week.`);
+    } else {
+      const lines = ranked.map((s, i) => `${i + 1}. ${s.local}`);
+      await tgSend(chat_id, `<b>🗓 Slots for "${title}" (${durationMinutes}m)</b>\n${lines.join('\n')}\n\nReply with the number to book it.`);
+    }
     return new Response('{"ok":true}', { headers: corsHeaders });
   }
 
