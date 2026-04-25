@@ -56,6 +56,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
 import { usePrayerNotificationSettings } from '@/hooks/usePrayerNotificationSettings';
+import { useUserLocationSettings, MAJOR_CITIES } from '@/hooks/useUserLocationSettings';
 
 interface SettingsPanelContentProps {
   settings: UserSettings;
@@ -347,6 +348,17 @@ export function SettingsPanelContent({
   const [locale, setLocale] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Location settings
+  const {
+    settings: locationSettings,
+    isLoading: locationLoading,
+    isSaving: locationSaving,
+    updateLocation,
+    updateTemperatureUnit,
+    updatePrayerCalculationMethod,
+  } = useUserLocationSettings();
 
   // Trigger the user-data-export edge function and surface the result as
   // a download. We POST through the edge function (not direct PostgREST)
@@ -549,9 +561,122 @@ export function SettingsPanelContent({
                     </p>
                   </div>
 
+                  {/* Location & Time Settings */}
+                  {locationSettings && (
+                    <>
+                      <div className="pt-4 border-t border-border">
+                        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                          Location & Time
+                        </h3>
+
+                        {locationLoading ? (
+                          <div className="flex items-center justify-center py-4">
+                            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {/* Current Location Display */}
+                            <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
+                              <p className="text-xs text-muted-foreground mb-1">Home Location</p>
+                              <p className="font-semibold">
+                                {locationSettings.city}, {locationSettings.country}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Timezone: {locationSettings.timezone}
+                              </p>
+                            </div>
+
+                            {/* Quick City Selection */}
+                            <div className="space-y-2">
+                              <Label htmlFor="citySearch">Quick Select City</Label>
+                              <Input
+                                id="citySearch"
+                                placeholder="Search cities..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="mb-2"
+                              />
+                              <ScrollArea className="h-32 border rounded-lg">
+                                <div className="p-2 space-y-1">
+                                  {MAJOR_CITIES.filter(
+                                    (c) =>
+                                      c.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                      c.country.toLowerCase().includes(searchQuery.toLowerCase())
+                                  ).map((city) => (
+                                    <Button
+                                      key={`${city.city}-${city.country}`}
+                                      variant={
+                                        locationSettings.city === city.city && locationSettings.country === city.country
+                                          ? 'default'
+                                          : 'ghost'
+                                      }
+                                      className="w-full justify-start text-xs h-8"
+                                      onClick={() => updateLocation(city.city, city.country, city.lat, city.lng, city.tz)}
+                                      disabled={locationSaving}
+                                    >
+                                      <MapPin className="w-3 h-3 mr-2" />
+                                      {city.city}, {city.country}
+                                    </Button>
+                                  ))}
+                                </div>
+                              </ScrollArea>
+                            </div>
+
+                            {/* Temperature Unit */}
+                            <div className="space-y-2">
+                              <Label>Temperature Display</Label>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant={locationSettings.temperature_unit === 'celsius' ? 'default' : 'outline'}
+                                  className="flex-1 text-xs h-9"
+                                  onClick={() => updateTemperatureUnit('celsius')}
+                                  disabled={locationSaving}
+                                >
+                                  °C Celsius
+                                </Button>
+                                <Button
+                                  variant={locationSettings.temperature_unit === 'fahrenheit' ? 'default' : 'outline'}
+                                  className="flex-1 text-xs h-9"
+                                  onClick={() => updateTemperatureUnit('fahrenheit')}
+                                  disabled={locationSaving}
+                                >
+                                  °F Fahrenheit
+                                </Button>
+                              </div>
+                            </div>
+
+                            {/* Prayer Calculation Method */}
+                            <div className="space-y-2">
+                              <Label htmlFor="prayerMethod">Prayer Calculation Method</Label>
+                              <Select
+                                value={locationSettings.prayer_calculation_method.toString()}
+                                onValueChange={(value) => updatePrayerCalculationMethod(parseInt(value))}
+                              >
+                                <SelectTrigger id="prayerMethod" className="h-9">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="2">ISNA (North America)</SelectItem>
+                                  <SelectItem value="3">Muslim World League</SelectItem>
+                                  <SelectItem value="5">Egyptian General Authority</SelectItem>
+                                  <SelectItem value="4">Umm Al-Qura (Mecca)</SelectItem>
+                                  <SelectItem value="8">Dubai</SelectItem>
+                                  <SelectItem value="13">Turkey (Diyanet)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <p className="text-xs text-muted-foreground">
+                                For accurate prayer times in your region
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+
                   {/* Save Button */}
-                  <Button 
-                    onClick={handleSaveProfile} 
+                  <Button
+                    onClick={handleSaveProfile}
                     disabled={isSavingProfile}
                     size="sm"
                   >
