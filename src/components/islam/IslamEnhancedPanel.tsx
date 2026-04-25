@@ -18,7 +18,7 @@ import {
   RefreshCw, ChevronLeft, ChevronRight, Search, Loader2,
   Volume2, VolumeX, Pause, Play, ZoomIn, ZoomOut, Heart, Clock, GraduationCap,
   Bookmark, BookmarkCheck, X, FileText, LayoutGrid, TrendingUp, Type, CheckCircle2,
-  Home, MoreHorizontal, Bell
+  Home, MoreHorizontal, Bell, MapPin
 } from 'lucide-react';
 import { useIslamicFeatures } from '@/hooks/useIslamicFeatures';
 import { useQuranBookmarks } from '@/hooks/useQuranBookmarks';
@@ -33,6 +33,7 @@ import { IslamOverviewTab } from './IslamOverviewTab';
 import { IslamMoreTab } from './IslamMoreTab';
 import { IslamDuasTab } from './IslamDuasTab';
 import { IslamNotificationsTab } from './IslamNotificationsTab';
+import { LocationSettingsTab } from './LocationSettingsTab';
 import { PanelShell } from '@/components/ui/panel-shell';
 
 // Arabic font options
@@ -400,7 +401,7 @@ export function IslamEnhancedPanel() {
       noPadding
     >
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className="mx-3 md:mx-4 mt-2 grid grid-cols-6">
+        <TabsList className="mx-3 md:mx-4 mt-2 grid grid-cols-7">
           <TabsTrigger value="home" className="gap-1 text-xs px-1">
             <Home className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Home</span>
@@ -416,6 +417,10 @@ export function IslamEnhancedPanel() {
           <TabsTrigger value="duas" className="gap-1 text-xs px-1">
             <Heart className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Duas</span>
+          </TabsTrigger>
+          <TabsTrigger value="location" className="gap-1 text-xs px-1">
+            <MapPin className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Location</span>
           </TabsTrigger>
           <TabsTrigger value="notifications" className="gap-1 text-xs px-1">
             <Bell className="w-3.5 h-3.5" />
@@ -457,6 +462,11 @@ export function IslamEnhancedPanel() {
         {/* Duas */}
         <TabsContent value="duas" className="flex-1 mt-0">
           <IslamDuasTab duas={DUAS} />
+        </TabsContent>
+
+        {/* Location Settings */}
+        <TabsContent value="location" className="flex-1 mt-0 overflow-y-auto">
+          <LocationSettingsTab />
         </TabsContent>
 
         {/* Notifications */}
