@@ -13,12 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { 
+import {
   Moon, BookOpen,
-  RefreshCw, ChevronLeft, ChevronRight, Search, Loader2, 
+  RefreshCw, ChevronLeft, ChevronRight, Search, Loader2,
   Volume2, VolumeX, Pause, Play, ZoomIn, ZoomOut, Heart, Clock, GraduationCap,
   Bookmark, BookmarkCheck, X, FileText, LayoutGrid, TrendingUp, Type, CheckCircle2,
-  Home, MoreHorizontal
+  Home, MoreHorizontal, Bell
 } from 'lucide-react';
 import { useIslamicFeatures } from '@/hooks/useIslamicFeatures';
 import { useQuranBookmarks } from '@/hooks/useQuranBookmarks';
@@ -32,6 +32,7 @@ import { QuranProgressPanel } from './QuranProgressPanel';
 import { IslamOverviewTab } from './IslamOverviewTab';
 import { IslamMoreTab } from './IslamMoreTab';
 import { IslamDuasTab } from './IslamDuasTab';
+import { IslamNotificationsTab } from './IslamNotificationsTab';
 import { PanelShell } from '@/components/ui/panel-shell';
 
 // Arabic font options
@@ -399,7 +400,7 @@ export function IslamEnhancedPanel() {
       noPadding
     >
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className="mx-3 md:mx-4 mt-2 grid grid-cols-5">
+        <TabsList className="mx-3 md:mx-4 mt-2 grid grid-cols-6">
           <TabsTrigger value="home" className="gap-1 text-xs px-1">
             <Home className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Home</span>
@@ -415,6 +416,10 @@ export function IslamEnhancedPanel() {
           <TabsTrigger value="duas" className="gap-1 text-xs px-1">
             <Heart className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Duas</span>
+          </TabsTrigger>
+          <TabsTrigger value="notifications" className="gap-1 text-xs px-1">
+            <Bell className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Notify</span>
           </TabsTrigger>
           <TabsTrigger value="more" className="gap-1 text-xs px-1">
             <MoreHorizontal className="w-3.5 h-3.5" />
@@ -452,6 +457,11 @@ export function IslamEnhancedPanel() {
         {/* Duas */}
         <TabsContent value="duas" className="flex-1 mt-0">
           <IslamDuasTab duas={DUAS} />
+        </TabsContent>
+
+        {/* Notifications */}
+        <TabsContent value="notifications" className="flex-1 mt-0 overflow-y-auto">
+          <IslamNotificationsTab />
         </TabsContent>
 
         {/* More: Qibla + Hadith + Calendar */}
