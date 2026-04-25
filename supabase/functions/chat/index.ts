@@ -3,6 +3,20 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { recordUndo } from "../_shared/dori-undo.ts";
 import { buildDoriContext, formatContextForAI } from "../_shared/dori-context.ts";
 import { findTimeSlots, rankProposedSlots } from "../_shared/dori-scheduling.ts";
+import {
+  retrieveRelevantMemories,
+  rememberSemantic,
+  formatMemoriesForPrompt,
+} from "../_shared/dori-semantic-memory.ts";
+import {
+  loadConversationState,
+  saveConversationState,
+  formatStateForPrompt,
+  type Channel,
+  type RecentEntity,
+} from "../_shared/dori-conversation-state.ts";
+import { decideRoute, type Specialist } from "../_shared/dori-router.ts";
+import { NATIVE_TOOLS, toolCallsToLegacyXml } from "../_shared/dori-tools.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": Deno.env.get("APP_URL") || "*",
@@ -1745,6 +1759,10 @@ async function loadDoriIntelligence(
   userId: string,
   currentChannel: string,
   workspaceId?: string | null,
+  // Latest user message — drives semantic recall. Optional so existing
+  // callers without a query (digests, recaps) keep working; in that
+  // case we just skip the semantic block.
+  query?: string | null,
 ) {
   const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const memoryQuery = supabase
@@ -1809,7 +1827,22 @@ async function loadDoriIntelligence(
     }
   }
 
-  return memoryBlock + prefsBlock + memoriesBlock;
+  // Semantic recall over notes / episodic memories / past tasks / past
+  // events / chat turns. Only fires when a query is provided AND it's
+  // long enough to be meaningful; otherwise returns empty.
+  let semanticBlock = '';
+  if (query && query.length >= 8) {
+    const hits = await retrieveRelevantMemories(supabase, {
+      userId,
+      workspaceId: workspaceId ?? null,
+      query,
+      matchCount: 6,
+      minSimilarity: 0.62,
+    });
+    semanticBlock = hits.length ? '\n\n' + formatMemoriesForPrompt(hits) : '';
+  }
+
+  return memoryBlock + prefsBlock + memoriesBlock + semanticBlock;
 }
 
 serve(async (req) => {
@@ -1980,8 +2013,53 @@ serve(async (req) => {
       ? (tgChannelHint === 'tg_family' ? 'tg_family' : 'tg_private')
       : 'web';
 
-    // Load unified cross-channel memory + auto-learned preferences
-    const intelligenceBlock = await loadDoriIntelligence(supabaseAdmin, userId, currentChannel, activeWorkspace?.id ?? null);
+    // The latest user message drives semantic recall (RAG over notes,
+    // episodic memories, past tasks/events, chat turns). Without it we
+    // only ship structured memory + prefs.
+    const lastUserContent = [...messages].reverse().find(m => m.role === 'user')?.content || '';
+
+    // Load unified cross-channel memory + auto-learned preferences + semantic recall.
+    const intelligenceBlock = await loadDoriIntelligence(
+      supabaseAdmin,
+      userId,
+      currentChannel,
+      activeWorkspace?.id ?? null,
+      lastUserContent,
+    );
+
+    // Cross-turn conversation state. If the previous turn left an open
+    // intent ("awaiting_plan_approval", "choose_among_candidates"),
+    // this surfaces it so the model resolves "do it" / "yes" / "the
+    // second one" without re-asking. Sticky specialist also lives here.
+    const conversationState = await loadConversationState(
+      supabaseAdmin,
+      userId,
+      currentChannel as Channel,
+    );
+    const stateBlock = formatStateForPrompt(conversationState);
+
+    // Specialist routing. Cheap regex classifier + sticky-follow-up so
+    // a "yes" after a meeting flow stays in the meeting specialist.
+    const route = decideRoute(lastUserContent, conversationState?.active_specialist);
+    const specialistBlock = route.prompt ? `\n\n${route.prompt}` : '';
+
+    // Fire-and-forget log of the routing decision (debug + offline eval).
+    if (route.specialist !== 'general' && userId !== 'anonymous') {
+      supabaseAdmin
+        .from('dori_intent_routing')
+        .insert({
+          user_id: userId,
+          channel: currentChannel,
+          user_message_excerpt: lastUserContent.slice(0, 240),
+          classified_specialist: route.specialist,
+          confidence: route.confidence,
+          used_specialist: route.effective,
+          metadata: { matched: route.matched },
+        })
+        .then(({ error }: any) => {
+          if (error) console.warn('[routing log] failed', error.message);
+        });
+    }
 
     // Persist the latest user turn into the unified log (fire-and-forget)
     const lastUserTurn = [...messages].reverse().find(m => m.role === 'user');
@@ -2464,7 +2542,18 @@ This avoids wrong actions on big asks. Skip propose_plan for simple 1–3 action
     //     preferences, both of which change per-turn and would otherwise
     //     break the cache if placed above the boundary).
     const stablePrefix = baseSystemPrompt + '\n\nPersonality: ' + personalityAddition + staticGuidance;
-    const dynamicTail = localeBlock + intelligenceBlock + contextMessage + liveContextBlock + workspaceBlock;
+    // Dynamic tail order matters: specialistBlock first because it
+    // narrows the model's mindset for this turn; stateBlock right
+    // after so any "yes/do it" is resolved against the pending plan
+    // before the model wades through context.
+    const dynamicTail =
+      specialistBlock +
+      stateBlock +
+      localeBlock +
+      intelligenceBlock +
+      contextMessage +
+      liveContextBlock +
+      workspaceBlock;
     const fullSystemPrompt = stablePrefix + dynamicTail;
 
     console.log("Chat request with enhanced context:", {
@@ -2485,16 +2574,42 @@ This avoids wrong actions on big asks. Skip propose_plan for simple 1–3 action
 
     const model = 'google/gemini-3-flash-preview';
     
-    // Helper: call Lovable AI (supports multimodal messages)
+    // Native function-calling is opt-in per request via a header so we
+    // can roll it out one surface at a time. The legacy XML path stays
+    // intact — when tools are NOT sent, the model continues to emit
+    // <tool>…</tool> blocks the executor already understands. When
+    // tools ARE sent, the model returns a structured `tool_calls`
+    // array, which we convert back to legacy XML for execution.
+    const useNativeTools = req.headers.get('x-dori-native-tools') === '1';
+
     async function callAI(msgs: { role: string; content: string | any[] }[], stream: boolean) {
+      const payload: any = { model, messages: msgs, stream };
+      if (useNativeTools) {
+        payload.tools = NATIVE_TOOLS;
+        payload.tool_choice = 'auto';
+      }
       return fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${LOVABLE_API_KEY}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ model, messages: msgs, stream }),
+        body: JSON.stringify(payload),
       });
+    }
+
+    // Pull the assistant content + tool_calls out of a non-streaming
+    // response and reconcile them into a single text blob the existing
+    // tool executor can parse. With tools=undefined, we just take
+    // `content`. With tools enabled, we append the converted XML so
+    // any prose the model produced still ships to the user, but the
+    // executor sees the XML it expects.
+    function flattenAssistantMessage(msg: any): string {
+      const content: string = msg?.content || '';
+      const toolCalls = Array.isArray(msg?.tool_calls) ? msg.tool_calls : [];
+      if (toolCalls.length === 0) return content;
+      const xml = toolCallsToLegacyXml(toolCalls);
+      return content ? `${content}\n${xml}` : xml;
     }
 
     // Helper: call Perplexity web search
@@ -2700,6 +2815,26 @@ This avoids wrong actions on big asks. Skip propose_plan for simple 1–3 action
               promptTokens, completionTokens, promptTokens + completionTokens,
               'success', { personality, streamFinalText: true, agentResultsCount: allExecResults.length });
             logDoriTurn(supabaseAdmin, userId, currentChannel, 'assistant', cleanText, tgChannelRef);
+            // Save state + semantic memory for the next turn (best-effort).
+            saveConversationState(supabaseAdmin, {
+              userId,
+              channel: currentChannel as Channel,
+              openIntent: null,
+              pendingPayload: {},
+              recentEntities: [],
+              activeSpecialist: route.effective,
+            }).catch(() => {});
+            if (cleanText && lastUserContent.length >= 12) {
+              rememberSemantic(supabaseAdmin, {
+                userId,
+                workspaceId: activeWorkspace?.id ?? null,
+                source: 'chat_turn',
+                sourceRef: `chat:${currentChannel}:${Date.now()}`,
+                content: `User: ${lastUserContent}\nAssistant: ${cleanText.slice(0, 800)}`,
+                metadata: { channel: currentChannel, specialist: route.effective },
+                importance: route.specialist === 'general' ? 0.3 : 0.55,
+              }).catch(() => {});
+            }
           } catch (e) {
             console.error('SSE agent stream failed', e);
             try { emit({ type: 'error', detail: (e as Error).message }); } catch { /* ignore */ }
@@ -2739,7 +2874,7 @@ This avoids wrong actions on big asks. Skip propose_plan for simple 1–3 action
           break;
         }
         const aiData = await fullResp.json();
-        const roundText: string = aiData.choices?.[0]?.message?.content || '';
+        const roundText: string = flattenAssistantMessage(aiData.choices?.[0]?.message);
         finalText = roundText;
         totalPromptTokens += aiData.usage?.prompt_tokens || 0;
         totalCompletionTokens += aiData.usage?.completion_tokens || 0;
@@ -2779,6 +2914,49 @@ This avoids wrong actions on big asks. Skip propose_plan for simple 1–3 action
         'success', { personality, executeServerSide: true, agentResultsCount: allExecResults.length });
 
       logDoriTurn(supabaseAdmin, userId, currentChannel, 'assistant', cleanText.trim(), tgChannelRef);
+
+      // Persist conversation-state for the next turn. Track the entities
+      // the tools just touched (so "him" / "the meeting" resolves) and
+      // remember which specialist handled this turn so a "yes" on the
+      // next turn stays in the same mindset. Also kick off async
+      // semantic indexing of the user's message + the assistant's reply.
+      try {
+        const recentEntities: RecentEntity[] = [];
+        for (const r of allExecResults.slice(-8)) {
+          const id = (r as any).id || (r as any).entityId;
+          if (!id) continue;
+          recentEntities.push({
+            kind: ((r as any).entityKind || (r as any).kind || 'task') as RecentEntity['kind'],
+            id,
+            label: (r as any).label || (r as any).title,
+            ref_at: new Date().toISOString(),
+          });
+        }
+        const proposedPlan = allExecResults.find((r: any) => r.tool === 'propose_plan');
+        await saveConversationState(supabaseAdmin, {
+          userId,
+          channel: currentChannel as Channel,
+          openIntent: proposedPlan ? 'awaiting_plan_approval' : null,
+          pendingPayload: proposedPlan ? (proposedPlan as any).payload ?? {} : {},
+          recentEntities,
+          activeSpecialist: route.effective,
+        });
+      } catch (e) {
+        console.warn('[saveConversationState agent] failed', (e as Error).message);
+      }
+      // Index the user's question + the final reply into semantic
+      // memory so future turns can recall this exchange. Best-effort.
+      if (lastUserContent.length >= 12) {
+        rememberSemantic(supabaseAdmin, {
+          userId,
+          workspaceId: activeWorkspace?.id ?? null,
+          source: 'chat_turn',
+          sourceRef: `chat:${currentChannel}:${Date.now()}`,
+          content: `User: ${lastUserContent}\nAssistant: ${cleanText.trim().slice(0, 800)}`,
+          metadata: { channel: currentChannel, specialist: route.effective },
+          importance: route.specialist === 'general' ? 0.3 : 0.55,
+        }).catch(() => {});
+      }
 
       return new Response(JSON.stringify({
         reply: cleanText.trim(),
@@ -2859,6 +3037,27 @@ This avoids wrong actions on big asks. Skip propose_plan for simple 1–3 action
             const cleaned = stripAllToolTags(fullResponseText).trim();
             if (cleaned) {
               await logDoriTurn(supabaseAdmin, userId, currentChannel, 'assistant', cleaned, tgChannelRef);
+            }
+            // Save the routing decision as the active specialist + index
+            // this exchange into semantic memory. Both are fire-and-forget.
+            saveConversationState(supabaseAdmin, {
+              userId,
+              channel: currentChannel as Channel,
+              openIntent: null,
+              pendingPayload: {},
+              recentEntities: [],
+              activeSpecialist: route.effective,
+            }).catch(() => {});
+            if (cleaned && lastUserContent.length >= 12) {
+              rememberSemantic(supabaseAdmin, {
+                userId,
+                workspaceId: activeWorkspace?.id ?? null,
+                source: 'chat_turn',
+                sourceRef: `chat:${currentChannel}:${Date.now()}`,
+                content: `User: ${lastUserContent}\nAssistant: ${cleaned.slice(0, 800)}`,
+                metadata: { channel: currentChannel, specialist: route.effective },
+                importance: route.specialist === 'general' ? 0.3 : 0.55,
+              }).catch(() => {});
             }
           } catch (e) {
             console.error('Failed to log assistant turn', e);

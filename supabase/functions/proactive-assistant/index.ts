@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchAtRiskTasks, nudgeMessage } from "../_shared/dori-slip-risk.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': Deno.env.get('APP_URL') || '*',
@@ -204,6 +205,18 @@ serve(async (req) => {
       if (!trigger_type || trigger_type === 'smart_followups') {
         const followUps = await generateSmartFollowUps(supabase, userId);
         remindersCreated.push(...followUps);
+      }
+
+      // Predictive slip-risk: catch at-risk tasks BEFORE they slip,
+      // not after they've already gone overdue. Uses dori_slip_risk
+      // (rolled up from completed-task history). Always cohabits with
+      // forgotten_tasks_enabled — a user who muted forgotten tasks
+      // also wants quiet on the predictive side.
+      if (!trigger_type || trigger_type === 'predictive_slip') {
+        if (settings.forgotten_tasks_enabled) {
+          const reminders = await checkPredictiveSlip(supabase, userId);
+          remindersCreated.push(...reminders);
+        }
       }
     }
 
@@ -863,4 +876,68 @@ async function checkWeeklyPlanning(supabase: any, userId: string, planningDay: n
     .single();
 
   return created ? [created] : [];
+}
+
+// Predictive slip risk: surface at-risk tasks BEFORE they go overdue.
+// Reads dori_slip_risk (a view that joins open tasks against the
+// rolled-up dori_task_stats). Suppresses repeat nudges within 24h on
+// the same task so the user doesn't get pinged every cron tick.
+async function checkPredictiveSlip(supabase: any, userId: string) {
+  const reminders: any[] = [];
+
+  let atRisk;
+  try {
+    atRisk = await fetchAtRiskTasks(supabase, {
+      userId,
+      minRisk: 0.6,
+      withinHours: 48,
+      limit: 5,
+      excludeOverdue: true,
+    });
+  } catch (e) {
+    console.error('[checkPredictiveSlip]', (e as Error).message);
+    return reminders;
+  }
+
+  if (!atRisk?.length) return reminders;
+
+  // De-dupe against tasks we've already nudged in the last 24h. Pulled
+  // from proactive_reminders, which records every nudge we've sent.
+  const sinceIso = new Date(Date.now() - 24 * 3600_000).toISOString();
+  const { data: recent } = await supabase
+    .from('proactive_reminders')
+    .select('trigger_entity_id')
+    .eq('user_id', userId)
+    .eq('reminder_type', 'predictive_slip')
+    .gte('created_at', sinceIso);
+  const recentIds = new Set((recent ?? []).map((r: any) => r.trigger_entity_id));
+
+  for (const t of atRisk) {
+    if (recentIds.has(t.task_id)) continue;
+
+    const reminder = {
+      user_id: userId,
+      reminder_type: 'predictive_slip',
+      trigger_entity_type: 'task',
+      trigger_entity_id: t.task_id,
+      title: '🎯 Heads-up: at-risk task',
+      message: nudgeMessage(t),
+      priority: t.slip_risk >= 0.8 ? 'high' : 'medium',
+      scheduled_for: new Date().toISOString(),
+      metadata: {
+        slip_risk: t.slip_risk,
+        on_time_rate: t.user_on_time_rate,
+        due_date: t.due_date,
+      },
+    };
+
+    const { data: created } = await supabase
+      .from('proactive_reminders')
+      .insert(reminder)
+      .select()
+      .single();
+    if (created) reminders.push(created);
+  }
+
+  return reminders;
 }
