@@ -27,6 +27,7 @@ import {
   LazyContactsPage,
   LazyContractsPage,
   LazyFinancePage,
+  LazyTravelPage,
   LazyNotFound,
   LazyOnboarding,
   LazyIndex,
@@ -153,6 +154,14 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <LazyFinancePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/travel"
+            element={
+              <ProtectedRoute>
+                <LazyTravelPage />
               </ProtectedRoute>
             }
           />

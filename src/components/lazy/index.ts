@@ -25,6 +25,7 @@ export const LazyDashboard = lazyWithRetry(() => import('@/pages/Dashboard'));
 export const LazyContactsPage = lazyWithRetry(() => import('@/pages/ContactsPage'));
 export const LazyContractsPage = lazyWithRetry(() => import('@/pages/Contracts'));
 export const LazyFinancePage = lazyWithRetry(() => import('@/pages/Finance'));
+export const LazyTravelPage = lazyWithRetry(() => import('@/pages/Travel'));
 export const LazyNotFound = lazyWithRetry(() => import('@/pages/NotFound'));
 export const LazyOnboarding = lazyWithRetry(() => import('@/pages/Onboarding'));
 

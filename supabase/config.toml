@@ -203,3 +203,12 @@ verify_jwt = true
 
 [functions.finance-summary]
 verify_jwt = true
+
+[functions.weather-forecast]
+verify_jwt = true
+
+[functions.generate-packing-list]
+verify_jwt = true
+
+[functions.trip-overview]
+verify_jwt = true
