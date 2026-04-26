@@ -3,6 +3,7 @@ import { Search, Bell, Menu } from 'lucide-react';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
 import { DoriNotificationIcon } from '@/components/assistant/DoriNotificationIcon';
 import { AgentActionInbox } from '@/components/assistant/AgentActionInbox';
+import { PlansPanel } from '@/components/assistant/PlansPanel';
 import { WorkspaceSwitcher } from '@/components/workspace/WorkspaceSwitcher';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -54,6 +55,7 @@ export function ContextualHeader({
           </Button>
         )}
         <DoriNotificationIcon />
+        <PlansPanel />
         <AgentActionInbox />
         <NotificationCenter
           notifications={notifications}

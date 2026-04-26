@@ -952,6 +952,8 @@ interface ToolExecResult {
   summary?: string;    // human-readable summary shown in confirmation prompts
   undoId?: string;     // set when the executed mutation can be reversed via /undo or an inline button
   entityId?: string;   // id of the row this result refers to (for row-level inline buttons)
+  planId?: string;     // set when the tool created a multi-step plan (propose_plan)
+  payload?: any;       // tool-specific structured payload (e.g. propose_plan steps)
 }
 
 interface ServerExecOpts {
@@ -1722,6 +1724,57 @@ async function executeToolsServerSide(
         });
       }
     } catch (e) { console.error('learn_preference failed', e); }
+  }
+
+  // ---------- propose_plan ----------
+  // Persists a multi-step plan as a real row so it survives refreshes
+  // and shows up in the PlansPanel. The agent loop receives a synthetic
+  // tool result back so it can reference the plan in its reply.
+  for (const m of text.matchAll(/<tool>propose_plan<\/tool>\s*<plan>(\{[\s\S]*?\})<\/plan>/g)) {
+    const parsed = safeJSON(m[1]);
+    if (!parsed || !Array.isArray(parsed.steps) || parsed.steps.length === 0) {
+      out.push({ tool: 'propose_plan', ok: false, message: 'Invalid plan payload' });
+      continue;
+    }
+    const stepsJson = parsed.steps.map((s: unknown, i: number) => {
+      // Accept two shapes: bare strings or { title, description, tool_hint }.
+      if (typeof s === 'string') {
+        const cleaned = s.replace(/^\d+\.\s*/, '').trim();
+        return { title: cleaned.slice(0, 200), description: cleaned, requires_confirmation: true };
+      }
+      const obj = s as Record<string, unknown>;
+      return {
+        title: String(obj.title || `Step ${i + 1}`).slice(0, 200),
+        description: typeof obj.description === 'string' ? obj.description.slice(0, 1000) : null,
+        tool_hint: typeof obj.tool_hint === 'string' ? obj.tool_hint.slice(0, 4000) : null,
+        requires_confirmation: obj.requires_confirmation !== false,
+      };
+    });
+    try {
+      const { data: planId, error } = await supabase.rpc('dori_create_plan', {
+        p_user_id: userId,
+        p_title: String(parsed.title || 'Untitled plan').slice(0, 200),
+        p_description: typeof parsed.description === 'string' ? parsed.description.slice(0, 1000) : null,
+        p_steps: stepsJson,
+        p_source: opts?.source === 'auto_pilot' ? 'auto_pilot' : 'chat',
+        p_channel: opts?.source || 'web',
+        p_workspace_id: null,
+        p_metadata: { source_ref: opts?.sourceRef ?? null },
+      });
+      if (error || !planId) {
+        out.push({ tool: 'propose_plan', ok: false, message: `Plan create failed: ${error?.message || 'unknown'}` });
+      } else {
+        out.push({
+          tool: 'propose_plan',
+          ok: true,
+          message: `📋 Plan created: ${parsed.title} (${stepsJson.length} steps). Review & approve in your Plans inbox.`,
+          planId,
+          payload: { title: parsed.title, steps: parsed.steps, planId },
+        } as ToolExecResult);
+      }
+    } catch (e) {
+      out.push({ tool: 'propose_plan', ok: false, message: `Failed: ${(e as Error).message}` });
+    }
   }
 
   return out;
