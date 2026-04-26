@@ -112,19 +112,22 @@ export function useTripOverview() {
   useEffect(() => { refresh(); }, [refresh]);
 
   // Realtime: any change to trips/segments/packing repaints the page.
+  // One channel with N listeners is cheaper than N channels — saves
+  // WebSocket connections on both sides.
   useEffect(() => {
     if (!user?.id) return;
     const tables = ['trips', 'trip_segments', 'packing_lists', 'trip_bookings'];
-    const channels = tables.map((table) => (supabase as any)
-      .channel(`trip-${table}-${user.id}`)
-      .on('postgres_changes', {
+    const channel = (supabase as any).channel(`trip-updates-${user.id}`);
+    for (const table of tables) {
+      channel.on('postgres_changes', {
         event: '*',
         schema: 'public',
         table,
         filter: `user_id=eq.${user.id}`,
-      }, () => { refresh(); })
-      .subscribe());
-    return () => { channels.forEach((c) => (supabase as any).removeChannel(c)); };
+      }, () => { refresh(); });
+    }
+    channel.subscribe();
+    return () => { (supabase as any).removeChannel(channel); };
   }, [user?.id, refresh]);
 
   // Fetch the weather forecast for a trip and persist a one-line

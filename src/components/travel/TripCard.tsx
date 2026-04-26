@@ -184,9 +184,13 @@ const SEGMENT_ICONS: Record<string, typeof Plane> = {
 
 function SegmentRow({ segment }: { segment: TripSegment }) {
   const Icon = SEGMENT_ICONS[segment.segment_type] || Plane;
+  // Render in the segment's local timezone when set ("flight lands at
+  // 14:30" means the destination's clock, not the traveller's home clock).
+  // Falls back to the browser's local zone otherwise.
   const time = segment.start_time
     ? new Date(segment.start_time).toLocaleString(undefined, {
       month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+      timeZone: segment.timezone || undefined,
     })
     : null;
   return (

@@ -9,8 +9,10 @@ export default function TravelPage() {
   const { data, loading, busyTripId, refresh, refreshWeather, generatePacking, togglePackedItem } = useTripOverview();
 
   const trips = data?.trips ?? [];
-  const upcoming = trips.filter((t) => t.days_until_departure >= 0);
-  const past = trips.filter((t) => t.days_until_departure < 0);
+  // In-progress trips (started but not yet ended) belong with upcoming
+  // so the user can still reach the active itinerary + packing list.
+  const upcoming = trips.filter((t) => t.days_until_departure + t.trip_length_days >= 0);
+  const past = trips.filter((t) => t.days_until_departure + t.trip_length_days < 0);
 
   return (
     <div className="min-h-screen bg-background">

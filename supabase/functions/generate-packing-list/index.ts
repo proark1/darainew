@@ -163,7 +163,17 @@ serve(async (req) => {
     }
     const data = await aiResp.json();
     const args = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
-    const parsed = typeof args === 'string' ? JSON.parse(args) : args;
+    // Forced tool_choice usually returns valid JSON, but the gateway
+    // can occasionally hand back a malformed string (truncated tokens,
+    // upstream timeout). Guard the parse so the function returns a
+    // clean 502 instead of crashing into a 500.
+    let parsed: any = null;
+    try {
+      parsed = typeof args === 'string' ? JSON.parse(args) : args;
+    } catch (e) {
+      console.error('[generate-packing-list] AI returned malformed JSON', (e as Error).message);
+      return json({ error: 'AI returned invalid structured data' }, 502);
+    }
     const items = Array.isArray(parsed?.items) ? parsed.items : [];
 
     const cleanItems = items.slice(0, 25).map((it: any) => ({
