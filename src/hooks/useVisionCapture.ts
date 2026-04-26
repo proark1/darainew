@@ -56,7 +56,9 @@ export function useVisionCapture() {
     try {
       // 1. Upload to chat-attachments under <user>/vision/
       const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-      const fileName = `vision/${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${ext}`;
+      // crypto.randomUUID is collision-resistant by spec; safer than
+      // Date.now() + Math.random() under rapid successive uploads.
+      const fileName = `vision/${crypto.randomUUID()}.${ext}`;
       const filePath = `${user.id}/${fileName}`;
       const { error: upErr } = await supabase.storage
         .from('chat-attachments')

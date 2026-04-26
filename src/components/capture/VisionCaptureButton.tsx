@@ -65,7 +65,10 @@ export function VisionCaptureButton() {
     for (const [k, v] of Object.entries(editedFields)) {
       if (v === '') continue;
       const n = Number(v);
-      payload[k] = Number.isFinite(n) && /^-?\d+(\.\d+)?$/.test(v) ? n : v;
+      // Trim before the regex test: Number(" 100 ") parses fine, but
+      // the strict regex would reject the surrounding whitespace and
+      // we'd send a string when a number was intended.
+      payload[k] = Number.isFinite(n) && /^-?\d+(\.\d+)?$/.test(v.trim()) ? n : v;
     }
     // Pass through any non-string keys from the original extraction
     // unchanged (e.g. line_items arrays).

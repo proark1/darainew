@@ -268,7 +268,19 @@ serve(async (req) => {
     }
 
     const data = await aiResp.json();
-    const args = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+    // Even with forced tool_choice the gateway can hand back an empty
+    // tool_calls array (safety filter, content blocked, upstream
+    // hiccup). Treat that as a hard failure rather than silently
+    // committing an empty extraction.
+    const toolCall = data?.choices?.[0]?.message?.tool_calls?.[0];
+    const args = toolCall?.function?.arguments;
+    if (!args) {
+      await admin.from('vision_captures').update({
+        status: 'error',
+        error_message: 'AI failed to return structured tool arguments',
+      }).eq('id', row.id);
+      return json({ error: 'AI extraction failed' }, 502);
+    }
     let parsed: any = null;
     try {
       parsed = typeof args === 'string' ? JSON.parse(args) : args;
