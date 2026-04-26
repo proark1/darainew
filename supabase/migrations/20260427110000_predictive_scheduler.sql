@@ -77,14 +77,15 @@ CREATE TRIGGER update_schedule_proposals_updated_at
 -- ============================================================
 -- 2. user_energy_profile view
 -- ============================================================
--- Maps each user's morning energy reports onto an approximate
--- hour-of-day curve. Three time bands (morning 07-12, afternoon
--- 12-17, evening 17-22) with the average self-reported level.
--- Sample size is exposed so the planner can fall back to defaults
--- when a user has only checked in a few times.
+-- Rolls up the last 60 days of MORNING check-ins into a single
+-- per-user summary: average energy level (1=low, 2=medium, 3=high),
+-- modal level, average sleep hours and quality. Sample size is
+-- exposed so the planner can fall back to defaults when a user has
+-- only checked in a few times.
 --
--- We don't yet have hour-stamped energy from HealthKit; this is a
--- best-effort signal until that arrives.
+-- Hour-of-day energy bands (morning / afternoon / evening) require
+-- timestamped HealthKit data we don't have yet — that's a follow-up
+-- once the Apple Health bridge populates a continuous signal.
 CREATE OR REPLACE VIEW public.user_energy_profile AS
 WITH levels AS (
   SELECT

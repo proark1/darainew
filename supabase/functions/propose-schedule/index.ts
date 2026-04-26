@@ -120,10 +120,14 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const days = clampInt(body.days, 1, 14, 7);
-    const rangeStart = isoDate(typeof body.range_start === 'string' ? body.range_start : todayIso());
+    // Resolve timezone before "today" so `range_start` defaults to the
+    // user's local date, not UTC. A user in Tokyo at 22:00 UTC has
+    // already moved to "tomorrow" locally — UTC's notion of today
+    // would put deep-work blocks on a day that's already in the past.
+    const timezone = typeof body.timezone === 'string' ? body.timezone : 'UTC';
+    const rangeStart = isoDate(typeof body.range_start === 'string' ? body.range_start : todayIso(timezone));
     if (!rangeStart) return json({ error: 'invalid range_start' }, 400);
     const rangeEnd = addDays(rangeStart, days - 1);
-    const timezone = typeof body.timezone === 'string' ? body.timezone : 'UTC';
     const deepHours = Array.isArray(body.deep_work_hours) && body.deep_work_hours.length === 2
       ? `${body.deep_work_hours[0]}–${body.deep_work_hours[1]}` : null;
     const constraints: string[] = Array.isArray(body.constraints)
@@ -320,8 +324,15 @@ function clampInt(v: unknown, min: number, max: number, fallback: number): numbe
   return Math.max(min, Math.min(max, n));
 }
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+function todayIso(tz: string): string {
+  // 'en-CA' formats dates as YYYY-MM-DD natively, which matches the
+  // ISO date format the rest of the function expects. Falls back to
+  // UTC if the timezone string is unsupported.
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
 }
 
 function isoDate(s: string): string | null {

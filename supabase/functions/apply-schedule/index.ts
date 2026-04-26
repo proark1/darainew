@@ -84,41 +84,63 @@ serve(async (req) => {
     let applied = 0;
     const errors: string[] = [];
 
+    // Build the candidate list once, then bulk-insert. Single round-trip
+    // beats N sequential ones — important when accept_all is fired on
+    // a 25-block week.
+    const candidates: Array<{ idx: number; block: any }> = [];
+    const skipped: Array<{ idx: number; block: any; reason: string }> = [];
     for (let i = 0; i < blocks.length; i += 1) {
       const b = blocks[i];
       if (!b || !targetIds.has(b.id)) continue;
-      // Already applied — skip.
       if (b.applied_event_id) continue;
-
       const startIso = typeof b.start_time === 'string' ? b.start_time : null;
       const endIso = typeof b.end_time === 'string' ? b.end_time : null;
       if (!startIso || !endIso) {
-        errors.push(`block ${b.id}: missing times`);
+        skipped.push({ idx: i, block: b, reason: 'missing times' });
         continue;
       }
-      const description = [
-        b.rationale ? `${b.rationale}` : null,
-        b.task_id ? `\n\nLinked task: ${b.task_id}` : null,
-        `\n\n_From schedule proposal ${prop.id}, kind=${b.kind}_`,
-      ].filter(Boolean).join('');
-      try {
-        const { data: ev, error: insErr } = await admin.from('events').insert({
-          user_id: user.id,
-          title: String(b.title || 'Block').slice(0, 200),
-          description,
-          start_time: startIso,
-          end_time: endIso,
-        }).select('id').single();
-        if (insErr || !ev) {
-          errors.push(`block ${b.id}: ${insErr?.message || 'insert failed'}`);
-          blocks[i] = { ...b, accepted: false };
-          continue;
+      candidates.push({ idx: i, block: b });
+    }
+
+    if (candidates.length > 0) {
+      const eventsToInsert = candidates.map(({ block: b }) => ({
+        user_id: user.id,
+        title: String(b.title || 'Block').slice(0, 200),
+        description: [
+          b.rationale ? `${b.rationale}` : null,
+          b.task_id ? `\n\nLinked task: ${b.task_id}` : null,
+          `\n\n_From schedule proposal ${prop.id}, kind=${b.kind}_`,
+        ].filter(Boolean).join(''),
+        start_time: b.start_time,
+        end_time: b.end_time,
+      }));
+      const { data: inserted, error: insErr } = await admin
+        .from('events')
+        .insert(eventsToInsert)
+        .select('id');
+      if (insErr) {
+        errors.push(`bulk insert failed: ${insErr.message}`);
+        for (const { idx, block } of candidates) {
+          blocks[idx] = { ...block, accepted: false };
         }
-        blocks[i] = { ...b, accepted: true, applied_event_id: ev.id };
-        applied += 1;
-      } catch (e) {
-        errors.push(`block ${b.id}: ${(e as Error).message}`);
+      } else if (inserted) {
+        // Postgres preserves input ordering for INSERT … RETURNING, so the
+        // returned ids align 1:1 with `candidates`.
+        for (let k = 0; k < candidates.length; k += 1) {
+          const { idx, block } = candidates[k];
+          const ev = inserted[k];
+          if (ev?.id) {
+            blocks[idx] = { ...block, accepted: true, applied_event_id: ev.id };
+            applied += 1;
+          } else {
+            blocks[idx] = { ...block, accepted: false };
+          }
+        }
       }
+    }
+    for (const { idx, block, reason } of skipped) {
+      errors.push(`block ${block.id}: ${reason}`);
+      blocks[idx] = { ...block, accepted: false };
     }
 
     // Mark blocks the user explicitly NOT in targetIds as rejected
