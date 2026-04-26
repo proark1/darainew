@@ -20,6 +20,15 @@ const ALLOWED_UNDO_TABLES = new Set<string>([
   'notes',
   'shopping_lists',
   'shopping_list_items',
+  // Recently added by feature PRs:
+  'financial_transactions',  // vision capture (receipt) + Plaid sync
+  'receipts',                // vision capture (receipt)
+  'personal_medications',    // vision capture (medication)
+  'meeting_bots',            // meeting copilot schedule
+  'vision_captures',         // own table — undo a discard
+  'dori_action_plans',       // plan create
+  'dori_plan_steps',         // step execution
+  'schedule_proposals',      // predictive scheduler
 ]);
 
 export interface UndoEntry {

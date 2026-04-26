@@ -22,6 +22,8 @@ import {
   normaliseStatus,
   type CreateBotRequest,
 } from '../_shared/meetingbot.ts';
+import { recordUndo } from '../_shared/dori-undo.ts';
+import { adminClient, resolveUserId } from '../_shared/auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -32,19 +34,11 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) return json({ error: 'Missing auth' }, 401);
-
+    const auth = await resolveUserId(req);
+    if (!auth) return json({ error: 'Unauthorized' }, 401);
+    const user = { id: auth.userId };
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const userClient = createClient(
-      supabaseUrl,
-      Deno.env.get('SUPABASE_PUBLISHABLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-    const { data: { user }, error: uErr } = await userClient.auth.getUser();
-    if (uErr || !user) return json({ error: 'Unauthorized' }, 401);
-
-    const admin = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    const admin = adminClient();
 
     const body = await req.json().catch(() => ({}));
     const meetingUrl = String(body.meeting_url || '').trim();
@@ -133,11 +127,28 @@ serve(async (req) => {
           local_user_id: user.id,
         },
       }).eq('id', row.id);
+      // Record undo so the user can revert within the 5-minute window.
+      // Snapshot deletes the local row; the upstream bot keeps running
+      // until the user explicitly cancels (idempotent — they can use
+      // the cancel control later if undo timing missed).
+      const undoId = await recordUndo(admin, {
+        user_id: user.id,
+        op: 'create',
+        entity_type: 'meeting_bot',
+        entity_id: row.id,
+        label: title || meetingUrl,
+        inverse_tool_xml: null,
+        snapshot: { kind: 'delete_by_id', table: 'meeting_bots', id: row.id },
+        source: 'meeting_bot',
+        source_ref: row.id,
+      });
+
       return json({
         ok: true,
         id: row.id,
         external_bot_id: upstream.id,
         status,
+        undo_id: undoId,
       });
     } catch (e) {
       await admin.from('meeting_bots').update({

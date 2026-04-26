@@ -23,6 +23,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { recordUndo } from '../_shared/dori-undo.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -81,7 +82,24 @@ serve(async (req) => {
 
     let createdEntityKind: string | null = null;
     let createdEntityId: string | null = null;
+    let undoId: string | null = null;
     let warning: string | null = null;
+
+    // Helper: record a delete-by-id undo for the row we just created
+    // so the caller can offer "Undo" within the 5-minute window.
+    const recordCreateUndo = async (table: string, id: string, label: string, entity: string) => {
+      undoId = await recordUndo(admin, {
+        user_id: user.id,
+        op: 'create',
+        entity_type: entity,
+        entity_id: id,
+        label,
+        inverse_tool_xml: null,
+        snapshot: { kind: 'delete_by_id', table, id },
+        source: 'vision_capture',
+        source_ref: cap.id,
+      });
+    };
 
     try {
       switch (kind) {
@@ -119,6 +137,8 @@ serve(async (req) => {
             merchant,
             receipt_date: date,
           });
+          await recordCreateUndo('financial_transactions', tx.id,
+            `${merchant ? `${merchant} · ` : ''}${total ?? '?'} ${currency}`, 'transaction');
           createdEntityKind = 'transaction';
           createdEntityId = tx.id;
           break;
@@ -138,6 +158,7 @@ serve(async (req) => {
             notes: ocrText.slice(0, 2000),
           }).select('id').single();
           if (e || !row) throw new Error(e?.message || 'contact insert failed');
+          await recordCreateUndo('user_contacts', row.id, name, 'contact');
           createdEntityKind = 'contact';
           createdEntityId = row.id;
           break;
@@ -157,6 +178,7 @@ serve(async (req) => {
             is_active: true,
           }).select('id').single();
           if (e || !row) throw new Error(e?.message || 'medication insert failed');
+          await recordCreateUndo('personal_medications', row.id, name, 'medication');
           createdEntityKind = 'medication';
           createdEntityId = row.id;
           break;
@@ -177,6 +199,7 @@ serve(async (req) => {
             tags: ['vision-capture', kind],
           }).select('id').single();
           if (e || !row) throw new Error(e?.message || 'note insert failed');
+          await recordCreateUndo('notes', row.id, title, 'note');
           createdEntityKind = 'note';
           createdEntityId = row.id;
           break;
@@ -201,6 +224,7 @@ serve(async (req) => {
             is_active: true,
           }).select('id').single();
           if (e || !row) throw new Error(e?.message || 'contract insert failed');
+          await recordCreateUndo('contracts', row.id, name, 'contract');
           createdEntityKind = 'contract';
           createdEntityId = row.id;
           break;
@@ -224,6 +248,7 @@ serve(async (req) => {
             tags: ['vision-capture', 'inventory'],
           }).select('id').single();
           if (e || !row) throw new Error(e?.message || 'note insert failed');
+          await recordCreateUndo('notes', row.id, title, 'note');
           createdEntityKind = 'note';
           createdEntityId = row.id;
           warning = 'Inventory items need a property to attach to; saved as a note for now.';
@@ -251,6 +276,7 @@ serve(async (req) => {
       capture_id: cap.id,
       created_entity_kind: createdEntityKind,
       created_entity_id: createdEntityId,
+      undo_id: undoId,
       warning,
     });
   } catch (err) {

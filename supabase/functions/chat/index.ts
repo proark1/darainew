@@ -698,7 +698,7 @@ function extractSearchQuery(msg: string): string {
 
 function stripAllToolTags(text: string): string {
   return text
-    .replace(/<tool>[\s\S]*?<\/(?:task|event|note|criteria|plan|item|contact|contract|project|habit|email|reminder|memory|query|type|property|business|member|filter|draft)>/g, '')
+    .replace(/<tool>[\s\S]*?<\/(?:task|event|note|criteria|plan|item|contact|contract|project|habit|email|reminder|memory|query|type|property|business|member|filter|draft|meeting|target|packing)>/g, '')
     .replace(/<tool>[\s\S]*?<\/tool>/g, '')
     .replace(/<action>[\s\S]*?<\/action>/g, '')
     .replace(/\n{3,}/g, '\n\n')
@@ -1777,7 +1777,117 @@ async function executeToolsServerSide(
     }
   }
 
+  // ---------- schedule_meeting_bot ----------
+  for (const m of text.matchAll(/<tool>schedule_meeting_bot<\/tool>\s*<meeting>(\{[\s\S]*?\})<\/meeting>/g)) {
+    const data = safeJSON(m[1]);
+    if (!data?.meeting_url) {
+      out.push({ tool: 'schedule_meeting_bot', ok: false, message: 'meeting_url required' });
+      continue;
+    }
+    const r = await invokeInternal('meeting-bot-schedule', userId, {
+      meeting_url: data.meeting_url,
+      title: data.title ?? null,
+      join_at: data.join_at ?? null,
+      record_video: !!data.record_video,
+      bot_name: data.bot_name || 'Notetaker',
+    });
+    out.push(r.ok
+      ? { tool: 'schedule_meeting_bot', ok: true, message: `📹 Meeting bot scheduled · ${data.title || data.meeting_url}`, entityId: r.body?.id }
+      : { tool: 'schedule_meeting_bot', ok: false, message: `Failed: ${r.error}` });
+  }
+
+  // ---------- plan_my_week ----------
+  for (const m of text.matchAll(/<tool>plan_my_week<\/tool>\s*<plan>(\{[\s\S]*?\})<\/plan>/g)) {
+    const data = safeJSON(m[1]) ?? {};
+    const r = await invokeInternal('propose-schedule', userId, {
+      days: data.days ?? 7,
+      timezone: opts?.timezone,
+      deep_work_hours: data.deep_work_hours,
+      constraints: Array.isArray(data.constraints) ? data.constraints : [],
+    });
+    if (r.ok) {
+      const count = r.body?.block_count ?? 0;
+      out.push({
+        tool: 'plan_my_week', ok: true,
+        message: `📅 Drafted a week (${count} block${count === 1 ? '' : 's'}). Open the planner inbox to review and apply.`,
+        entityId: r.body?.proposal?.id,
+      });
+    } else {
+      out.push({ tool: 'plan_my_week', ok: false, message: `Failed: ${r.error}` });
+    }
+  }
+
+  // ---------- forget_memory ----------
+  for (const m of text.matchAll(/<tool>forget_memory<\/tool>\s*<target>(\{[\s\S]*?\})<\/target>/g)) {
+    const data = safeJSON(m[1]);
+    if (!data?.target_id || !data?.target_kind) {
+      out.push({ tool: 'forget_memory', ok: false, message: 'target_kind + target_id required' });
+      continue;
+    }
+    const body: Record<string, unknown> = { reason: data.reason ?? null };
+    if (data.target_kind === 'kg_entity' && data.deep) {
+      body.entity_id = data.target_id;
+      body.deep = true;
+    } else {
+      body.target_kind = data.target_kind;
+      body.target_id = data.target_id;
+    }
+    const r = await invokeInternal('memory-forget', userId, body);
+    out.push(r.ok
+      ? { tool: 'forget_memory', ok: true, message: `🗑️ Forgotten (${r.body?.forgotten ?? r.body?.cascaded_rows ?? 0} item${(r.body?.forgotten ?? r.body?.cascaded_rows ?? 0) === 1 ? '' : 's'})` }
+      : { tool: 'forget_memory', ok: false, message: `Failed: ${r.error}` });
+  }
+
+  // ---------- generate_packing_list ----------
+  for (const m of text.matchAll(/<tool>generate_packing_list<\/tool>\s*<packing>(\{[\s\S]*?\})<\/packing>/g)) {
+    const data = safeJSON(m[1]);
+    if (!data?.trip_id) {
+      out.push({ tool: 'generate_packing_list', ok: false, message: 'trip_id required' });
+      continue;
+    }
+    const r = await invokeInternal('generate-packing-list', userId, {
+      trip_id: data.trip_id,
+      replace: !!data.replace,
+      extra_context: data.extra_context ?? '',
+    });
+    out.push(r.ok
+      ? { tool: 'generate_packing_list', ok: true, message: `🎒 Packing list ready (${r.body?.items_count ?? '?'} items)`, entityId: r.body?.packing_list_id }
+      : { tool: 'generate_packing_list', ok: false, message: `Failed: ${r.error}` });
+  }
+
   return out;
+}
+
+// Internal helper for the new chat tools that delegate to other edge
+// functions. Mirrors the pattern from dori-execute-action: service-role
+// bearer + x-telegram-user-id header so the receiving function picks
+// up the right user identity.
+async function invokeInternal(
+  fn: string,
+  userId: string,
+  body: Record<string, unknown>,
+): Promise<{ ok: boolean; status: number; body?: any; error?: string }> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  try {
+    const resp = await fetch(`${supabaseUrl}/functions/v1/${fn}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+        'x-telegram-user-id': userId,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(50_000),
+    });
+    const json = await resp.json().catch(() => null);
+    if (!resp.ok || (json && json.error)) {
+      return { ok: false, status: resp.status, body: json, error: json?.error || `HTTP ${resp.status}` };
+    }
+    return { ok: true, status: resp.status, body: json };
+  } catch (e) {
+    return { ok: false, status: 0, error: (e as Error).message };
+  }
 }
 
 // Persist a turn into the unified cross-channel conversation log
@@ -2541,6 +2651,25 @@ Format: <tool>propose_plan</tool><plan>{"title":"Plan for X","steps":["1. Find c
 
 After the user approves (any affirmative reply), execute all steps using the normal tools in ONE response. If they say "skip 2", omit step 2.
 This avoids wrong actions on big asks. Skip propose_plan for simple 1–3 action chains — just do those directly.
+
+## TOOL: schedule_meeting_bot (send a notetaker into a Zoom/Meet/Teams call)
+Use when the user wants the assistant to attend or transcribe a meeting on their behalf. Requires a meeting URL.
+Format: <tool>schedule_meeting_bot</tool><meeting>{"meeting_url":"https://meet.google.com/abc-defg-hij","title":"optional","join_at":"optional ISO-8601","record_video":false}</meeting>
+After it runs, mention the bot will join + summarise after.
+
+## TOOL: plan_my_week (predictive scheduler)
+Use when the user asks to "plan my week", "schedule my work", "block focus time", "organize my time". Pulls in tasks + calendar + energy + slip risk and drafts a week of blocks the user reviews in the planner inbox.
+Format: <tool>plan_my_week</tool><plan>{"days":7,"deep_work_hours":[9,12],"constraints":["no meetings before 10","2h on Tuesday for the X review"]}</plan>
+days defaults to 7 (max 14). deep_work_hours and constraints are optional.
+
+## TOOL: forget_memory (delete an entity or memory item)
+Use when the user says "forget about X", "stop tracking Y", "remove that". Pass either a kg_entity id (deep-forget cascades to every memory item that mentions it) or a single semantic/episodic/ai_memory id.
+Format: <tool>forget_memory</tool><target>{"target_kind":"kg_entity|semantic|episodic|ai_memory","target_id":"uuid","deep":false,"reason":"optional"}</target>
+
+## TOOL: generate_packing_list (AI packing list for a trip)
+Use when the user asks to "pack for X", "what should I bring to Y", "plan my packing". Requires a trip id (look it up via the trips table first if needed).
+Format: <tool>generate_packing_list</tool><packing>{"trip_id":"uuid","replace":false,"extra_context":"climbing trip, expect rain"}</packing>
+
 `;
     // Resolve the user's timezone so every timestamp Dori shows (or feeds
     // into the AI) reflects the user's local clock, not the UTC edge-runtime

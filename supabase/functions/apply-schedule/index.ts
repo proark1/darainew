@@ -15,6 +15,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { recordUndo } from '../_shared/dori-undo.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -125,13 +126,26 @@ serve(async (req) => {
         }
       } else if (inserted) {
         // Postgres preserves input ordering for INSERT … RETURNING, so the
-        // returned ids align 1:1 with `candidates`.
+        // returned ids align 1:1 with `candidates`. Each newly-created
+        // event also gets an undo entry so the user can revert within
+        // the 5-minute window.
         for (let k = 0; k < candidates.length; k += 1) {
           const { idx, block } = candidates[k];
           const ev = inserted[k];
           if (ev?.id) {
             blocks[idx] = { ...block, accepted: true, applied_event_id: ev.id };
             applied += 1;
+            recordUndo(admin, {
+              user_id: user.id,
+              op: 'create',
+              entity_type: 'event',
+              entity_id: ev.id,
+              label: String(block.title || 'Block'),
+              inverse_tool_xml: null,
+              snapshot: { kind: 'delete_by_id', table: 'events', id: ev.id },
+              source: 'schedule',
+              source_ref: prop.id,
+            }).catch(() => { /* non-blocking */ });
           } else {
             blocks[idx] = { ...block, accepted: false };
           }
