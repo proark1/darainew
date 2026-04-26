@@ -212,3 +212,9 @@ verify_jwt = true
 
 [functions.trip-overview]
 verify_jwt = true
+
+[functions.vision-capture]
+verify_jwt = true
+
+[functions.vision-commit]
+verify_jwt = true
