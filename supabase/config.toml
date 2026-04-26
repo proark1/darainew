@@ -182,3 +182,12 @@ verify_jwt = true
 
 [functions.dori-plan-execute]
 verify_jwt = true
+
+[functions.meeting-bot-schedule]
+verify_jwt = true
+
+[functions.meeting-bot-control]
+verify_jwt = true
+
+[functions.meeting-bot-webhook]
+verify_jwt = false

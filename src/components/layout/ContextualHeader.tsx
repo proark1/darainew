@@ -4,6 +4,7 @@ import { NotificationCenter } from '@/components/notifications/NotificationCente
 import { DoriNotificationIcon } from '@/components/assistant/DoriNotificationIcon';
 import { AgentActionInbox } from '@/components/assistant/AgentActionInbox';
 import { PlansPanel } from '@/components/assistant/PlansPanel';
+import { MeetingBotsPanel } from '@/components/assistant/MeetingBotsPanel';
 import { WorkspaceSwitcher } from '@/components/workspace/WorkspaceSwitcher';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -55,6 +56,7 @@ export function ContextualHeader({
           </Button>
         )}
         <DoriNotificationIcon />
+        <MeetingBotsPanel />
         <PlansPanel />
         <AgentActionInbox />
         <NotificationCenter

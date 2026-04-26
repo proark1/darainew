@@ -114,6 +114,9 @@ Supabase Edge Functions require these secrets (set via Supabase Dashboard):
 | `PERPLEXITY_API_KEY` | Web search |
 | `GEMINI_API_KEY` | Gemini Live |
 | `APP_URL` | CORS origin restriction |
+| `MEETINGBOT_BASE_URL` | Meeting copilot (no trailing slash) — see [proark1/MeetingBot](https://github.com/proark1/MeetingBot) |
+| `MEETINGBOT_API_KEY` | Bearer token (`sk_live_…`) generated in MeetingBot's `/auth/keys` |
+| `MEETINGBOT_WEBHOOK_SECRET` | HMAC-SHA256 secret used to verify inbound webhook deliveries |
 
 ## Architecture
 
