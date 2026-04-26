@@ -5,18 +5,20 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { UserSettings, ThemeMode, ColorScheme, TaskCategory, TaskPriority } from '@/types/flux';
-import { 
-  Settings, 
-  X, 
-  Palette, 
-  Bell, 
-  ListTodo, 
-  Sun, 
+import {
+  Settings,
+  X,
+  Palette,
+  Bell,
+  ListTodo,
+  Sun,
   Moon,
   Check,
-  Users
+  Users,
+  Brain,
 } from 'lucide-react';
 import { SpaceMembersPanel } from './SpaceMembersPanel';
+import { MemoryDashboard } from '@/components/memory/MemoryDashboard';
 import { useAuth } from '@/hooks/useAuth';
 
 interface SettingsPanelProps {
@@ -41,13 +43,14 @@ export function SettingsPanel({
   onClose 
 }: SettingsPanelProps) {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'appearance' | 'notifications' | 'defaults' | 'team'>('appearance');
+  const [activeTab, setActiveTab] = useState<'appearance' | 'notifications' | 'defaults' | 'team' | 'memory'>('appearance');
 
   const tabs = [
     { id: 'appearance' as const, label: 'Appearance', icon: Palette },
     { id: 'notifications' as const, label: 'Notifications', icon: Bell },
     { id: 'defaults' as const, label: 'Defaults', icon: ListTodo },
     { id: 'team' as const, label: 'Team', icon: Users },
+    { id: 'memory' as const, label: 'Memory', icon: Brain },
   ];
 
   return (
@@ -222,6 +225,10 @@ export function SettingsPanel({
 
           {activeTab === 'team' && user && (
             <SpaceMembersPanel userId={user.id} />
+          )}
+
+          {activeTab === 'memory' && user && (
+            <MemoryDashboard />
           )}
         </div>
       </div>

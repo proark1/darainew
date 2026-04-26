@@ -48,6 +48,7 @@ import { KeyboardShortcutsPanel, useKeyboardShortcutsPanel } from './KeyboardSho
 import { AutomationRulesPanel } from './AutomationRulesPanel';
 import { CalendarConnectionsPanel } from './CalendarConnectionsPanel';
 import { TelegramHubPanel } from './TelegramHubPanel';
+import { MemoryDashboard } from '@/components/memory/MemoryDashboard';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useUserProfile } from '@/hooks/useUserProfile';
@@ -337,7 +338,7 @@ export function SettingsPanelContent({
   const biometricAuth = useBiometricAuth();
   const keyboardShortcuts = useKeyboardShortcutsPanel();
   const prayerNotifications = usePrayerNotificationSettings();
-  const [activeTab, setActiveTab] = useState<'general' | 'telegram' | 'proactive' | 'team' | 'ai' | 'info'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'telegram' | 'proactive' | 'team' | 'memory' | 'ai' | 'info'>('general');
   
   // Sync status bar color with theme
   useStatusBar(settings.theme);
@@ -443,6 +444,7 @@ export function SettingsPanelContent({
     { id: 'telegram' as const, label: 'Telegram', icon: Send },
     { id: 'proactive' as const, label: 'Proactive & Advanced', icon: Brain },
     { id: 'team' as const, label: t('settings.team'), icon: Users },
+    { id: 'memory' as const, label: 'Memory', icon: Brain },
     { id: 'ai' as const, label: 'AI', icon: Bot },
     { id: 'info' as const, label: 'Info', icon: Info },
   ];
@@ -1021,6 +1023,10 @@ export function SettingsPanelContent({
 
         {activeTab === 'team' && user && (
           <SpaceMembersPanel userId={user.id} />
+        )}
+
+        {activeTab === 'memory' && user && (
+          <MemoryDashboard />
         )}
 
         {activeTab === 'ai' && (

@@ -10,6 +10,7 @@
 // a chat turn if the embedding provider is down.
 
 import { embedText, toPgVectorLiteral } from './dori-embeddings.ts';
+import { autoKgIngest } from './kg.ts';
 
 export interface SemanticHit {
   id: string;
@@ -50,12 +51,25 @@ export async function rememberSemantic(supabase: any, args: RememberArgs): Promi
     // upsert on (user_id, source, source_ref) — the unique index in the
     // migration. NULL source_ref upserts collapse, so callers pass a
     // synthetic ref ("chat_turn:<uuid>") for those.
-    const { error } = await supabase
+    const { data: upserted, error } = await supabase
       .from('dori_semantic_memories')
-      .upsert(row, { onConflict: 'user_id,source,source_ref' });
+      .upsert(row, { onConflict: 'user_id,source,source_ref' })
+      .select('id')
+      .single();
     if (error) {
       console.warn('[rememberSemantic] upsert failed', error.message);
       return false;
+    }
+    // Knowledge graph ingest is fire-and-forget: a failed extraction
+    // never blocks the underlying memory write.
+    if (upserted?.id) {
+      autoKgIngest(supabase, {
+        userId: args.userId,
+        workspaceId: args.workspaceId ?? null,
+        sourceKind: 'semantic',
+        sourceId: upserted.id,
+        text: content,
+      }).catch((e) => console.warn('[rememberSemantic] kg ingest failed', (e as Error).message));
     }
     return true;
   } catch (e) {

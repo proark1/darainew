@@ -173,3 +173,9 @@ verify_jwt = true
 
 [functions.family-expiry-scanner]
 verify_jwt = false
+
+[functions.kg-extract]
+verify_jwt = true
+
+[functions.memory-forget]
+verify_jwt = true
