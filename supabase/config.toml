@@ -191,3 +191,15 @@ verify_jwt = true
 
 [functions.meeting-bot-webhook]
 verify_jwt = false
+
+[functions.plaid-link-token]
+verify_jwt = true
+
+[functions.plaid-exchange]
+verify_jwt = true
+
+[functions.plaid-sync]
+verify_jwt = true
+
+[functions.finance-summary]
+verify_jwt = true

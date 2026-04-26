@@ -26,6 +26,7 @@ import {
   LazyDashboard,
   LazyContactsPage,
   LazyContractsPage,
+  LazyFinancePage,
   LazyNotFound,
   LazyOnboarding,
   LazyIndex,
@@ -144,6 +145,14 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <LazyContractsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/finance"
+            element={
+              <ProtectedRoute>
+                <LazyFinancePage />
               </ProtectedRoute>
             }
           />

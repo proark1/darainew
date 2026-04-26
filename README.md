@@ -117,6 +117,9 @@ Supabase Edge Functions require these secrets (set via Supabase Dashboard):
 | `MEETINGBOT_BASE_URL` | Meeting copilot (no trailing slash) — see [proark1/MeetingBot](https://github.com/proark1/MeetingBot) |
 | `MEETINGBOT_API_KEY` | Bearer token (`sk_live_…`) generated in MeetingBot's `/auth/keys` |
 | `MEETINGBOT_WEBHOOK_SECRET` | HMAC-SHA256 secret used to verify inbound webhook deliveries |
+| `PLAID_CLIENT_ID` | Financial OS — bank linking + transaction sync |
+| `PLAID_SECRET` | Plaid secret matching `PLAID_ENV` (sandbox/development/production) |
+| `PLAID_ENV` | `sandbox` (default), `development`, or `production` |
 
 ## Architecture
 
