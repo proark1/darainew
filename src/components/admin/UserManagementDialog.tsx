@@ -52,14 +52,22 @@ export function UserManagementDialog({ user, open, onOpenChange, onSaved }: Prop
       const { data, error } = await supabase.functions.invoke('admin-user-management', {
         body: { action: 'update', target_user_id: user.user_id, payload },
       });
-      if (error) throw error;
-      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      // Edge function returns 400 with { error } for validation failures (e.g. weak password).
+      // supabase-js surfaces that as a FunctionsHttpError; the real message lives in `data.error`.
+      const returnedError = (data as { error?: string })?.error;
+      if (returnedError) throw new Error(returnedError);
+      if (error) throw new Error(error.message || 'Request failed');
 
       toast.success('User updated');
       onSaved();
       onOpenChange(false);
     } catch (e) {
-      toast.error('Update failed: ' + (e as Error).message);
+      const msg = (e as Error).message || 'Unknown error';
+      toast.error(msg, {
+        description: msg.toLowerCase().includes('password')
+          ? 'Try a longer, unique passphrase (e.g. 3-4 random words).'
+          : undefined,
+      });
     } finally {
       setSaving(false);
     }
