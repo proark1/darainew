@@ -823,34 +823,31 @@ Deno.serve(async (req) => {
       }
 
       // ---------- PHOTO / DOCUMENT → download + forward to chat() as a multimodal turn ----------
-      // The user sent a picture (receipt / business card / bill / prescription / whiteboard)
-      // or a file. We download it, encode as a base64 data URL, and hand it off to the
-      // normal chat pipeline via the existing imageUrl field so the AI extracts
-      // structured content and runs the appropriate tools (subject to the user's
-      // confirmation settings). Group chats use the router path which doesn't
-      // accept imageUrl today, so for simplicity photo intake is private-chat only.
+      // The user sent a picture (receipt / business card / bill / prescription / whiteboard /
+      // calendar screenshot) or a file. We download it, encode as a base64 data URL, and hand
+      // it off to the normal chat pipeline via the existing imageUrl field so the AI extracts
+      // structured content and runs the appropriate tools (subject to the user's confirmation
+      // settings). Photo intake works in BOTH private chats and linked family/assistant groups —
+      // for groups we bypass the text-only router and call Dori directly with the image.
       let photoDataUrl: string | null = null;
       let photoCaption: string | null = null;
-      const isGroupChat = chatType === 'group' || chatType === 'supergroup';
-      if (!isGroupChat) {
-        if (msg.photo && Array.isArray(msg.photo) && msg.photo.length > 0) {
-          // photo is an array of PhotoSize; pick the highest-resolution option.
-          // Sorting by pixel area avoids mixing units if file_size is missing.
-          const biggest = [...msg.photo].sort(
-            (a: any, b: any) => ((b.width || 0) * (b.height || 0)) - ((a.width || 0) * (a.height || 0)),
-          )[0];
-          photoDataUrl = await downloadTelegramFile(biggest.file_id, 'image/jpeg', LOVABLE_API_KEY, TELEGRAM_API_KEY);
-          photoCaption = msg.caption || null;
-        } else if (msg.document && typeof msg.document.mime_type === 'string' && msg.document.mime_type.startsWith('image/')) {
-          photoDataUrl = await downloadTelegramFile(msg.document.file_id, msg.document.mime_type, LOVABLE_API_KEY, TELEGRAM_API_KEY);
-          photoCaption = msg.caption || null;
-        }
-        if (photoDataUrl) {
-          // Fabricate the text so the rest of the pipeline treats it as a normal turn.
-          msg.text = photoCaption && photoCaption.trim()
-            ? photoCaption.trim()
-            : 'Please look at this picture and take the appropriate action (add contact / task / expense / reminder / note as makes sense).';
-        }
+      if (msg.photo && Array.isArray(msg.photo) && msg.photo.length > 0) {
+        // photo is an array of PhotoSize; pick the highest-resolution option.
+        // Sorting by pixel area avoids mixing units if file_size is missing.
+        const biggest = [...msg.photo].sort(
+          (a: any, b: any) => ((b.width || 0) * (b.height || 0)) - ((a.width || 0) * (a.height || 0)),
+        )[0];
+        photoDataUrl = await downloadTelegramFile(biggest.file_id, 'image/jpeg', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+        photoCaption = msg.caption || null;
+      } else if (msg.document && typeof msg.document.mime_type === 'string' && msg.document.mime_type.startsWith('image/')) {
+        photoDataUrl = await downloadTelegramFile(msg.document.file_id, msg.document.mime_type, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+        photoCaption = msg.caption || null;
+      }
+      if (photoDataUrl) {
+        // Fabricate the text so the rest of the pipeline treats it as a normal turn.
+        msg.text = photoCaption && photoCaption.trim()
+          ? photoCaption.trim()
+          : 'Please look at this picture and take the appropriate action — if it is a calendar screenshot, add the events to my calendar; otherwise add contact / task / expense / reminder / note as makes sense.';
       }
 
       if (!msg.text && !photoDataUrl) continue;
