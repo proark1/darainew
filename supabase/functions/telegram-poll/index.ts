@@ -1094,7 +1094,7 @@ Deno.serve(async (req) => {
             processed++;
             continue;
           }
-          const placeholder = await sendMessage(chatId, '🔍 Reading the picture…', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          await sendMessage(chatId, '🔍 Reading the picture…', LOVABLE_API_KEY, TELEGRAM_API_KEY);
           const dori = await callDori(
             actingUserId,
             cleanText,
@@ -1106,11 +1106,7 @@ Deno.serve(async (req) => {
             wsLink?.workspace_id || null,
           );
           const replyText = dori.reply || '✅ Got it.';
-          if (placeholder?.message_id) {
-            await tgEditMessageText(chatId, placeholder.message_id, replyText, LOVABLE_API_KEY, TELEGRAM_API_KEY).catch(() => {});
-          } else {
-            await sendMessage(chatId, replyText, LOVABLE_API_KEY, TELEGRAM_API_KEY);
-          }
+          await sendMessage(chatId, replyText, LOVABLE_API_KEY, TELEGRAM_API_KEY);
           await supabase.from('telegram_messages').upsert({
             update_id: u.update_id, chat_id: chatId, text, raw_update: u, processed: true,
           }, { onConflict: 'update_id' });
