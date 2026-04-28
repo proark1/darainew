@@ -843,11 +843,20 @@ Deno.serve(async (req) => {
         photoDataUrl = await downloadTelegramFile(msg.document.file_id, msg.document.mime_type, LOVABLE_API_KEY, TELEGRAM_API_KEY);
         photoCaption = msg.caption || null;
       }
+      // What the user *visibly* sent — the caption if any, otherwise a short
+      // placeholder. Used for storage in `telegram_messages` and for follow-up
+      // conversation history so a later "what was it?" sees a sensible prior
+      // turn instead of the long auto-generated AI prompt below.
+      let photoUserText: string | null = null;
       if (photoDataUrl) {
-        // Fabricate the text so the rest of the pipeline treats it as a normal turn.
-        msg.text = photoCaption && photoCaption.trim()
-          ? photoCaption.trim()
-          : 'Please look at this picture and take the appropriate action — if it is a calendar screenshot, add the events to my calendar; otherwise add contact / task / expense / reminder / note as makes sense.';
+        const trimmedCaption = photoCaption?.trim();
+        photoUserText = trimmedCaption || '[Photo]';
+        // Fabricate the AI-facing text so the rest of the pipeline treats it
+        // as a normal turn. Describe-first / propose-actions framing keeps the
+        // bot from silently auto-acting on a picture the user only wanted
+        // identified.
+        msg.text = trimmedCaption
+          || 'A user shared this picture in chat. First, briefly tell us what it is (1–2 sentences). Then, if it looks like a calendar / receipt / business card / to-do / prescription / bill, propose the matching action (add events, log expense, save contact, create tasks, save note) and queue it for confirmation. If nothing actionable, just describe what you see.';
       }
 
       if (!msg.text && !photoDataUrl) continue;
@@ -1089,12 +1098,24 @@ Deno.serve(async (req) => {
           if (!actingUserId) {
             await sendMessage(chatId, "📸 I can read photos here, but this group isn't linked to a personal account yet. Run /linkfamily or have a member link via Settings → Telegram.", LOVABLE_API_KEY, TELEGRAM_API_KEY);
             await supabase.from('telegram_messages').upsert({
-              update_id: u.update_id, chat_id: chatId, text, raw_update: u, processed: true,
+              update_id: u.update_id, chat_id: chatId, text: photoUserText ?? text, raw_update: u, processed: true,
             }, { onConflict: 'update_id' });
             processed++;
             continue;
           }
-          await sendMessage(chatId, '🔍 Reading the picture…', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          // Placeholder we'll edit in-place once analysis is back, so a single
+          // message visibly transforms from "Reading…" into the answer.
+          let placeholderMessageId: number | null = null;
+          try {
+            const phResp = await tg('sendMessage', {
+              chat_id: chatId,
+              text: '🔍 Reading the picture…',
+            }, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            placeholderMessageId = phResp?.result?.message_id ?? null;
+          } catch (e) {
+            console.warn('group photo placeholder send failed', e);
+          }
+
           const dori = await callDori(
             actingUserId,
             cleanText,
@@ -1105,10 +1126,73 @@ Deno.serve(async (req) => {
             undefined,
             wsLink?.workspace_id || null,
           );
-          const replyText = dori.reply || '✅ Got it.';
-          await sendMessage(chatId, replyText, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+
+          // Mirror the private-chat photo flow: combine the AI's prose with
+          // executed tool messages, surface queued confirmations as separate
+          // tappable prompts, and offer Undo for the latest reversible action.
+          const queued = dori.toolResults.filter((t) => t.queued && t.actionId);
+          const executed = dori.toolResults.filter((t) => !t.queued);
+          const bodyParts: string[] = [];
+          if (dori.reply) bodyParts.push(dori.reply);
+          if (executed.length > 0) bodyParts.push(executed.map((t) => t.message).join('\n'));
+          const replyText = bodyParts.join('\n\n').trim();
+          const undoableIds = executed.map((t) => t.undoId).filter(Boolean) as string[];
+          const latestUndoId = undoableIds.length > 0 ? undoableIds[undoableIds.length - 1] : null;
+
+          // If the AI returned nothing AND queued nothing, say so explicitly
+          // instead of the old "✅ Got it." — that wording was indistinguishable
+          // from another group member's reaction and made it look like the bot
+          // had silently dropped the photo.
+          const outgoingText = replyText || (queued.length === 0
+            ? "📸 I looked at the picture but couldn't find anything actionable. Tell me what you'd like me to do with it."
+            : null);
+
+          if (placeholderMessageId && outgoingText) {
+            try {
+              await tgEditMessageText(chatId, placeholderMessageId, outgoingText.slice(0, 4000), LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              if (latestUndoId) {
+                await tgEditReplyMarkup(chatId, placeholderMessageId, buildUndoKeyboard(latestUndoId), LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              }
+            } catch (e) {
+              console.warn('group photo placeholder edit failed, falling back to send', e);
+              await sendMessage(chatId, outgoingText, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            }
+          } else if (outgoingText) {
+            await sendMessage(chatId, outgoingText, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          } else if (placeholderMessageId) {
+            // No text reply, only queued confirmations — drop the stale "Reading…".
+            try { await tg('deleteMessage', { chat_id: chatId, message_id: placeholderMessageId }, LOVABLE_API_KEY, TELEGRAM_API_KEY); }
+            catch { /* ignore */ }
+          }
+
+          for (const q of queued) {
+            const prompt = `🤔 <b>Please confirm</b>\n${q.summary || q.message}\n\nReply <b>yes</b> or tap a button below.`;
+            await tgSendWithKeyboard(
+              chatId,
+              prompt,
+              buildConfirmKeyboard(q.actionId!),
+              LOVABLE_API_KEY,
+              TELEGRAM_API_KEY,
+            );
+            try {
+              await supabase.from('telegram_assistant_replies').insert({ chat_id: chatId, reply: prompt });
+            } catch { /* ignore */ }
+          }
+
+          // Persist the bot's analysis so a follow-up text turn ("ok what is
+          // it?") routed through telegram-router sees the prior assistant
+          // reply in conversation history instead of re-asking for the image.
+          if (outgoingText) {
+            try {
+              await supabase.from('telegram_assistant_replies').insert({ chat_id: chatId, reply: outgoingText });
+            } catch (e) { console.error('Failed to persist photo reply', e); }
+          }
+
+          // Save the user-visible text (caption or "[Photo]") rather than the
+          // long auto-generated AI prompt — keeps conversation history sensible
+          // for any later text follow-ups in this group.
           await supabase.from('telegram_messages').upsert({
-            update_id: u.update_id, chat_id: chatId, text, raw_update: u, processed: true,
+            update_id: u.update_id, chat_id: chatId, text: photoUserText ?? text, raw_update: u, processed: true,
           }, { onConflict: 'update_id' });
           processed++;
           continue;
@@ -1503,7 +1587,7 @@ Deno.serve(async (req) => {
       }
 
       await supabase.from('telegram_messages').upsert({
-        update_id: u.update_id, chat_id: chatId, text, raw_update: u, processed: true,
+        update_id: u.update_id, chat_id: chatId, text: photoUserText ?? text, raw_update: u, processed: true,
       }, { onConflict: 'update_id' });
       processed++;
       } finally {
