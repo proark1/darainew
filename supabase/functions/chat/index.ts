@@ -1025,6 +1025,30 @@ function resolveAssignee(
   return byLoose?.user_id || null;
 }
 
+// Insert and, if PostgREST's schema cache is missing one of the optional
+// columns (e.g. workspace_id / assignee_id when the workspaces migration
+// hasn't propagated yet), retry without those columns. Lets event / task
+// creation succeed in personal mode instead of failing the user's request
+// with a confusing "Could not find the 'X' column of 'Y' in the schema
+// cache" error.
+async function insertWithSchemaCacheFallback(
+  supabase: any,
+  table: string,
+  row: Record<string, unknown>,
+  optionalCols: string[],
+  selectCols: string,
+) {
+  let res = await supabase.from(table).insert(row).select(selectCols).single();
+  const msg = (res?.error?.message || '') as string;
+  const isSchemaCacheMiss = msg.includes('schema cache') && optionalCols.some((c) => msg.includes(`'${c}'`));
+  if (!isSchemaCacheMiss) return res;
+  const stripped: Record<string, unknown> = { ...row };
+  for (const c of optionalCols) delete stripped[c];
+  console.warn(`[${table}] schema cache missing one of [${optionalCols.join(', ')}] — retrying without them`);
+  res = await supabase.from(table).insert(stripped).select(selectCols).single();
+  return res;
+}
+
 async function executeToolsServerSide(
   text: string,
   userId: string,
@@ -1121,13 +1145,19 @@ async function executeToolsServerSide(
     try {
       if (action === 'add') {
         const assigneeId = resolveAssignee(data.assignee, opts?.workspaceMembers);
-        const { data: t, error } = await supabase.from('tasks').insert({
-          user_id: userId, title: data.title, category: data.category || 'personal',
-          priority: data.priority || 'medium', due_date: isoOrNull(data.dueDate),
-          recurrence_rule: data.recurrenceRule || null,
-          workspace_id: opts?.workspaceId || null,
-          assignee_id: assigneeId,
-        }).select('id, title, due_date').single();
+        const { data: t, error } = await insertWithSchemaCacheFallback(
+          supabase,
+          'tasks',
+          {
+            user_id: userId, title: data.title, category: data.category || 'personal',
+            priority: data.priority || 'medium', due_date: isoOrNull(data.dueDate),
+            recurrence_rule: data.recurrenceRule || null,
+            workspace_id: opts?.workspaceId || null,
+            assignee_id: assigneeId,
+          },
+          ['workspace_id', 'assignee_id'],
+          'id, title, due_date',
+        );
         if (error) throw error;
         const undoId = await undoCreate('tasks', t.id, `added task "${t.title}"`, 'task');
         const assigneeName = assigneeId
@@ -1183,13 +1213,19 @@ async function executeToolsServerSide(
       const start = isoOrNull(data.startTime)!;
       const end = isoOrNull(data.endTime) || new Date(new Date(start).getTime() + 60 * 60 * 1000).toISOString();
       const assigneeId = resolveAssignee(data.assignee, opts?.workspaceMembers);
-      const { data: e, error } = await supabase.from('events').insert({
-        user_id: userId, title: data.title, start_time: start, end_time: end,
-        location: data.location || null, attendees: data.attendees || null,
-        recurrence_rule: data.recurrenceRule || null, category: data.category || 'personal',
-        workspace_id: opts?.workspaceId || null,
-        assignee_id: assigneeId,
-      }).select('id, title, start_time').single();
+      const { data: e, error } = await insertWithSchemaCacheFallback(
+        supabase,
+        'events',
+        {
+          user_id: userId, title: data.title, start_time: start, end_time: end,
+          location: data.location || null, attendees: data.attendees || null,
+          recurrence_rule: data.recurrenceRule || null, category: data.category || 'personal',
+          workspace_id: opts?.workspaceId || null,
+          assignee_id: assigneeId,
+        },
+        ['workspace_id', 'assignee_id'],
+        'id, title, start_time',
+      );
       if (error) throw error;
       const undoId = await undoCreate('events', e.id, `scheduled "${e.title}"`, 'event');
       if (assigneeId && assigneeId !== userId) {
@@ -1453,10 +1489,16 @@ async function executeToolsServerSide(
     const action = m[1] || 'create'; const data = safeJSON(m[2]); if (!data) continue;
     try {
       if (action === 'create') {
-        const { data: n, error } = await supabase.from('notes').insert({
-          user_id: userId, title: data.title || 'Note', content: data.content || '', tags: data.tags || null,
-          workspace_id: opts?.workspaceId || null,
-        }).select('id, title').single();
+        const { data: n, error } = await insertWithSchemaCacheFallback(
+          supabase,
+          'notes',
+          {
+            user_id: userId, title: data.title || 'Note', content: data.content || '', tags: data.tags || null,
+            workspace_id: opts?.workspaceId || null,
+          },
+          ['workspace_id'],
+          'id, title',
+        );
         if (error) throw error;
         const undoId = await undoCreate('notes', n.id, `saved note "${n.title}"`, 'note');
         out.push({ tool: 'manage_note', ok: true, message: `📝 Saved note: ${n.title}`, data: n, undoId, entityId: n.id });

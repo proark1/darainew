@@ -1156,9 +1156,15 @@ Deno.serve(async (req) => {
             } catch (e) {
               console.warn('group photo placeholder edit failed, falling back to send', e);
               await sendMessage(chatId, outgoingText, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              if (latestUndoId) {
+                await tgSendWithKeyboard(chatId, '↩️ Tap to undo the last action.', buildUndoKeyboard(latestUndoId), LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              }
             }
           } else if (outgoingText) {
             await sendMessage(chatId, outgoingText, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            if (latestUndoId) {
+              await tgSendWithKeyboard(chatId, '↩️ Tap to undo the last action.', buildUndoKeyboard(latestUndoId), LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            }
           } else if (placeholderMessageId) {
             // No text reply, only queued confirmations — drop the stale "Reading…".
             try { await tg('deleteMessage', { chat_id: chatId, message_id: placeholderMessageId }, LOVABLE_API_KEY, TELEGRAM_API_KEY); }
