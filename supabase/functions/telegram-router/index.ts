@@ -962,7 +962,7 @@ Deno.serve(async (req) => {
     await tgSend(chat_id, await handleWeek(supabase, memberIds, household));
     return new Response('{"ok":true}', { headers: corsHeaders });
   }
-  if (/^(show me the calendar|show calendar|what'?s on (my|our) calendar|what do (i|we) have (today|tomorrow|this week)|what are (my|our) next meetings|next meetings|upcoming meetings)$/i.test(trimmed)) {
+  if (/^(show me the calendar|show calendar|what'?s on (my|our) calendar|what do (i|we) have (today|tomorrow|this week)|what are (my|our) next meetings|next meetings|upcoming meetings)[?!.]*$/i.test(trimmed)) {
     if (/meeting/i.test(trimmed)) {
       await tgSend(chat_id, await handleUpcomingMeetings(supabase, memberIds, household, userTimezone));
     } else if (/tomorrow/i.test(trimmed)) {
