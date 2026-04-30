@@ -273,9 +273,10 @@ When to use this tool:
 - The content should capture the full idea/information
 
 TOOL: add_shopping_item
-Use this to add items to the family shopping list.
-Format: <tool>add_shopping_item</tool><item>JSON_OBJECT</item>
-Item JSON fields:
+Use this to add, remove, or clear items on the family shopping list.
+Format: <tool>add_shopping_item</tool><action>add|remove|clear</action><item>JSON_OBJECT</item>
+The <action> tag is optional; omit it (or use "add") to add an item. Use "remove" with {"name": "..."} to delete a single item by fuzzy match. Use "clear" with an empty <item>{}</item> to wipe all unchecked items.
+Item JSON fields (for add):
 - "name": string (required) - Name of the item
 - "quantity": number (optional, default 1)
 - "category": string (optional) - Category like "produce", "dairy", "meat", etc.
