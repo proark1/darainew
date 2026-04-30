@@ -1974,6 +1974,239 @@ async function executeToolsServerSide(
       : { tool: 'cancel_subscription', ok: false, message: `Failed: ${r.error}` });
   }
 
+  // ---------- manage_habit ----------
+  // Previously documented but had no executor — silently failed. Now creates,
+  // logs (today), deletes, or summarises habits for the user.
+  for (const m of text.matchAll(/<tool>manage_habit<\/tool>\s*<action>(\w+)<\/action>\s*<habit>(\{[\s\S]*?\})<\/habit>/g)) {
+    const action = m[1]; const data = safeJSON(m[2]) || {};
+    try {
+      if (action === 'create') {
+        if (!data.name) { out.push({ tool: 'manage_habit', ok: false, message: 'Habit name required.' }); continue; }
+        const { data: h, error } = await supabase.from('habits').insert({
+          user_id: userId, name: data.name, frequency: data.frequency || 'daily',
+          target_count: data.target_count || 1, icon: data.icon || null, color: data.color || null,
+          is_active: true,
+        }).select('id, name').single();
+        if (error) throw error;
+        const undoId = await undoCreate('habits', h.id, `created habit "${h.name}"`, 'habit');
+        out.push({ tool: 'manage_habit', ok: true, message: `🎯 Created habit: ${h.name}`, undoId, entityId: h.id });
+      } else if (action === 'log') {
+        const q = (data.query || data.name || '').trim();
+        if (!q) { out.push({ tool: 'manage_habit', ok: false, message: 'Habit name required.' }); continue; }
+        const { data: matches } = await supabase.from('habits').select('id, name')
+          .eq('user_id', userId).eq('is_active', true).ilike('name', `%${q}%`).limit(2);
+        if (!matches?.length) { out.push({ tool: 'manage_habit', ok: false, message: `🔍 No habit matches "${q}".` }); continue; }
+        if (matches.length > 1) { out.push({ tool: 'manage_habit', ok: false, message: `🤔 Multiple habits match: ${matches.map((x:any)=>x.name).join(', ')}` }); continue; }
+        const target = matches[0];
+        const today = new Date().toISOString().slice(0, 10);
+        await supabase.from('habit_logs').upsert({
+          habit_id: target.id, user_id: userId, log_date: today,
+          completed_count: data.count || 1,
+        }, { onConflict: 'habit_id,log_date' } as any);
+        out.push({ tool: 'manage_habit', ok: true, message: `✅ Logged habit: ${target.name}`, entityId: target.id });
+      } else if (action === 'delete') {
+        const q = (data.query || data.name || '').trim();
+        const { data: matches } = await supabase.from('habits').select('*')
+          .eq('user_id', userId).ilike('name', `%${q}%`).limit(2);
+        if (!matches?.length) { out.push({ tool: 'manage_habit', ok: false, message: `🔍 No habit matches "${q}".` }); continue; }
+        if (matches.length > 1) { out.push({ tool: 'manage_habit', ok: false, message: `🤔 Multiple habits match. Be more specific.` }); continue; }
+        const before = matches[0];
+        await supabase.from('habits').delete().eq('id', before.id).eq('user_id', userId);
+        const undoId = await undoDelete('habits', before, `deleted habit "${before.name}"`, 'habit');
+        out.push({ tool: 'manage_habit', ok: true, message: `🗑️ Deleted habit: ${before.name}`, undoId });
+      } else if (action === 'summary') {
+        let habitsQ = supabase.from('habits').select('id, name').eq('user_id', userId).eq('is_active', true);
+        if (data.query) habitsQ = habitsQ.ilike('name', `%${data.query}%`);
+        const { data: hs } = await habitsQ;
+        if (!hs?.length) { out.push({ tool: 'manage_habit', ok: true, message: '📭 No active habits.' }); continue; }
+        const today = new Date().toISOString().slice(0, 10);
+        const { data: logs } = await supabase.from('habit_logs')
+          .select('habit_id, log_date').eq('user_id', userId)
+          .gte('log_date', new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10));
+        const lines = hs.map((h: any) => {
+          const myLogs = (logs || []).filter((l: any) => l.habit_id === h.id).map((l:any)=>l.log_date).sort();
+          const doneToday = myLogs.includes(today);
+          // streak = consecutive days ending today (or yesterday if not done today)
+          let streak = 0; let cursor = new Date();
+          if (!doneToday) cursor.setDate(cursor.getDate() - 1);
+          for (;;) {
+            const ds = cursor.toISOString().slice(0, 10);
+            if (myLogs.includes(ds)) { streak++; cursor.setDate(cursor.getDate() - 1); } else break;
+          }
+          return `• ${doneToday ? '✅' : '⬜'} ${h.name} — 🔥 ${streak}d streak`;
+        });
+        out.push({ tool: 'manage_habit', ok: true, message: `<b>🎯 Habits</b>\n${lines.join('\n')}` });
+      }
+    } catch (e) { out.push({ tool: 'manage_habit', ok: false, message: `Failed: ${(e as Error).message}` }); }
+  }
+
+  // ---------- log_wellbeing ----------
+  // One tool covers mood / energy / sleep_hours / water / exercise — writes to
+  // daily_checkins (one row per user per day, upsert-style).
+  for (const m of text.matchAll(/<tool>log_wellbeing<\/tool>\s*<wellbeing>(\{[\s\S]*?\})<\/wellbeing>/g)) {
+    const data = safeJSON(m[1]) || {};
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const patch: any = { user_id: userId, checkin_date: today, checkin_type: data.checkin_type || 'morning' };
+      if (data.mood !== undefined) patch.mood = String(data.mood);
+      if (data.energy_level !== undefined) patch.energy_level = String(data.energy_level);
+      if (data.sleep_hours !== undefined) patch.sleep_hours = Number(data.sleep_hours);
+      if (data.water_glasses !== undefined) patch.water_glasses = Number(data.water_glasses);
+      if (data.exercise_minutes !== undefined) patch.exercise_minutes = Number(data.exercise_minutes);
+      if (data.stress_level !== undefined) patch.stress_level = Number(data.stress_level);
+      if (data.notes) patch.mood_note = String(data.notes);
+      // Upsert by (user_id, checkin_date, checkin_type) — fall back to insert.
+      const { data: existing } = await supabase.from('daily_checkins')
+        .select('id').eq('user_id', userId).eq('checkin_date', today).eq('checkin_type', patch.checkin_type).maybeSingle();
+      if (existing?.id) {
+        await supabase.from('daily_checkins').update(patch).eq('id', existing.id);
+      } else {
+        await supabase.from('daily_checkins').insert(patch);
+      }
+      // Also log a mood snapshot (1-5) if numeric — keeps mood_logs as the time series.
+      const moodNum = Number(data.mood);
+      if (Number.isFinite(moodNum) && moodNum >= 1 && moodNum <= 5) {
+        await supabase.from('mood_logs').insert({
+          user_id: userId, mood_score: moodNum,
+          energy_score: Number.isFinite(Number(data.energy_level)) ? Number(data.energy_level) : null,
+          notes: data.notes || null,
+        });
+      }
+      const bits: string[] = [];
+      if (data.mood !== undefined) bits.push(`mood ${data.mood}`);
+      if (data.energy_level !== undefined) bits.push(`energy ${data.energy_level}`);
+      if (data.sleep_hours !== undefined) bits.push(`${data.sleep_hours}h sleep`);
+      if (data.water_glasses !== undefined) bits.push(`${data.water_glasses} glasses water`);
+      if (data.exercise_minutes !== undefined) bits.push(`${data.exercise_minutes}min exercise`);
+      out.push({ tool: 'log_wellbeing', ok: true, message: `❤️ Logged${bits.length ? ': ' + bits.join(', ') : ' check-in'}.` });
+    } catch (e) { out.push({ tool: 'log_wellbeing', ok: false, message: `Failed: ${(e as Error).message}` }); }
+  }
+
+  // ---------- manage_goal ----------
+  for (const m of text.matchAll(/<tool>manage_goal<\/tool>\s*<action>(\w+)<\/action>\s*<goal>(\{[\s\S]*?\})<\/goal>/g)) {
+    const action = m[1]; const data = safeJSON(m[2]) || {};
+    try {
+      if (action === 'create') {
+        if (!data.name) { out.push({ tool: 'manage_goal', ok: false, message: 'Goal name required.' }); continue; }
+        const { data: g, error } = await supabase.from('goals').insert({
+          user_id: userId, name: data.name, description: data.description || null,
+          target_value: data.target_value || null, current_value: data.current_value || 0,
+          unit: data.unit || null, target_date: data.target_date || null,
+        }).select('id, name').single();
+        if (error) throw error;
+        const undoId = await undoCreate('goals', g.id, `created goal "${g.name}"`, 'goal');
+        out.push({ tool: 'manage_goal', ok: true, message: `🎯 Created goal: ${g.name}`, undoId, entityId: g.id });
+      } else if (action === 'progress' || action === 'update') {
+        const q = (data.query || data.name || '').trim();
+        const { data: rows } = await supabase.from('goals').select('*')
+          .eq('user_id', userId).ilike('name', `%${q}%`).limit(2);
+        if (!rows?.length) { out.push({ tool: 'manage_goal', ok: false, message: `🔍 No goal matches "${q}".` }); continue; }
+        if (rows.length > 1) { out.push({ tool: 'manage_goal', ok: false, message: `🤔 Multiple goals match. Be more specific.` }); continue; }
+        const target = rows[0];
+        const upd: any = {};
+        if (data.current_value !== undefined) upd.current_value = Number(data.current_value);
+        if (data.add !== undefined) upd.current_value = Number(target.current_value || 0) + Number(data.add);
+        if (data.target_value !== undefined) upd.target_value = Number(data.target_value);
+        if (data.target_date) upd.target_date = data.target_date;
+        if (Object.keys(upd).length === 0) {
+          const pct = target.target_value ? Math.round((target.current_value / target.target_value) * 100) : 0;
+          out.push({ tool: 'manage_goal', ok: true, message: `🎯 ${target.name}: ${target.current_value}/${target.target_value} ${target.unit || ''} (${pct}%)`, entityId: target.id });
+          continue;
+        }
+        await supabase.from('goals').update(upd).eq('id', target.id).eq('user_id', userId);
+        const newVal = upd.current_value ?? target.current_value;
+        const tv = upd.target_value ?? target.target_value;
+        const pct = tv ? Math.round((newVal / tv) * 100) : 0;
+        out.push({ tool: 'manage_goal', ok: true, message: `📈 ${target.name}: ${newVal}/${tv} ${target.unit || ''} (${pct}%)`, entityId: target.id });
+      } else if (action === 'list') {
+        const { data: rows } = await supabase.from('goals').select('name, current_value, target_value, unit, is_completed')
+          .eq('user_id', userId).order('created_at', { ascending: false }).limit(10);
+        if (!rows?.length) { out.push({ tool: 'manage_goal', ok: true, message: '📭 No goals yet.' }); continue; }
+        const lines = rows.map((r: any) => {
+          const pct = r.target_value ? Math.round((r.current_value / r.target_value) * 100) : 0;
+          return `• ${r.is_completed ? '✅' : '🎯'} ${r.name} — ${r.current_value}/${r.target_value} ${r.unit || ''} (${pct}%)`;
+        });
+        out.push({ tool: 'manage_goal', ok: true, message: `<b>🎯 Goals</b>\n${lines.join('\n')}` });
+      } else if (action === 'delete') {
+        const q = (data.query || data.name || '').trim();
+        const { data: rows } = await supabase.from('goals').select('*').eq('user_id', userId).ilike('name', `%${q}%`).limit(2);
+        if (!rows?.length || rows.length > 1) { out.push({ tool: 'manage_goal', ok: false, message: rows?.length ? '🤔 Multiple match.' : `🔍 No goal matches "${q}".` }); continue; }
+        const before = rows[0];
+        await supabase.from('goals').delete().eq('id', before.id).eq('user_id', userId);
+        const undoId = await undoDelete('goals', before, `deleted goal "${before.name}"`, 'goal');
+        out.push({ tool: 'manage_goal', ok: true, message: `🗑️ Deleted goal: ${before.name}`, undoId });
+      }
+    } catch (e) { out.push({ tool: 'manage_goal', ok: false, message: `Failed: ${(e as Error).message}` }); }
+  }
+
+  // ---------- bulk_reschedule (tasks) ----------
+  // Shifts every open task matching `filter` by `shift_days`. Filter is one of:
+  //   { when: 'today' | 'overdue' | 'tomorrow' }  OR  { date: 'YYYY-MM-DD' }
+  for (const m of text.matchAll(/<tool>bulk_reschedule<\/tool>\s*<bulk>(\{[\s\S]*?\})<\/bulk>/g)) {
+    const data = safeJSON(m[1]) || {};
+    const shift = Number(data.shift_days);
+    if (!Number.isFinite(shift)) { out.push({ tool: 'bulk_reschedule', ok: false, message: 'shift_days (number) required.' }); continue; }
+    try {
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(todayStart); todayEnd.setDate(todayEnd.getDate() + 1);
+      let q = supabase.from('tasks').select('id, title, due_date').eq('user_id', userId).eq('completed', false);
+      const when = (data.filter?.when || data.when || '').toLowerCase();
+      if (when === 'today') q = q.gte('due_date', todayStart.toISOString()).lt('due_date', todayEnd.toISOString());
+      else if (when === 'tomorrow') {
+        const t1 = new Date(todayEnd); const t2 = new Date(t1); t2.setDate(t2.getDate() + 1);
+        q = q.gte('due_date', t1.toISOString()).lt('due_date', t2.toISOString());
+      } else if (when === 'overdue') q = q.lt('due_date', todayStart.toISOString()).not('due_date', 'is', null);
+      else if (data.filter?.date || data.date) {
+        const d = new Date(data.filter?.date || data.date); d.setHours(0,0,0,0);
+        const d2 = new Date(d); d2.setDate(d2.getDate() + 1);
+        q = q.gte('due_date', d.toISOString()).lt('due_date', d2.toISOString());
+      } else { out.push({ tool: 'bulk_reschedule', ok: false, message: 'filter.when or filter.date required.' }); continue; }
+      const { data: tasks } = await q;
+      if (!tasks?.length) { out.push({ tool: 'bulk_reschedule', ok: true, message: '📭 No tasks matched the filter.' }); continue; }
+      const updates = tasks.map((t: any) => {
+        const cur = new Date(t.due_date);
+        cur.setDate(cur.getDate() + shift);
+        return supabase.from('tasks').update({ due_date: cur.toISOString() }).eq('id', t.id);
+      });
+      await Promise.all(updates);
+      out.push({ tool: 'bulk_reschedule', ok: true, message: `📅 Shifted ${tasks.length} task${tasks.length === 1 ? '' : 's'} by ${shift > 0 ? '+' : ''}${shift}d.` });
+    } catch (e) { out.push({ tool: 'bulk_reschedule', ok: false, message: `Failed: ${(e as Error).message}` }); }
+  }
+
+  // ---------- bulk_delete_events ----------
+  // Deletes all events on a given date (or in a date range) for the user.
+  for (const m of text.matchAll(/<tool>bulk_delete_events<\/tool>\s*<bulk>(\{[\s\S]*?\})<\/bulk>/g)) {
+    const data = safeJSON(m[1]) || {};
+    if (!data.date) { out.push({ tool: 'bulk_delete_events', ok: false, message: 'date (YYYY-MM-DD) required.' }); continue; }
+    try {
+      const d = new Date(data.date); d.setHours(0,0,0,0);
+      const d2 = new Date(d); d2.setDate(d2.getDate() + 1);
+      const { data: rows } = await supabase.from('events').select('*')
+        .eq('user_id', userId).gte('start_time', d.toISOString()).lt('start_time', d2.toISOString());
+      if (!rows?.length) { out.push({ tool: 'bulk_delete_events', ok: true, message: '📭 No events on that date.' }); continue; }
+      await supabase.from('events').delete().eq('user_id', userId)
+        .gte('start_time', d.toISOString()).lt('start_time', d2.toISOString());
+      out.push({ tool: 'bulk_delete_events', ok: true, message: `🗑️ Cancelled ${rows.length} event${rows.length === 1 ? '' : 's'} on ${data.date}.` });
+    } catch (e) { out.push({ tool: 'bulk_delete_events', ok: false, message: `Failed: ${(e as Error).message}` }); }
+  }
+
+  // ---------- append_note ----------
+  // Finds a recent note by title fragment and appends new content with a separator.
+  for (const m of text.matchAll(/<tool>append_note<\/tool>\s*<note>(\{[\s\S]*?\})<\/note>/g)) {
+    const data = safeJSON(m[1]) || {};
+    if (!data.query || !data.content) { out.push({ tool: 'append_note', ok: false, message: 'query and content required.' }); continue; }
+    try {
+      const { data: rows } = await supabase.from('notes').select('id, title, content')
+        .eq('user_id', userId).eq('trashed', false).ilike('title', `%${data.query}%`)
+        .order('updated_at', { ascending: false }).limit(1);
+      if (!rows?.length) { out.push({ tool: 'append_note', ok: false, message: `🔍 No note matches "${data.query}".` }); continue; }
+      const target = rows[0];
+      const newContent = `${target.content || ''}\n\n---\n${new Date().toLocaleString()}\n${data.content}`;
+      await supabase.from('notes').update({ content: newContent }).eq('id', target.id).eq('user_id', userId);
+      out.push({ tool: 'append_note', ok: true, message: `📝 Appended to note: ${target.title}`, entityId: target.id });
+    } catch (e) { out.push({ tool: 'append_note', ok: false, message: `Failed: ${(e as Error).message}` }); }
+  }
+
   return out;
 }
 
