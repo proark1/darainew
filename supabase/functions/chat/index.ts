@@ -2253,29 +2253,42 @@ async function executeToolsServerSide(
     const shift = Number(data.shift_days);
     if (!Number.isFinite(shift)) { out.push({ tool: 'bulk_reschedule', ok: false, message: 'shift_days (number) required.' }); continue; }
     try {
+      const entity = (data.entity === 'event') ? 'event' : 'task';
       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
       const todayEnd = new Date(todayStart); todayEnd.setDate(todayEnd.getDate() + 1);
-      let q = supabase.from('tasks').select('id, title, due_date').eq('user_id', userId).eq('completed', false);
+      const dateCol = entity === 'event' ? 'start_time' : 'due_date';
+      const table = entity === 'event' ? 'events' : 'tasks';
+      let q = entity === 'event'
+        ? supabase.from('events').select('id, title, start_time, end_time').eq('user_id', userId)
+        : supabase.from('tasks').select('id, title, due_date').eq('user_id', userId).eq('completed', false);
       const when = (data.filter?.when || data.when || '').toLowerCase();
-      if (when === 'today') q = q.gte('due_date', todayStart.toISOString()).lt('due_date', todayEnd.toISOString());
+      if (when === 'today') q = q.gte(dateCol, todayStart.toISOString()).lt(dateCol, todayEnd.toISOString());
       else if (when === 'tomorrow') {
         const t1 = new Date(todayEnd); const t2 = new Date(t1); t2.setDate(t2.getDate() + 1);
-        q = q.gte('due_date', t1.toISOString()).lt('due_date', t2.toISOString());
-      } else if (when === 'overdue') q = q.lt('due_date', todayStart.toISOString()).not('due_date', 'is', null);
+        q = q.gte(dateCol, t1.toISOString()).lt(dateCol, t2.toISOString());
+      } else if (when === 'overdue' && entity === 'task') q = q.lt('due_date', todayStart.toISOString()).not('due_date', 'is', null);
       else if (data.filter?.date || data.date) {
         const d = new Date(data.filter?.date || data.date); d.setHours(0,0,0,0);
         const d2 = new Date(d); d2.setDate(d2.getDate() + 1);
-        q = q.gte('due_date', d.toISOString()).lt('due_date', d2.toISOString());
+        q = q.gte(dateCol, d.toISOString()).lt(dateCol, d2.toISOString());
       } else { out.push({ tool: 'bulk_reschedule', ok: false, message: 'filter.when or filter.date required.' }); continue; }
-      const { data: tasks } = await q;
-      if (!tasks?.length) { out.push({ tool: 'bulk_reschedule', ok: true, message: '📭 No tasks matched the filter.' }); continue; }
-      const updates = tasks.map((t: any) => {
-        const cur = new Date(t.due_date);
+      const { data: rows } = await q;
+      if (!rows?.length) { out.push({ tool: 'bulk_reschedule', ok: true, message: `📭 No ${entity}s matched the filter.` }); continue; }
+      const updates = (rows as any[]).map((r: any) => {
+        if (entity === 'event') {
+          const s = new Date(r.start_time); s.setDate(s.getDate() + shift);
+          const e = r.end_time ? new Date(r.end_time) : null; if (e) e.setDate(e.getDate() + shift);
+          return supabase.from('events').update({
+            start_time: s.toISOString(),
+            ...(e ? { end_time: e.toISOString() } : {}),
+          }).eq('id', r.id).eq('user_id', userId);
+        }
+        const cur = new Date(r.due_date);
         cur.setDate(cur.getDate() + shift);
-        return supabase.from('tasks').update({ due_date: cur.toISOString() }).eq('id', t.id);
+        return supabase.from('tasks').update({ due_date: cur.toISOString() }).eq('id', r.id).eq('user_id', userId);
       });
       await Promise.all(updates);
-      out.push({ tool: 'bulk_reschedule', ok: true, message: `📅 Shifted ${tasks.length} task${tasks.length === 1 ? '' : 's'} by ${shift > 0 ? '+' : ''}${shift}d.` });
+      out.push({ tool: 'bulk_reschedule', ok: true, message: `📅 Shifted ${rows.length} ${entity}${rows.length === 1 ? '' : 's'} by ${shift > 0 ? '+' : ''}${shift}d.` });
     } catch (e) { out.push({ tool: 'bulk_reschedule', ok: false, message: `Failed: ${(e as Error).message}` }); }
   }
 
