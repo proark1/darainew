@@ -24,6 +24,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { motion, useMotionValue, useTransform } from 'framer-motion';
 import { AnimatedCounter } from '@/components/ui/animated-counter';
 import { useToast } from '@/hooks/use-toast';
+import { EmailActionPipelineCard } from '@/components/dashboard/EmailActionPipelineCard';
 
 function EmailSection({ title, count, threads, defaultOpen = true, onSelect, onArchive, onToggleImportant, icon: Icon, selectMode, selectedIds, onToggleSelect }: {
   title: string;
@@ -380,6 +381,8 @@ export function EmailPanel() {
   const headerExtra = !selectMode ? (
     <div className="space-y-2">
       <StatsBanner unread={unreadCount} priority={priorityCount} handled={handledToday} />
+
+      <EmailActionPipelineCard />
 
       <div className="relative">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
