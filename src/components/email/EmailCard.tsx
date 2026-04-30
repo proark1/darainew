@@ -140,7 +140,7 @@ export function EmailCard({ thread, onSelect, onArchive, onToggleImportant, onSn
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
         className={cn(
-          "relative flex items-start gap-3 p-3 !rounded-xl",
+          "relative flex w-full min-w-0 max-w-full items-start gap-3 overflow-hidden p-3 !rounded-xl",
           !email.is_read && "border-l-[3px] border-l-primary bg-primary/5 border-primary/10",
           email.is_read && "opacity-70 border-l-[3px] border-l-transparent",
           isThreat && "bg-destructive/5 border-destructive/20 border-l-destructive",
@@ -169,12 +169,12 @@ export function EmailCard({ thread, onSelect, onArchive, onToggleImportant, onSn
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
               {email.sentiment && email.sentiment !== 'neutral' && (
                 <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", sentimentDot[email.sentiment] || sentimentDot.neutral)} />
               )}
-              <span className={cn("text-sm", !email.is_read ? "font-bold text-foreground" : "font-semibold text-muted-foreground")}>
+              <span className={cn("min-w-0 truncate text-sm", !email.is_read ? "font-bold text-foreground" : "font-semibold text-muted-foreground")}>
                 {sender.name}
               </span>
               {thread.threadCount > 1 && (
