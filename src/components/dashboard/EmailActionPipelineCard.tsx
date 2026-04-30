@@ -317,7 +317,7 @@ export function EmailActionPipelineCard({
                       key={key}
                       size="sm"
                       variant={isSuggested ? 'default' : 'outline'}
-                       className="h-auto min-h-0 w-full min-w-0 max-w-full justify-start px-2 py-1.5 text-[11px] flex-shrink whitespace-normal"
+                       className="h-auto min-h-0 w-full min-w-0 max-w-full shrink justify-start px-2 py-1.5 text-[11px] whitespace-normal"
                       onClick={() => apply(item, key)}
                       disabled={isApplying}
                     >
