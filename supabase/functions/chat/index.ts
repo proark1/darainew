@@ -338,6 +338,61 @@ Habit JSON fields:
 - "targetCount": number (optional, default 1)
 - "query": string (for log/delete — matches habit name)
 
+TOOL: log_wellbeing
+Use this when the user reports their mood, energy, sleep, water intake, exercise, or stress.
+Format: <tool>log_wellbeing</tool><wellbeing>JSON_OBJECT</wellbeing>
+Wellbeing JSON fields (all optional, send only the ones the user mentioned):
+- "mood": number 1-5 (1=terrible, 5=great) — also accepts "low"|"mid"|"high"
+- "energy_level": "low"|"medium"|"high" (or 1-5 number)
+- "sleep_hours": number (e.g. 7.5)
+- "water_glasses": number (1 glass ≈ 250ml — convert ml/L if user gives those)
+- "exercise_minutes": number
+- "stress_level": number 1-5
+- "checkin_type": "morning"|"evening" (defaults to morning)
+- "notes": string
+Examples:
+- "Log mood 4" → mood: 4
+- "I slept 8 hours" → sleep_hours: 8
+- "Drank 500ml water" → water_glasses: 2
+- "Did 30 min workout" → exercise_minutes: 30
+
+TOOL: manage_goal
+Use this to create, update progress on, list, or delete a long-term goal.
+Format: <tool>manage_goal</tool><action>create|progress|list|delete</action><goal>JSON_OBJECT</goal>
+Goal JSON fields:
+- "name": string (required for create; or use "query" for progress/delete to fuzzy-match)
+- "description": string (optional)
+- "target_value": number (optional)
+- "current_value": number (optional — set absolute progress)
+- "add": number (optional — increment current by this amount)
+- "unit": string (e.g. "books", "kg", "km")
+- "target_date": YYYY-MM-DD
+- "query": string (used by progress/delete to find the goal)
+Examples:
+- "Set goal: read 12 books this year" → action=create name="read 12 books" target_value=12 unit="books"
+- "Logged 1 more book" → action=progress query="books" add=1
+- "How am I doing on books?" → action=progress query="books" (no values → returns status)
+
+TOOL: bulk_reschedule
+Use this when the user wants to shift MANY tasks at once (today, overdue, tomorrow, or a specific date).
+Format: <tool>bulk_reschedule</tool><bulk>JSON_OBJECT</bulk>
+Fields:
+- "filter": { "when": "today" | "overdue" | "tomorrow" }  OR  { "date": "YYYY-MM-DD" }
+- "shift_days": number (positive = later, negative = earlier)
+Examples:
+- "Move all today's tasks to next week" → filter.when="today" shift_days=7
+- "Push all overdue tasks to tomorrow" → filter.when="overdue" shift_days=1
+
+TOOL: bulk_delete_events
+Use this when the user wants to cancel ALL events on a specific date.
+Format: <tool>bulk_delete_events</tool><bulk>{"date":"YYYY-MM-DD"}</bulk>
+Examples: "Cancel all my meetings on Friday" → resolve Friday's date.
+
+TOOL: append_note
+Use this when the user wants to APPEND content to an existing note (don't create a new one).
+Format: <tool>append_note</tool><note>{"query":"<title fragment>","content":"<text to append>"}</note>
+Examples: "Append to yesterday's journal: had a great day" → query="journal" content="had a great day"
+
 TOOL: manage_note
 Use this to create, search, or delete notes. Replaces the simpler create_note tool.
 Format: <tool>manage_note</tool><action>create|search|delete</action><note>JSON_OBJECT</note>
