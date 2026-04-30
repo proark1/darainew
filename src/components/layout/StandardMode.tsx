@@ -722,7 +722,7 @@ export function StandardMode({
 
               {/* Email Panel */}
               {activePanel === 'email' && user?.id && (
-                <div className="flex-1 glass-panel-solid rounded-xl overflow-hidden">
+                <div className="flex-1 min-w-0 min-h-0 glass-panel-solid rounded-xl overflow-hidden">
                   <EmailPanel />
                 </div>
               )}
