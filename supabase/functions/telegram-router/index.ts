@@ -112,7 +112,11 @@ read it. Send a <b>voice note</b> and I'll act on what you said.
 /week — next 7 days overview
 /agenda — same as /today
 /overdue — open tasks past their due date
-/free [day] — find free 30-min slots in your week
+/free [duration] [day] — e.g. <code>/free 2h thursday</code>
+/agenda &lt;YYYY-MM-DD&gt; — past or future date lookup
+/load — meeting hours per member this week
+/snooze — push today's tasks to tomorrow
+/done — what you've completed this week
 /schedule &lt;title&gt; with @a @b for 30m — find a time
 
 <b>🧑‍🤝‍🧑 Team (workspace groups)</b>
@@ -136,6 +140,8 @@ Reply <b>yes</b> / <b>no</b> to confirm any action I propose.
 
 <b>💶 Money &amp; assets</b>
 /contracts · /expiring · /properties · /vehicles
+/expense &lt;amount&gt; [category] [note] — log a one-off expense
+/spent [category] [period] — totals (today/week/month/year)
 
 <b>❤️ Health &amp; wellbeing</b>
 /health · /checkin
@@ -148,6 +154,13 @@ Reply <b>yes</b> / <b>no</b> to confirm any action I propose.
 
 <b>🧹 Household</b>
 /chores — recurring chores across the family
+/whoseturn &lt;chore&gt; — next person up in the rotation
+/menu — today's planned meals
+
+<b>🌐 Misc</b>
+/weather &lt;city&gt; — today + tomorrow forecast
+/lang de|en — switch language
+/recent — Dori's last 5 actions
 
 <b>⚙️ Settings</b>
 /quiet on|off · /voice on|off
