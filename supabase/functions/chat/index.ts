@@ -1524,10 +1524,38 @@ async function executeToolsServerSide(
   }
 
   // ---------- add_shopping_item ----------
-  for (const m of text.matchAll(/<tool>add_shopping_item<\/tool>\s*<item>(\{[\s\S]*?\})<\/item>/g)) {
-    const data = safeJSON(m[1]); if (!data?.name) continue;
+  // Supports three forms (back-compat with the original add-only XML):
+  //   <tool>add_shopping_item</tool><item>{...}</item>                  (add)
+  //   <tool>add_shopping_item</tool><action>add|remove|clear</action><item>{...}</item>
+  for (const m of text.matchAll(/<tool>add_shopping_item<\/tool>(?:\s*<action>(\w+)<\/action>)?\s*<item>(\{[\s\S]*?\})<\/item>/g)) {
+    const action = (m[1] || 'add').toLowerCase();
+    const data = safeJSON(m[2]) || {};
     try {
       let { data: list } = await supabase.from('shopping_lists').select('id').eq('user_id', userId).eq('is_completed', false).order('created_at').limit(1).maybeSingle();
+      if (action === 'clear') {
+        if (!list) { out.push({ tool: 'add_shopping_item', ok: true, message: '🛒 Shopping list is already empty.' }); continue; }
+        const { count } = await supabase.from('shopping_list_items')
+          .delete({ count: 'exact' }).eq('list_id', list.id).eq('is_checked', false);
+        out.push({ tool: 'add_shopping_item', ok: true, message: `🗑️ Cleared ${count || 0} item${count === 1 ? '' : 's'} from shopping.` });
+        continue;
+      }
+      if (action === 'remove') {
+        if (!data?.name || !list) {
+          out.push({ tool: 'add_shopping_item', ok: false, message: data?.name ? '🛒 Shopping list is empty.' : 'No item name to remove.' });
+          continue;
+        }
+        const { data: matches } = await supabase.from('shopping_list_items')
+          .select('id, name').eq('list_id', list.id).eq('is_checked', false)
+          .ilike('name', `%${data.name}%`).limit(2);
+        if (!matches?.length) { out.push({ tool: 'add_shopping_item', ok: false, message: `🔍 No shopping item matches "${data.name}".` }); continue; }
+        if (matches.length > 1) { out.push({ tool: 'add_shopping_item', ok: false, message: `🤔 Multiple items match "${data.name}": ${matches.map((x: any) => x.name).join(', ')}. Be more specific.` }); continue; }
+        const target = matches[0];
+        await supabase.from('shopping_list_items').delete().eq('id', target.id);
+        out.push({ tool: 'add_shopping_item', ok: true, message: `🗑️ Removed from shopping: ${target.name}` });
+        continue;
+      }
+      // ---- add (default) ----
+      if (!data?.name) continue;
       if (!list) {
         const { data: newList } = await supabase.from('shopping_lists').insert({ user_id: userId, name: 'Shopping', category: 'grocery' }).select('id').single();
         list = newList;
