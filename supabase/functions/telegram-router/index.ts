@@ -683,6 +683,102 @@ async function handleEmailActions(supabase: any, ids: string[], household: any, 
   return lines.join('\n');
 }
 
+// /overdue — open tasks whose due_date is in the past, across the household.
+// DB-driven, no AI round-trip. Mirrors the /today layout.
+async function handleOverdue(supabase: any, ids: string[], household: any): Promise<string> {
+  const nowIso = new Date().toISOString();
+  const { data } = await supabase.from('tasks')
+    .select('title, due_date, priority, user_id')
+    .in('user_id', ids).eq('completed', false).eq('trashed', false)
+    .lt('due_date', nowIso).order('due_date').limit(15);
+  if (!data?.length) return '✅ Nothing overdue. Nice.';
+  const lines = ['<b>⚠️ Overdue tasks</b>'];
+  (data as any[]).forEach((t) => {
+    const pr = t.priority === 'high' ? '🔴' : t.priority === 'low' ? '⚪️' : '🟡';
+    const days = Math.max(1, Math.round((Date.now() - new Date(t.due_date).getTime()) / 86400000));
+    const who = household.multi ? ` <i>(${household.nameOf(t.user_id)})</i>` : '';
+    lines.push(`${pr} ${t.title}${who} — ${days}d late`);
+  });
+  return lines.join('\n');
+}
+
+// /notes <query> — ILIKE search across the household's notes (title + body).
+async function handleNotesSearch(supabase: any, ids: string[], query: string): Promise<string> {
+  const q = query.trim();
+  if (!q) return 'Usage: <code>/notes &lt;search&gt;</code>';
+  const { data } = await supabase.from('notes')
+    .select('title, content, updated_at, user_id')
+    .in('user_id', ids)
+    .or(`title.ilike.%${q}%,content.ilike.%${q}%`)
+    .order('updated_at', { ascending: false }).limit(8);
+  if (!data?.length) return `🔍 No notes match "${q}".`;
+  const lines = [`<b>📝 Notes matching "${q}"</b>`];
+  (data as any[]).forEach((n: any) => {
+    const snippet = String(n.content || '').replace(/\s+/g, ' ').slice(0, 120);
+    lines.push(`• <b>${escapeHtml(n.title || 'Untitled')}</b>${snippet ? ` — ${escapeHtml(snippet)}…` : ''}`);
+  });
+  return lines.join('\n');
+}
+
+// /free [day] — find free slots for the *sender* (single user) in working hours.
+async function handleFreeTime(supabase: any, userId: string, dayHint: string, tz?: string): Promise<string> {
+  const slots = await findTimeSlots(supabase, {
+    workspaceId: '',
+    participants: [userId],
+    durationMinutes: 30,
+    withinDays: 7,
+    timezone: tz,
+  });
+  let ranked = rankProposedSlots(slots);
+  const hint = dayHint.toLowerCase();
+  // Lightweight day filter so "/free thursday" narrows to Thursday slots.
+  const dayMap: Record<string, number> = {
+    sunday: 0, sun: 0, monday: 1, mon: 1, tuesday: 2, tue: 2, wednesday: 3, wed: 3,
+    thursday: 4, thu: 4, friday: 5, fri: 5, saturday: 6, sat: 6,
+    today: -1, tomorrow: -2,
+  };
+  for (const [k, v] of Object.entries(dayMap)) {
+    if (hint.includes(k)) {
+      const target = v === -1 ? new Date().getDay() : v === -2 ? (new Date().getDay() + 1) % 7 : v;
+      ranked = ranked.filter((s: any) => new Date(s.start).getDay() === target);
+      break;
+    }
+  }
+  ranked = ranked.slice(0, 5);
+  if (!ranked.length) return `😕 No free 30-minute slots${dayHint ? ` for "${dayHint}"` : ' in the next 7 days'}.`;
+  const lines = [`<b>🗓 Free slots</b>${dayHint ? ` (${escapeHtml(dayHint)})` : ''}`];
+  ranked.forEach((s: any, i: number) => lines.push(`${i + 1}. ${s.local}`));
+  return lines.join('\n');
+}
+
+// /draft <subject-fragment> — find the most recent inbound email matching the
+// fragment and ask email-draft-reply to compose a reply.
+async function handleEmailDraft(supabase: any, userId: string, query: string): Promise<string> {
+  const q = query.trim();
+  if (!q) return 'Usage: <code>/draft &lt;subject or sender&gt;</code>';
+  const { data: matches } = await supabase.from('emails')
+    .select('id, subject, from_address')
+    .eq('user_id', userId)
+    .or(`subject.ilike.%${q}%,from_address.ilike.%${q}%`)
+    .order('received_at', { ascending: false }).limit(2);
+  if (!matches?.length) return `🔍 No email matches "${q}".`;
+  if (matches.length > 1) return `🤔 Multiple emails match "${q}":\n${matches.map((e: any, i: number) => `${i + 1}. ${e.subject || '(no subject)'} — ${e.from_address}`).join('\n')}\nBe more specific.`;
+  const email = matches[0];
+  try {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/email-draft-reply`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email_id: email.id, user_id: userId }),
+    });
+    const j = await r.json().catch(() => ({}));
+    const draft = (j.draft || j.body || j.reply || '').toString().trim();
+    if (!draft) return `⚠️ Couldn't draft a reply right now. Open the email in the app to draft it manually.`;
+    return `<b>✉️ Draft reply to "${escapeHtml(email.subject || '(no subject)')}"</b>\n\n${escapeHtml(draft).slice(0, 3000)}\n\n<i>Open the app to review &amp; send.</i>`;
+  } catch (e) {
+    return `⚠️ Couldn't draft: ${(e as Error).message}`;
+  }
+}
+
 async function handlePrayers(supabase: any, userId: string): Promise<string> {
   // Try invoking the prayer-times function; fall back gracefully.
   try {
