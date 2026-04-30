@@ -76,22 +76,20 @@ function EmailSection({ title, count, threads, defaultOpen = true, onSelect, onA
 
 function StatsBanner({ unread, priority, handled }: { unread: number; priority: number; handled: number }) {
   return (
-    <GlassCard className="flex items-center gap-3 px-3 py-2.5 text-xs">
-      <div className="flex items-center gap-1.5">
+    <GlassCard className="grid w-full min-w-0 grid-cols-3 gap-2 px-3 py-2.5 text-xs overflow-hidden">
+      <div className="flex min-w-0 items-center gap-1.5">
         <Mail className="w-3 h-3 text-primary" />
-        <span className="text-muted-foreground">Unread</span>
+        <span className="truncate text-muted-foreground">Unread</span>
         <AnimatedCounter value={unread} className="font-semibold text-foreground" />
       </div>
-      <div className="w-px h-3 bg-border" />
-      <div className="flex items-center gap-1.5">
+      <div className="flex min-w-0 items-center gap-1.5 justify-center">
         <Zap className="w-3 h-3 text-destructive" />
-        <span className="text-muted-foreground">Priority</span>
+        <span className="truncate text-muted-foreground">Priority</span>
         <AnimatedCounter value={priority} className="font-semibold text-foreground" />
       </div>
-      <div className="w-px h-3 bg-border" />
-      <div className="flex items-center gap-1.5">
+      <div className="flex min-w-0 items-center gap-1.5 justify-end">
         <CheckCheck className="w-3 h-3 text-emerald-500" />
-        <span className="text-muted-foreground">Handled</span>
+        <span className="truncate text-muted-foreground">Handled</span>
         <AnimatedCounter value={handled} className="font-semibold text-foreground" />
       </div>
     </GlassCard>
@@ -391,30 +389,30 @@ export function EmailPanel() {
     <div className="space-y-2">
       <StatsBanner unread={unreadCount} priority={priorityCount} handled={handledToday} />
 
-      <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none z-10" />
+      <div className="flex h-8 w-full min-w-0 items-center gap-2 rounded-lg border border-input bg-background px-3 text-xs ring-offset-background transition-all duration-200 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:border-primary focus-within:shadow-[0_0_0_3px_hsl(var(--primary)/0.1)]">
+        <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <Input
           placeholder="Search emails..."
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
-          className="!pl-9 !pr-8 sm:!pl-9 sm:!pr-8 h-8 text-xs"
+          className="h-full min-w-0 border-0 bg-transparent px-0 py-0 text-xs shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
         />
         {searchQuery && (
-          <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2">
+          <button onClick={() => setSearchQuery('')} className="shrink-0">
             <X className="w-3.5 h-3.5 text-muted-foreground" />
           </button>
         )}
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList className="w-full h-8">
-          <TabsTrigger value="smart" className="text-xs gap-1 px-3"><Sparkles className="w-3 h-3" />Smart</TabsTrigger>
-          <TabsTrigger value="all" className="text-xs gap-1 px-3"><Inbox className="w-3 h-3" />All</TabsTrigger>
-          <TabsTrigger value="flagged" className="text-xs gap-1 px-3">
+        <TabsList className="grid h-auto w-full min-w-0 grid-cols-4 gap-1">
+          <TabsTrigger value="smart" className="min-w-0 gap-1 px-2 text-xs"><Sparkles className="w-3 h-3 shrink-0" />Smart</TabsTrigger>
+          <TabsTrigger value="all" className="min-w-0 gap-1 px-2 text-xs"><Inbox className="w-3 h-3 shrink-0" />All</TabsTrigger>
+          <TabsTrigger value="flagged" className="min-w-0 gap-1 px-2 text-xs">
             <ShieldAlert className="w-3 h-3" />Flagged
             {flaggedCount > 0 && <span className="text-[10px] bg-destructive/20 text-destructive rounded-full px-1 ml-0.5">{flaggedCount}</span>}
           </TabsTrigger>
-          <TabsTrigger value="actions" className="text-xs gap-1 px-3">
+          <TabsTrigger value="actions" className="min-w-0 gap-1 px-2 text-xs">
             <Zap className="w-3 h-3" />Actions
             {actionsCount > 0 && <span className="text-[10px] bg-primary/20 text-primary rounded-full px-1 ml-0.5">{actionsCount}</span>}
           </TabsTrigger>
@@ -446,9 +444,9 @@ export function EmailPanel() {
       </motion.div>
 
       {/* Content */}
-      <ScrollArea className="flex-1 w-full max-w-full overflow-x-hidden">
+      <ScrollArea className="flex-1 w-full min-w-0 max-w-full overflow-x-hidden">
         <motion.div
-          className="p-2 space-y-1.5 w-full max-w-full overflow-x-hidden"
+          className="w-full min-w-0 max-w-full space-y-1.5 overflow-x-hidden p-2"
           drag="y"
           dragConstraints={{ top: 0, bottom: 0 }}
           dragElastic={{ top: 0.3, bottom: 0 }}
