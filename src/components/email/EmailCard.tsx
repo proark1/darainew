@@ -112,7 +112,7 @@ export function EmailCard({ thread, onSelect, onArchive, onToggleImportant, onSn
   }, []);
 
   return (
-    <motion.div variants={staggerItem} className="relative overflow-hidden rounded-xl group w-full max-w-full min-w-0"
+    <motion.div variants={staggerItem} className="relative overflow-hidden rounded-xl group w-full max-w-full min-w-0 [contain:layout]"
       onMouseEnter={() => !selectMode && setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
@@ -140,7 +140,7 @@ export function EmailCard({ thread, onSelect, onArchive, onToggleImportant, onSn
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
         className={cn(
-          "relative flex w-full min-w-0 max-w-full items-start gap-3 overflow-hidden p-3 !rounded-xl",
+          "relative flex w-full min-w-0 max-w-full items-start gap-2 overflow-hidden p-3 !rounded-xl",
           !email.is_read && "border-l-[3px] border-l-primary bg-primary/5 border-primary/10",
           email.is_read && "opacity-70 border-l-[3px] border-l-transparent",
           isThreat && "bg-destructive/5 border-destructive/20 border-l-destructive",
@@ -168,13 +168,13 @@ export function EmailCard({ thread, onSelect, onArchive, onToggleImportant, onSn
         )}
 
         {/* Content */}
-        <div className="flex-1 min-w-0">
-          <div className="flex min-w-0 items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 min-w-0">
+        <div className="flex-1 min-w-0 max-w-full overflow-hidden">
+          <div className="flex min-w-0 max-w-full items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
               {email.sentiment && email.sentiment !== 'neutral' && (
                 <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", sentimentDot[email.sentiment] || sentimentDot.neutral)} />
               )}
-              <span className={cn("min-w-0 truncate text-sm", !email.is_read ? "font-bold text-foreground" : "font-semibold text-muted-foreground")}>
+              <span className={cn("min-w-0 flex-1 truncate text-sm block", !email.is_read ? "font-bold text-foreground" : "font-semibold text-muted-foreground")}>
                 {sender.name}
               </span>
               {thread.threadCount > 1 && (
@@ -183,15 +183,15 @@ export function EmailCard({ thread, onSelect, onArchive, onToggleImportant, onSn
             </div>
             <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">{timeAgo}</span>
           </div>
-          <p className={cn("text-sm truncate mt-0.5", !email.is_read ? "text-foreground" : "text-muted-foreground")}>
+          <p className={cn("text-sm truncate mt-0.5 max-w-full", !email.is_read ? "text-foreground" : "text-muted-foreground")}>
             {email.subject || '(No subject)'}
           </p>
-          <p className="text-xs text-muted-foreground truncate mt-0.5">{decodeHtmlEntities(email.ai_summary || email.snippet)}</p>
+          <p className="text-xs text-muted-foreground truncate mt-0.5 max-w-full">{decodeHtmlEntities(email.ai_summary || email.snippet)}</p>
 
           {/* Tags row */}
-          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap min-w-0 max-w-full">
             {email.ai_suggested_action && (
-              <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", actionColors[email.ai_suggested_action] || "bg-muted text-muted-foreground")}>
+              <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium max-w-full truncate", actionColors[email.ai_suggested_action] || "bg-muted text-muted-foreground")}>
                 {email.ai_suggested_action}
               </span>
             )}

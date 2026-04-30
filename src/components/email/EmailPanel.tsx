@@ -444,9 +444,9 @@ export function EmailPanel() {
       </motion.div>
 
       {/* Content */}
-      <ScrollArea className="flex-1 w-full min-w-0 max-w-full overflow-x-hidden">
+      <ScrollArea className="flex-1 w-full min-w-0 max-w-full overflow-hidden">
         <motion.div
-          className="w-full min-w-0 max-w-full space-y-1.5 overflow-x-hidden p-2"
+          className="w-full min-w-0 max-w-full space-y-1.5 overflow-hidden p-2"
           drag="y"
           dragConstraints={{ top: 0, bottom: 0 }}
           dragElastic={{ top: 0.3, bottom: 0 }}
@@ -454,7 +454,7 @@ export function EmailPanel() {
           onDragEnd={handlePullEnd}
         >
           {activeTab === 'actions' ? (
-            <div className="p-1">
+            <div className="p-1 w-full min-w-0 max-w-full overflow-hidden">
               <EmailActionPipelineCard variant="list" hideWhenEmpty />
             </div>
           ) : view === 'smart' ? (
