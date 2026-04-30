@@ -754,7 +754,7 @@ function extractSearchQuery(msg: string): string {
 
 function stripAllToolTags(text: string): string {
   return text
-    .replace(/<tool>[\s\S]*?<\/(?:task|event|note|criteria|plan|item|contact|contract|project|habit|email|reminder|memory|query|type|property|business|member|filter|draft|meeting|target|packing|prep|cancel)>/g, '')
+    .replace(/<tool>[\s\S]*?<\/(?:task|event|note|criteria|plan|item|contact|contract|project|habit|email|reminder|memory|query|type|property|business|member|filter|draft|meeting|target|packing|prep|cancel|wellbeing|bulk|goal|pref)>/g, '')
     .replace(/<tool>[\s\S]*?<\/tool>/g, '')
     .replace(/<action>[\s\S]*?<\/action>/g, '')
     .replace(/\n{3,}/g, '\n\n')
