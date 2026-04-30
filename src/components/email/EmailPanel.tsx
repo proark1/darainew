@@ -446,9 +446,9 @@ export function EmailPanel() {
       </motion.div>
 
       {/* Content */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 w-full max-w-full overflow-x-hidden">
         <motion.div
-          className="p-2 space-y-1.5"
+          className="p-2 space-y-1.5 w-full max-w-full overflow-x-hidden"
           drag="y"
           dragConstraints={{ top: 0, bottom: 0 }}
           dragElastic={{ top: 0.3, bottom: 0 }}
