@@ -53,7 +53,10 @@ const CATEGORY_COLOR: Record<string, string> = {
   other: 'bg-muted text-muted-foreground',
 };
 
-export function EmailActionPipelineCard() {
+export function EmailActionPipelineCard({
+  variant = 'card',
+  hideWhenEmpty = false,
+}: { variant?: 'card' | 'list'; hideWhenEmpty?: boolean } = {}) {
   const { user } = useAuth();
   const [items, setItems] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
@@ -71,7 +74,7 @@ export function EmailActionPipelineCard() {
       .eq('status', 'pending')
       .neq('suggested_action', 'none')
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(variant === 'list' ? 100 : 20);
     setItems((data ?? []) as Suggestion[]);
   };
 
@@ -103,15 +106,16 @@ export function EmailActionPipelineCard() {
     setItems(prev => prev.filter(i => i.id !== id));
   };
 
-  const apply = async (item: Suggestion) => {
+  const apply = async (item: Suggestion, overrideAction?: string) => {
     if (!user?.id) return;
     setApplyingId(item.id);
     try {
       const p = item.suggested_payload || {};
       const titleFromEmail = p.subject || p.title || 'From email';
       let createdLabel = 'Applied';
+      const action = overrideAction || item.suggested_action;
 
-      if (item.suggested_action === 'create_task') {
+      if (action === 'create_task') {
         const { error } = await supabase.from('tasks').insert({
           user_id: user.id,
           title: p.title || titleFromEmail,
@@ -122,27 +126,42 @@ export function EmailActionPipelineCard() {
         });
         if (error) throw error;
         createdLabel = 'Task created';
-      } else if (item.suggested_action === 'create_event') {
+      } else if (action === 'create_event') {
         const start = p.start_iso ? new Date(p.start_iso) : null;
         if (!start || isNaN(start.getTime())) {
-          toast.error('No valid date in email — open it to add manually');
-          setApplyingId(null);
-          return;
+          // Default to tomorrow 9am if no date detected
+          const fallback = new Date();
+          fallback.setDate(fallback.getDate() + 1);
+          fallback.setHours(9, 0, 0, 0);
+          const end = new Date(fallback.getTime() + 60 * 60 * 1000);
+          const { error } = await supabase.from('events').insert({
+            user_id: user.id,
+            title: p.title || titleFromEmail,
+            description: item.reasoning || '',
+            start_time: fallback.toISOString(),
+            end_time: end.toISOString(),
+            location: p.location || null,
+            category: 'personal',
+            created_via: 'email_suggestion',
+          });
+          if (error) throw error;
+          createdLabel = 'Event added (tomorrow 9am — please review)';
+        } else {
+          const end = new Date(start.getTime() + 60 * 60 * 1000);
+          const { error } = await supabase.from('events').insert({
+            user_id: user.id,
+            title: p.title || titleFromEmail,
+            description: item.reasoning || '',
+            start_time: start.toISOString(),
+            end_time: end.toISOString(),
+            location: p.location || null,
+            category: 'personal',
+            created_via: 'email_suggestion',
+          });
+          if (error) throw error;
+          createdLabel = 'Event added';
         }
-        const end = new Date(start.getTime() + 60 * 60 * 1000);
-        const { error } = await supabase.from('events').insert({
-          user_id: user.id,
-          title: p.title || titleFromEmail,
-          description: item.reasoning || '',
-          start_time: start.toISOString(),
-          end_time: end.toISOString(),
-          location: p.location || null,
-          category: 'personal',
-          created_via: 'email_suggestion',
-        });
-        if (error) throw error;
-        createdLabel = 'Event added';
-      } else if (item.suggested_action === 'create_note') {
+      } else if (action === 'create_note') {
         const { error } = await supabase.from('notes').insert({
           user_id: user.id,
           title: p.title || titleFromEmail,
@@ -151,7 +170,7 @@ export function EmailActionPipelineCard() {
         });
         if (error) throw error;
         createdLabel = 'Note saved';
-      } else if (item.suggested_action === 'create_contract') {
+      } else if (action === 'create_contract') {
         // Contracts have a richer flow — defer to email hub but mark applied
         toast.info('Open the email in Email Hub to confirm contract details');
         createdLabel = 'Marked for review';
@@ -207,6 +226,20 @@ export function EmailActionPipelineCard() {
   );
 
   if (!items.length) {
+    if (hideWhenEmpty && variant === 'list') {
+      return (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">No pending email actions.</p>
+            <Button size="sm" variant="outline" onClick={() => setScanOpen(true)} disabled={loading}>
+              <Sparkles className="w-3 h-3 mr-1" />
+              Scan emails
+            </Button>
+          </div>
+          {ScanDialog}
+        </div>
+      );
+    }
     return (
       <>
         <Card className="p-3">
@@ -223,6 +256,84 @@ export function EmailActionPipelineCard() {
         </Card>
         {ScanDialog}
       </>
+    );
+  }
+
+  // List variant — used inside the Email panel "Actions" tab
+  if (variant === 'list') {
+    const ALL_ACTIONS: Array<{ key: string; label: string; Icon: typeof Plus }> = [
+      { key: 'create_task', label: 'Task', Icon: CheckSquare },
+      { key: 'create_event', label: 'Event', Icon: Calendar },
+      { key: 'create_note', label: 'Note', Icon: FileText },
+      { key: 'create_contract', label: 'Contract', Icon: Receipt },
+    ];
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Sparkles className="w-4 h-4 text-primary shrink-0" />
+            <h3 className="font-semibold text-sm truncate">{items.length} email action{items.length === 1 ? '' : 's'}</h3>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => setScanOpen(true)} disabled={loading}>
+              <Sparkles className="w-3 h-3 mr-1" />
+              Scan
+            </Button>
+            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => runClassifier(25, false)} disabled={loading}>
+              <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+        </div>
+        {items.map(item => {
+          const catClass = CATEGORY_COLOR[item.category] ?? CATEGORY_COLOR.other;
+          const isApplying = applyingId === item.id;
+          const suggestedKey = item.suggested_action;
+          return (
+            <Card key={item.id} className="p-3 space-y-2">
+              <div className="flex items-start gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <Badge variant="outline" className={`text-[10px] ${catClass}`}>
+                      {item.category.replace('_', ' ')}
+                    </Badge>
+                    <span className="text-xs font-medium truncate">
+                      {item.suggested_payload?.subject ?? 'Email'}
+                    </span>
+                  </div>
+                  {item.reasoning && (
+                    <p className="text-[11px] text-muted-foreground line-clamp-2">{item.reasoning}</p>
+                  )}
+                </div>
+                <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0"
+                  onClick={() => dismiss(item.id)} disabled={isApplying} title="Dismiss">
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {ALL_ACTIONS.map(({ key, label, Icon }) => {
+                  const isSuggested = key === suggestedKey;
+                  return (
+                    <Button
+                      key={key}
+                      size="sm"
+                      variant={isSuggested ? 'default' : 'outline'}
+                      className="h-7 text-[11px]"
+                      onClick={() => apply(item, key)}
+                      disabled={isApplying}
+                    >
+                      {isApplying
+                        ? <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        : <Icon className="w-3 h-3 mr-1" />}
+                      {label}
+                    </Button>
+                  );
+                })}
+              </div>
+            </Card>
+          );
+        })}
+        {ScanDialog}
+      </div>
     );
   }
 
