@@ -1265,7 +1265,15 @@ async function executeToolsServerSide(
         await supabase.from('events').update(upd).eq('id', target.id).eq('user_id', userId);
         const undoId = await undoPatch('events', target.id, oldPatch, `edited event "${target.title}"`, 'event');
         const updatedTitle = upd.title || target.title;
-        out.push({ tool: 'manage_event', ok: true, message: `✏️ Updated event: ${updatedTitle}`, undoId, entityId: target.id, title: updatedTitle, entityKind: 'event' });
+        // Echo the new time/location too so users see what actually changed,
+        // not just the (possibly unchanged) title.
+        const newStart = upd.start_time || target.start_time;
+        const whenStr = newStart ? new Date(newStart).toLocaleString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+        const locStr = upd.location !== undefined ? upd.location : target.location;
+        const bits = [updatedTitle];
+        if (whenStr) bits.push(`→ ${whenStr}`);
+        if (locStr) bits.push(`@ ${locStr}`);
+        out.push({ tool: 'manage_event', ok: true, message: `✏️ Updated event: ${bits.join(' ')}`, undoId, entityId: target.id, title: updatedTitle, entityKind: 'event' });
       } else {
         out.push({ tool: 'manage_event', ok: true, message: `Found: ${target.title} on ${new Date(target.start_time).toLocaleString()}`, entityId: target.id, title: target.title, entityKind: 'event' });
       }
