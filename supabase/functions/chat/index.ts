@@ -273,9 +273,10 @@ When to use this tool:
 - The content should capture the full idea/information
 
 TOOL: add_shopping_item
-Use this to add items to the family shopping list.
-Format: <tool>add_shopping_item</tool><item>JSON_OBJECT</item>
-Item JSON fields:
+Use this to add, remove, or clear items on the family shopping list.
+Format: <tool>add_shopping_item</tool><action>add|remove|clear</action><item>JSON_OBJECT</item>
+The <action> tag is optional; omit it (or use "add") to add an item. Use "remove" with {"name": "..."} to delete a single item by fuzzy match. Use "clear" with an empty <item>{}</item> to wipe all unchecked items.
+Item JSON fields (for add):
 - "name": string (required) - Name of the item
 - "quantity": number (optional, default 1)
 - "category": string (optional) - Category like "produce", "dairy", "meat", etc.
@@ -1265,7 +1266,15 @@ async function executeToolsServerSide(
         await supabase.from('events').update(upd).eq('id', target.id).eq('user_id', userId);
         const undoId = await undoPatch('events', target.id, oldPatch, `edited event "${target.title}"`, 'event');
         const updatedTitle = upd.title || target.title;
-        out.push({ tool: 'manage_event', ok: true, message: `✏️ Updated event: ${updatedTitle}`, undoId, entityId: target.id, title: updatedTitle, entityKind: 'event' });
+        // Echo the new time/location too so users see what actually changed,
+        // not just the (possibly unchanged) title.
+        const newStart = upd.start_time || target.start_time;
+        const whenStr = newStart ? new Date(newStart).toLocaleString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+        const locStr = upd.location !== undefined ? upd.location : target.location;
+        const bits = [updatedTitle];
+        if (whenStr) bits.push(`→ ${whenStr}`);
+        if (locStr) bits.push(`@ ${locStr}`);
+        out.push({ tool: 'manage_event', ok: true, message: `✏️ Updated event: ${bits.join(' ')}`, undoId, entityId: target.id, title: updatedTitle, entityKind: 'event' });
       } else {
         out.push({ tool: 'manage_event', ok: true, message: `Found: ${target.title} on ${new Date(target.start_time).toLocaleString()}`, entityId: target.id, title: target.title, entityKind: 'event' });
       }
@@ -1516,10 +1525,38 @@ async function executeToolsServerSide(
   }
 
   // ---------- add_shopping_item ----------
-  for (const m of text.matchAll(/<tool>add_shopping_item<\/tool>\s*<item>(\{[\s\S]*?\})<\/item>/g)) {
-    const data = safeJSON(m[1]); if (!data?.name) continue;
+  // Supports three forms (back-compat with the original add-only XML):
+  //   <tool>add_shopping_item</tool><item>{...}</item>                  (add)
+  //   <tool>add_shopping_item</tool><action>add|remove|clear</action><item>{...}</item>
+  for (const m of text.matchAll(/<tool>add_shopping_item<\/tool>(?:\s*<action>(\w+)<\/action>)?\s*<item>(\{[\s\S]*?\})<\/item>/g)) {
+    const action = (m[1] || 'add').toLowerCase();
+    const data = safeJSON(m[2]) || {};
     try {
       let { data: list } = await supabase.from('shopping_lists').select('id').eq('user_id', userId).eq('is_completed', false).order('created_at').limit(1).maybeSingle();
+      if (action === 'clear') {
+        if (!list) { out.push({ tool: 'add_shopping_item', ok: true, message: '🛒 Shopping list is already empty.' }); continue; }
+        const { count } = await supabase.from('shopping_list_items')
+          .delete({ count: 'exact' }).eq('list_id', list.id).eq('is_checked', false);
+        out.push({ tool: 'add_shopping_item', ok: true, message: `🗑️ Cleared ${count || 0} item${count === 1 ? '' : 's'} from shopping.` });
+        continue;
+      }
+      if (action === 'remove') {
+        if (!data?.name || !list) {
+          out.push({ tool: 'add_shopping_item', ok: false, message: data?.name ? '🛒 Shopping list is empty.' : 'No item name to remove.' });
+          continue;
+        }
+        const { data: matches } = await supabase.from('shopping_list_items')
+          .select('id, name').eq('list_id', list.id).eq('is_checked', false)
+          .ilike('name', `%${data.name}%`).limit(2);
+        if (!matches?.length) { out.push({ tool: 'add_shopping_item', ok: false, message: `🔍 No shopping item matches "${data.name}".` }); continue; }
+        if (matches.length > 1) { out.push({ tool: 'add_shopping_item', ok: false, message: `🤔 Multiple items match "${data.name}": ${matches.map((x: any) => x.name).join(', ')}. Be more specific.` }); continue; }
+        const target = matches[0];
+        await supabase.from('shopping_list_items').delete().eq('id', target.id);
+        out.push({ tool: 'add_shopping_item', ok: true, message: `🗑️ Removed from shopping: ${target.name}` });
+        continue;
+      }
+      // ---- add (default) ----
+      if (!data?.name) continue;
       if (!list) {
         const { data: newList } = await supabase.from('shopping_lists').insert({ user_id: userId, name: 'Shopping', category: 'grocery' }).select('id').single();
         list = newList;

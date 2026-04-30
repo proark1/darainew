@@ -229,10 +229,11 @@ export const NATIVE_TOOLS: ToolDef[] = [
     type: 'function',
     function: {
       name: 'add_shopping_item',
-      description: 'Add an item to the family shopping list.',
+      description: 'Add, remove, or clear items on the family shopping list. Use action="remove" with a name to delete a single item (fuzzy match), or action="clear" to empty all unchecked items.',
       parameters: {
         type: 'object',
         properties: {
+          action: { type: 'string', enum: ['add', 'remove', 'clear'], description: 'Defaults to "add" if omitted.' },
           item: {
             type: 'object',
             properties: {
@@ -240,10 +241,8 @@ export const NATIVE_TOOLS: ToolDef[] = [
               quantity: { type: 'number' },
               category: { type: 'string' },
             },
-            required: ['name'],
           },
         },
-        required: ['item'],
       },
     },
   },
@@ -400,7 +399,7 @@ function renderLegacy(name: string, args: any): string {
     case 'set_reminder':
       return `<tool>set_reminder</tool><reminder>${JSON.stringify(args.reminder ?? {})}</reminder>`;
     case 'add_shopping_item':
-      return `<tool>add_shopping_item</tool><item>${JSON.stringify(args.item ?? {})}</item>`;
+      return `<tool>add_shopping_item</tool><action>${args.action || 'add'}</action><item>${JSON.stringify(args.item ?? {})}</item>`;
     case 'compose_email':
       return `<tool>compose_email</tool><email>${JSON.stringify(args.email ?? {})}</email>`;
     case 'send_email':
