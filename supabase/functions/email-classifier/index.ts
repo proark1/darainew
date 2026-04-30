@@ -11,10 +11,35 @@ const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-const SYSTEM_PROMPT = `You classify emails for a personal assistant. Return one classification per email.
-Categories: bill, meeting_request, family_logistics, newsletter, personal, work, other.
-Suggested actions: create_contract (only for bills/invoices/subscriptions), create_event (for meeting requests with clear time), create_task (for family logistics or actionable work), none.
-Be conservative — only suggest actions when clearly warranted. Confidence 0-1.`;
+const SYSTEM_PROMPT = `You are a smart inbox triage assistant for a personal/household productivity app (DarAI).
+For each email return ONE classification with a category, a suggested action, and a short reasoning.
+
+Categories (pick the single best fit):
+- bill            → invoices, recurring subscriptions, utility/rent/insurance bills, payment receipts
+- meeting_request → contains a clear date/time for a meeting/call/appointment
+- family_logistics→ school, kids, household chores, family scheduling
+- travel          → flight/hotel/train bookings, itineraries, check-in reminders
+- shopping        → order confirmations, deliveries, shipping updates
+- newsletter      → marketing, promos, digests, "unsubscribe" footers
+- personal        → friends, personal correspondence
+- work            → work tasks, action items from colleagues
+- note            → reference info worth saving (receipts of important info, login codes are NOT)
+- other           → anything else
+
+Suggested actions (pick the single best fit, or 'none'):
+- create_contract → ONLY for bills/subscriptions/invoices that recur or have a clear vendor + amount
+- create_event    → ONLY when there is a concrete date AND time
+- create_task     → for actionable items (reply needed, deadline, errand, follow-up, family logistics)
+- create_note     → for reference info the user will want to look up later
+- none            → nothing actionable
+
+Rules:
+- Be CONSERVATIVE. If unsure, use 'none'. Confidence 0-1.
+- Always write reasoning as ONE short sentence in the user's likely language (German if sender/subject is German, else English).
+- For create_event include payload.start_iso (ISO 8601) and payload.title.
+- For create_task include payload.title and optional payload.due_iso.
+- For create_contract include payload.vendor and payload.amount if visible.
+- For create_note include payload.title.`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -28,7 +53,8 @@ Deno.serve(async (req) => {
     const isServiceRole = authHeader === `Bearer ${SERVICE_KEY}`;
 
     const body = await req.json().catch(() => ({}));
-    const limit: number = body.limit ?? 25;
+    const limit: number = Math.min(Math.max(Number(body.limit) || 25, 1), 200);
+    const force: boolean = !!body.force; // re-classify even if a row already exists
     let user_id: string | undefined = body.user_id;
 
     if (!isServiceRole) {
@@ -58,12 +84,15 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ classified: 0 }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { data: existing } = await supabase
-      .from("email_classifications")
-      .select("email_id")
-      .in("email_id", emails.map(e => e.id));
-    const existingIds = new Set((existing ?? []).map(e => e.email_id));
-    const todo = emails.filter(e => !existingIds.has(e.id));
+    let todo = emails;
+    if (!force) {
+      const { data: existing } = await supabase
+        .from("email_classifications")
+        .select("email_id")
+        .in("email_id", emails.map(e => e.id));
+      const existingIds = new Set((existing ?? []).map(e => e.email_id));
+      todo = emails.filter(e => !existingIds.has(e.id));
+    }
     if (!todo.length) {
       return new Response(JSON.stringify({ classified: 0, skipped: emails.length }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -96,10 +125,22 @@ Deno.serve(async (req) => {
                     type: "object",
                     properties: {
                       index: { type: "number" },
-                      category: { type: "string", enum: ["bill", "meeting_request", "family_logistics", "newsletter", "personal", "work", "other"] },
-                      suggested_action: { type: "string", enum: ["create_contract", "create_event", "create_task", "none"] },
+                      category: { type: "string", enum: ["bill", "meeting_request", "family_logistics", "travel", "shopping", "newsletter", "personal", "work", "note", "other"] },
+                      suggested_action: { type: "string", enum: ["create_contract", "create_event", "create_task", "create_note", "none"] },
                       confidence: { type: "number" },
                       reasoning: { type: "string" },
+                      payload: {
+                        type: "object",
+                        description: "Extra fields needed to apply the action (title, start_iso, due_iso, vendor, amount, etc.)",
+                        properties: {
+                          title: { type: "string" },
+                          start_iso: { type: "string" },
+                          due_iso: { type: "string" },
+                          vendor: { type: "string" },
+                          amount: { type: "number" },
+                          location: { type: "string" },
+                        },
+                      },
                     },
                     required: ["index", "category", "suggested_action", "confidence"],
                   },
@@ -134,7 +175,14 @@ Deno.serve(async (req) => {
         suggested_action: it.suggested_action,
         confidence: it.confidence,
         reasoning: it.reasoning ?? null,
-        suggested_payload: { subject: email.subject, from: email.from_email },
+        suggested_payload: {
+          subject: email.subject,
+          from: email.from_email,
+          from_name: email.from_name,
+          received_at: email.received_at,
+          ...(it.payload || {}),
+        },
+        status: 'pending',
       };
     }).filter(Boolean);
 
