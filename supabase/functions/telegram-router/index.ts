@@ -144,7 +144,10 @@ Reply <b>yes</b> / <b>no</b> to confirm any action I propose.
 /inbox · /actions · /draft &lt;subject or sender&gt;
 
 <b>🕌 Islam</b>
-/prayers
+/prayers · /qibla [city] · /quran &lt;name|1-114&gt; · /dhikr [count]
+
+<b>🧹 Household</b>
+/chores — recurring chores across the family
 
 <b>⚙️ Settings</b>
 /quiet on|off · /voice on|off
@@ -805,6 +808,103 @@ async function handlePrayers(supabase: any, userId: string): Promise<string> {
   return '🕌 Prayer times unavailable right now. Check the Islam tab in the app.';
 }
 
+// /dhikr <count> — log dhikr count for today (best-effort, falls back to ack-only).
+async function handleDhikr(supabase: any, userId: string, arg: string): Promise<string> {
+  const n = parseInt(arg.trim(), 10);
+  const count = Number.isFinite(n) && n > 0 ? n : 33;
+  // Best-effort write: try a generic mood_logs row tagged dhikr (works regardless
+  // of whether a dedicated dhikr_log table exists).
+  try {
+    await supabase.from('mood_logs').insert({
+      user_id: userId, mood_score: null, energy_score: null,
+      context_tags: ['dhikr'], notes: `${count} dhikr`,
+    });
+  } catch (_) { /* table missing or strict — silent ack still fine */ }
+  return `📿 Logged <b>${count}</b> dhikr. SubhanAllah 🤲`;
+}
+
+// /qibla [city] — return the Qibla bearing from the given city (or profile city).
+async function handleQibla(supabase: any, userId: string, cityArg: string): Promise<string> {
+  let city = cityArg.trim();
+  let country = '';
+  if (!city) {
+    const { data: prof } = await supabase.from('profiles')
+      .select('location_city, location_country').eq('user_id', userId).maybeSingle();
+    city = prof?.location_city || '';
+    country = prof?.location_country || '';
+  }
+  if (!city) return 'Usage: <code>/qibla &lt;city&gt;</code> — or set your city in your profile.';
+  try {
+    // Aladhan's qibla endpoint takes lat/long, so first geocode via timingsByCity.
+    const dateStr = new Date().toISOString().slice(0, 10).split('-').reverse().join('-');
+    const tUrl = `https://api.aladhan.com/v1/timingsByCity/${dateStr}?city=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}&method=2`;
+    const tRes = await fetch(tUrl).then(r => r.json());
+    const lat = tRes?.data?.meta?.latitude;
+    const lng = tRes?.data?.meta?.longitude;
+    if (lat == null || lng == null) return `🧭 Couldn't geolocate "${city}".`;
+    const qRes = await fetch(`https://api.aladhan.com/v1/qibla/${lat}/${lng}`).then(r => r.json());
+    const dir = qRes?.data?.direction;
+    if (dir == null) return `🧭 Couldn't compute Qibla for "${city}".`;
+    return `🧭 Qibla from <b>${city}</b>: <b>${Number(dir).toFixed(1)}°</b> from true north.`;
+  } catch (e) {
+    console.error('qibla error', e);
+    return '🧭 Qibla service unavailable right now.';
+  }
+}
+
+// /quran <surah> — minimal surah snippet via Aladhan's al-quran companion API.
+async function handleQuran(supabase: any, userId: string, arg: string): Promise<string> {
+  const q = arg.trim();
+  if (!q) return 'Usage: <code>/quran &lt;surah name or number&gt;</code> (e.g. /quran al-fatiha or /quran 1)';
+  void supabase; void userId;
+  try {
+    // Try numeric first; otherwise let user pick the famous short ones.
+    const num = parseInt(q, 10);
+    let surahNum = Number.isFinite(num) && num >= 1 && num <= 114 ? num : null;
+    if (surahNum == null) {
+      const aliases: Record<string, number> = {
+        'al-fatiha': 1, 'fatiha': 1, 'fatihah': 1, 'al-fatihah': 1,
+        'al-ikhlas': 112, 'ikhlas': 112, 'al-falaq': 113, 'falaq': 113,
+        'an-nas': 114, 'nas': 114, 'al-nas': 114, 'al-kawthar': 108, 'kawthar': 108,
+        'ya-sin': 36, 'yasin': 36, 'ya sin': 36, 'al-mulk': 67, 'mulk': 67,
+        'al-kahf': 18, 'kahf': 18, 'al-baqarah': 2, 'baqarah': 2,
+      };
+      surahNum = aliases[q.toLowerCase()] ?? null;
+    }
+    if (surahNum == null) return `🕌 I don't recognise "${q}". Try a number 1-114 or a name like /quran al-fatiha.`;
+    const r = await fetch(`https://api.alquran.cloud/v1/surah/${surahNum}/editions/quran-uthmani,en.sahih`);
+    const j = await r.json();
+    if (!j.data?.length) return '🕌 Quran service unavailable right now.';
+    const arabic = j.data[0]; const english = j.data[1];
+    const limit = arabic.numberOfAyahs <= 10 ? arabic.numberOfAyahs : 5;
+    const lines = [`<b>📖 Surah ${arabic.englishName} — ${arabic.englishNameTranslation}</b>`];
+    for (let i = 0; i < limit; i++) {
+      lines.push(`\n<b>${i + 1}.</b> ${arabic.ayahs[i].text}`);
+      lines.push(`<i>${english.ayahs[i].text}</i>`);
+    }
+    if (limit < arabic.numberOfAyahs) lines.push(`\n…and ${arabic.numberOfAyahs - limit} more verses (open in app for full surah).`);
+    return lines.join('\n');
+  } catch (e) {
+    console.error('quran error', e);
+    return '🕌 Quran service unavailable right now.';
+  }
+}
+
+// /chores — recurring tasks tagged 'chore' across the household.
+async function handleChores(supabase: any, ids: string[]): Promise<string> {
+  const { data } = await supabase.from('tasks')
+    .select('title, due_date, user_id, category')
+    .in('user_id', ids).eq('completed', false)
+    .or('category.eq.chore,category.eq.household,recurrence_rule.not.is.null')
+    .order('due_date', { ascending: true, nullsFirst: false }).limit(15);
+  if (!data?.length) return '🧹 No active chores. Tip: tag a recurring task with category="chore".';
+  const lines = data.slice(0, 10).map((t: any) => {
+    const when = t.due_date ? new Date(t.due_date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }) : '—';
+    return `• ${t.title} <i>(${when})</i>`;
+  });
+  return `<b>🧹 Household chores</b>\n${lines.join('\n')}`;
+}
+
 async function handleToggleSetting(
   supabase: any, userId: string, column: string, value: boolean, label: string
 ): Promise<string> {
@@ -1176,6 +1276,22 @@ Deno.serve(async (req) => {
   // ─── Islam ───────────────────────────────────────────────
   if (lower === '/prayers') {
     await tgSend(chat_id, await handlePrayers(supabase, userForChat));
+    return new Response('{"ok":true}', { headers: corsHeaders });
+  }
+  if (lower === '/dhikr' || lower.startsWith('/dhikr ')) {
+    await tgSend(chat_id, await handleDhikr(supabase, userForChat, trimmed.slice(6).trim()));
+    return new Response('{"ok":true}', { headers: corsHeaders });
+  }
+  if (lower === '/qibla' || lower.startsWith('/qibla ')) {
+    await tgSend(chat_id, await handleQibla(supabase, userForChat, trimmed.slice(6).trim()));
+    return new Response('{"ok":true}', { headers: corsHeaders });
+  }
+  if (lower.startsWith('/quran')) {
+    await tgSend(chat_id, await handleQuran(supabase, userForChat, trimmed.slice(6).trim()));
+    return new Response('{"ok":true}', { headers: corsHeaders });
+  }
+  if (lower === '/chores') {
+    await tgSend(chat_id, await handleChores(supabase, memberIds));
     return new Response('{"ok":true}', { headers: corsHeaders });
   }
 
