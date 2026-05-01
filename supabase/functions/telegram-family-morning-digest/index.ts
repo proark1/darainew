@@ -3,7 +3,7 @@
 // hour matches the group's configured `morning_digest_hour` and we haven't
 // already sent for that local date.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { buildSharedFamilyDigest } from '../telegram-router/index.ts';
+import { buildSharedFamilyDigest } from '../_shared/telegram-digest.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
