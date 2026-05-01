@@ -145,3 +145,22 @@ To keep scope reasonable, implement the highest-leverage fixes that touch many s
 - 28 menstrual cycle tracking, 35 presence, 46 flight integration, 48 fasting log — niche, would each require their own data models. Will add a one-line note in HELP_TEXT pointing users to free-text Dori for these.
 - 16 price-aware shopping — no price field on shopping items.
 - 42 semantic history search — would need new embeddings infra; existing `/notes` ILIKE covers most cases.
+
+---
+
+## ✅ Phase 2-4 Complete (gap closure shipped)
+
+### Native tool schemas (dori-tools.ts)
+Added 19 tool definitions + correct legacy XML mappings for: task_filter, task_tag, task_estimate, task_complete_note, task_duplicate, task_subtask, task_assign, summarize_emails, email_action, period_log, fasting_log, pantry, flight_track, presence, budget, meds, zakat, timezone, currency.
+
+### Voice parity (openai-realtime-session + useOpenAIRealtime)
+- Added 28 new tool schemas to the Realtime session.
+- Added a default-case fallback in `handleFunctionCall` that proxies any unknown voice tool to the `chat` edge function. This means voice has automatic parity with chat — no per-tool client handlers needed.
+
+### Telegram shortcuts (telegram-router + telegram-register-commands)
+- 14 new slash commands wired via `forcedPrefix` natural-language routing into `chat`.
+- BotFather registry updated with new commands (run `/telegram-register-commands` once).
+- HELP_TEXT updated with a "🆕 Power tools" section.
+
+### Niche items previously "out of scope" — now in scope
+period, fasting, pantry, presence, flight tracking, zakat, currency, timezone all have working executors + DB tables + voice + telegram routes.
