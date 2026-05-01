@@ -1405,6 +1405,34 @@ export function useOpenAIRealtime({
           }
           break;
         }
+
+        // ==================== FALLBACK: proxy unknown tools to chat ====================
+        // Any tool not handled above (log_expense, weather, find_time, web_search,
+        // manage_goal, undo, summarize_emails, email_action, period_log, fasting_log,
+        // pantry, flight_track, presence, budget, meds, zakat, timezone, currency,
+        // task_filter/tag/estimate/etc.) is forwarded as a natural-language
+        // request to the `chat` edge function which already implements all 40+
+        // executors. This gives voice full parity without duplicating handlers.
+        default: {
+          try {
+            const argsStr = (() => { try { return JSON.stringify(args); } catch { return String(args); } })();
+            const { data, error } = await supabase.functions.invoke('chat', {
+              body: {
+                messages: [
+                  { role: 'user', content: `[voice tool ${name}] arguments: ${argsStr}. Execute this and reply concisely.` }
+                ],
+                surface: 'voice',
+              }
+            });
+            if (error) throw error;
+            const reply = (data?.text || data?.message || data?.reply || '').toString().slice(0, 500) || 'Done.';
+            result = { success: true, message: reply };
+          } catch (proxyErr) {
+            console.error('[voice fallback] proxy to chat failed for', name, proxyErr);
+            result = { success: false, message: `Tool "${name}" is not supported in voice mode yet.` };
+          }
+          break;
+        }
       }
     } catch (err) {
       console.error('Function call error:', err);
