@@ -481,6 +481,159 @@ export const NATIVE_TOOLS: ToolDef[] = [
       },
     },
   },
+  // ============= Phase 2: 19 new tools =============
+  {
+    type: 'function',
+    function: {
+      name: 'task_filter',
+      description: 'List tasks with filters (status, priority, tag, due range). Use for "show my high-priority tasks", "what is tagged work".',
+      parameters: { type: 'object', properties: { data: { type: 'object', properties: { status: { type: 'string' }, priority: { type: 'string' }, tag: { type: 'string' }, when: { type: 'string', enum: ['today','tomorrow','overdue','week'] } } } }, required: ['data'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'task_tag',
+      description: 'Add or remove tags on a task (fuzzy match by query).',
+      parameters: { type: 'object', properties: { data: { type: 'object', properties: { query: { type: 'string' }, add: { type: 'array', items: { type: 'string' } }, remove: { type: 'array', items: { type: 'string' } } }, required: ['query'] } }, required: ['data'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'task_estimate',
+      description: 'Set an estimated minutes value on a task.',
+      parameters: { type: 'object', properties: { data: { type: 'object', properties: { query: { type: 'string' }, minutes: { type: 'number' } }, required: ['query','minutes'] } }, required: ['data'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'task_complete_note',
+      description: 'Complete a task and attach a short completion note.',
+      parameters: { type: 'object', properties: { data: { type: 'object', properties: { query: { type: 'string' }, note: { type: 'string' } }, required: ['query','note'] } }, required: ['data'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'task_duplicate',
+      description: 'Duplicate a task (optionally with a new title or due date).',
+      parameters: { type: 'object', properties: { data: { type: 'object', properties: { query: { type: 'string' }, title: { type: 'string' }, dueDate: { type: 'string' } }, required: ['query'] } }, required: ['data'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'task_subtask',
+      description: 'Add a subtask under an existing parent task (matched by query).',
+      parameters: { type: 'object', properties: { data: { type: 'object', properties: { parentQuery: { type: 'string' }, title: { type: 'string' } }, required: ['parentQuery','title'] } }, required: ['data'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'task_assign',
+      description: 'Assign or reassign a task to a workspace member by display name.',
+      parameters: { type: 'object', properties: { data: { type: 'object', properties: { query: { type: 'string' }, assignee: { type: 'string' } }, required: ['query','assignee'] } }, required: ['data'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'summarize_emails',
+      description: 'Summarize recent unread emails (top N) into a brief digest.',
+      parameters: { type: 'object', properties: { data: { type: 'object', properties: { limit: { type: 'number' } } } }, required: ['data'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'email_action',
+      description: 'Perform an action on an email: star, unstar, archive, trash, snooze, mark_read, mark_unread, forward, unsubscribe.',
+      parameters: { type: 'object', properties: { data: { type: 'object', properties: { messageId: { type: 'string' }, query: { type: 'string', description: 'Subject fragment if no messageId' }, action: { type: 'string', enum: ['star','unstar','archive','trash','snooze','mark_read','mark_unread','forward','unsubscribe'] }, snoozeUntil: { type: 'string', description: 'ISO datetime for snooze' }, forwardTo: { type: 'string' } }, required: ['action'] } }, required: ['data'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'period_log',
+      description: 'Log a period entry (start/end, flow, symptoms).',
+      parameters: { type: 'object', properties: { data: { type: 'object', properties: { date: { type: 'string' }, flow: { type: 'string', enum: ['light','medium','heavy'] }, symptoms: { type: 'array', items: { type: 'string' } }, notes: { type: 'string' } } } }, required: ['data'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'fasting_log',
+      description: 'Log a fast (start/end times, type).',
+      parameters: { type: 'object', properties: { data: { type: 'object', properties: { startedAt: { type: 'string' }, endedAt: { type: 'string' }, type: { type: 'string' }, notes: { type: 'string' } } } }, required: ['data'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'pantry',
+      description: 'Manage household pantry inventory: add, remove, list, check low-stock.',
+      parameters: { type: 'object', properties: { data: { type: 'object', properties: { action: { type: 'string', enum: ['add','remove','list','low'] }, name: { type: 'string' }, quantity: { type: 'number' }, unit: { type: 'string' }, lowThreshold: { type: 'number' } }, required: ['action'] } }, required: ['data'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'flight_track',
+      description: 'Add a flight to track (number, date) and set arrival/departure reminders.',
+      parameters: { type: 'object', properties: { data: { type: 'object', properties: { flightNumber: { type: 'string' }, date: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' } }, required: ['flightNumber','date'] } }, required: ['data'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'presence',
+      description: 'Set or query household presence ("home", "away", "work", "travel").',
+      parameters: { type: 'object', properties: { data: { type: 'object', properties: { action: { type: 'string', enum: ['set','get'] }, status: { type: 'string' }, location: { type: 'string' } }, required: ['action'] } }, required: ['data'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'budget',
+      description: 'Set or check a monthly category budget.',
+      parameters: { type: 'object', properties: { data: { type: 'object', properties: { action: { type: 'string', enum: ['set','check','list'] }, category: { type: 'string' }, amount: { type: 'number' }, month: { type: 'string', description: 'YYYY-MM, defaults to current' } }, required: ['action'] } }, required: ['data'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'meds',
+      description: 'Log a medication taken or set a recurring med reminder.',
+      parameters: { type: 'object', properties: { data: { type: 'object', properties: { action: { type: 'string', enum: ['log','schedule','list'] }, name: { type: 'string' }, dose: { type: 'string' }, time: { type: 'string' } }, required: ['action'] } }, required: ['data'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'zakat',
+      description: 'Calculate Zakat on a wealth amount (2.5%).',
+      parameters: { type: 'object', properties: { data: { type: 'object', properties: { wealth: { type: 'number' }, currency: { type: 'string' } }, required: ['wealth'] } }, required: ['data'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'timezone',
+      description: 'Look up the current local time / timezone for a city.',
+      parameters: { type: 'object', properties: { data: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] } }, required: ['data'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'currency',
+      description: 'Convert an amount between currencies via Frankfurter API.',
+      parameters: { type: 'object', properties: { data: { type: 'object', properties: { amount: { type: 'number' }, from: { type: 'string' }, to: { type: 'string' } }, required: ['amount','from','to'] } }, required: ['data'] },
+    },
+  },
 ];
 
 // Convert a native tool_calls array (OpenAI-style) into the legacy XML
