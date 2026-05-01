@@ -21,6 +21,7 @@ import { fetchLatestUndoableForUser, runUndo } from '../_shared/dori-undo.ts';
 import { buildDoriContext } from '../_shared/dori-context.ts';
 import { findTimeSlots, rankProposedSlots } from '../_shared/dori-scheduling.ts';
 import { buildWorkspaceWeeklyRecap, formatRecapForTelegram } from '../_shared/dori-recap.ts';
+import { buildSharedFamilyDigest } from '../_shared/telegram-digest.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': Deno.env.get('APP_URL') || '*',
