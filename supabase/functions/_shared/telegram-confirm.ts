@@ -110,8 +110,8 @@ export async function tgEditMessageText(
 // Emoji get their own patterns because `\b` is a word-boundary anchor and emoji
 // are non-word characters — a word-boundary regex won't match bare emoji.
 const YES_PATTERNS = [
-  /^(?:\s*)(?:y|ya|ye|yes|yep|yeah|yup|sure|ok|okay|confirm|confirmed|do it|go|go ahead|please do|approve|approved|ja|jo|jep|klar|passt|mach|mach das|mach es|bestätigen|bestätige|bestätigt)\b/i,
-  /^(?:\s*)(?:✅|👍)/,
+  /^(?:\s*)(?:y|ya|ye|yes|yep|yeah|yup|jes|jess|jeah|yess|ja|jaa|jaja|jo|jep|joa|sure|ok|okay|kk|confirm|confirmed|do it|go|go ahead|please do|approve|approved|klar|passt|mach|mach das|mach es|bestätigen|bestätige|bestätigt)\b/i,
+  /^(?:\s*)(?:✅|👍|👌)/,
 ];
 const NO_PATTERNS = [
   /^(?:\s*)(?:n|no|nope|nah|cancel|stop|reject|skip|don't|do not|nicht|nein|abbrechen|stopp|ablehnen|lass|lass stecken)\b/i,

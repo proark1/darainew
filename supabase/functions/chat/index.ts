@@ -229,7 +229,15 @@ Task JSON fields:
 - "category": "business" | "personal" | "family" | "shared"
 - "priority": "high" | "medium" | "low"
 - "dueDate": ISO date string (IMPORTANT: always set this when user mentions a date, deadline, or "starting from today")
-- "recurrenceRule": RRULE string for recurring tasks (e.g., "FREQ=WEEKLY;INTERVAL=2" for every 2 weeks, "FREQ=DAILY", "FREQ=MONTHLY")
+- "recurrenceRule": RRULE string for recurring tasks. ALWAYS emit this when the user says "every", "weekly", "monthly", etc. dueDate is the FIRST occurrence. Mapping:
+    · "every Tuesday" / "weekly on Tuesday" → "FREQ=WEEKLY;BYDAY=TU"
+    · "every Mon/Wed/Fri" → "FREQ=WEEKLY;BYDAY=MO,WE,FR"
+    · "every weekday" → "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
+    · "every other Tuesday" / "biweekly Tue" → "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU"
+    · "every day" / "daily" → "FREQ=DAILY"
+    · "every month" / "monthly" → "FREQ=MONTHLY"
+    · "every year" / "annually" → "FREQ=YEARLY"
+  Weekday codes: MO TU WE TH FR SA SU.
 - "assignee": string (OPTIONAL — only valid inside a workspace; a teammate's display name or @handle. Use the ACTIVE WORKSPACE members list to pick one)
 - "status": "backlog"|"in_progress"|"blocked"|"done" (optional)
 - "estimateMinutes": number (optional — saved as a comment "estimate: Nm" on the task)
@@ -246,7 +254,14 @@ Event JSON fields:
 - "endTime": ISO date string (required)
 - "location": string (optional)
 - "attendees": string[] (optional)
-- "recurrenceRule": RRULE string (optional, e.g., "FREQ=WEEKLY;INTERVAL=2")
+- "recurrenceRule": RRULE string. ALWAYS emit when the user says "every", "weekly", "monthly", etc. startTime is the FIRST occurrence. Same mapping as manage_task:
+    · "every Tuesday" → "FREQ=WEEKLY;BYDAY=TU"
+    · "every Wednesday from 8 to 12" → "FREQ=WEEKLY;BYDAY=WE" (startTime/endTime cover one instance)
+    · "every Mon/Wed/Fri" → "FREQ=WEEKLY;BYDAY=MO,WE,FR"
+    · "every weekday" → "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
+    · "every other Tuesday" → "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU"
+    · "every day" → "FREQ=DAILY"
+    · "every month on the 5th" → "FREQ=MONTHLY;BYMONTHDAY=5"
 - "assignee": string (OPTIONAL — a teammate's display name when inside a workspace)
 
 TOOL: find_time
@@ -757,7 +772,7 @@ Adapt your tone and suggestions based on time:
 - PERSONALIZE responses using the user's profile information
 - When adding tasks, infer the category (business/personal/family) and priority from context
 - ALWAYS include dueDate when user mentions any time reference
-- For recurring tasks, ALWAYS set both dueDate (start date) AND recurrenceRule
+- For recurring tasks/events, ALWAYS set both dueDate/startTime (the FIRST occurrence) AND recurrenceRule. Trigger phrases include "every", "weekly", "daily", "monthly", "every Tuesday", "every other week", "Mondays and Wednesdays". Do NOT create a single one-off row for a recurring request — the row must carry the RRULE so future occurrences appear automatically.
 - Always confirm what you've done after using a tool
 - Proactively offer relevant contacts when discussing travel, meetings, or networking
 - Reference the user by name when appropriate to make interactions personal
@@ -1295,6 +1310,40 @@ async function executeToolsServerSide(
   const safeJSON = (s: string) => { try { return JSON.parse(s); } catch { return null; } };
   const isoOrNull = (s?: string) => { if (!s) return null; const d = new Date(s); return isNaN(d.getTime()) ? null : d.toISOString(); };
 
+  // Human-readable short summary of an RRULE so the confirmation message
+  // tells the user "every Tuesday" was actually persisted as recurring,
+  // not as a one-off due-date. Covers the common phrasings the prompt
+  // teaches the model to emit; falls back to the raw rule for anything
+  // exotic.
+  const summarizeRRule = (rule?: string | null): string | null => {
+    if (!rule) return null;
+    const parts: Record<string, string> = {};
+    for (const seg of rule.split(';')) {
+      const [k, v] = seg.split('=');
+      if (k && v) parts[k.trim().toUpperCase()] = v.trim().toUpperCase();
+    }
+    const freq = parts.FREQ;
+    const interval = parts.INTERVAL ? parseInt(parts.INTERVAL, 10) : 1;
+    const byday = parts.BYDAY ? parts.BYDAY.split(',') : [];
+    const dayNames: Record<string, string> = {
+      MO: 'Mon', TU: 'Tue', WE: 'Wed', TH: 'Thu', FR: 'Fri', SA: 'Sat', SU: 'Sun',
+    };
+    const days = byday.map((d) => dayNames[d] || d).join(', ');
+    const every = (n: number, unit: string) =>
+      n === 1 ? `every ${unit}` : `every ${n} ${unit}s`;
+    if (freq === 'DAILY') return every(interval, 'day');
+    if (freq === 'WEEKLY') {
+      if (days) return interval === 1 ? `every ${days}` : `every ${interval} weeks on ${days}`;
+      return every(interval, 'week');
+    }
+    if (freq === 'MONTHLY') {
+      if (parts.BYMONTHDAY) return `every month on the ${parts.BYMONTHDAY}`;
+      return every(interval, 'month');
+    }
+    if (freq === 'YEARLY') return every(interval, 'year');
+    return rule;
+  };
+
   // Per-surface undo bookkeeping. Every successful mutation records a short-TTL
   // row so the Telegram surface (or the web app) can offer an Undo button.
   // Returns the undo id to attach to the corresponding ToolExecResult.
@@ -1354,9 +1403,10 @@ async function executeToolsServerSide(
           const self = opts?.workspaceMembers?.find((m) => m.user_id === userId)?.display_name || null;
           notifyAssignee(assigneeId, 'task', t.id, t.title, assigneeName, self);
         }
+        const recurrenceLabel = summarizeRRule(data.recurrenceRule);
         out.push({
           tool: 'manage_task', ok: true,
-          message: `✅ Added task: ${t.title}${t.due_date ? ` (due ${new Date(t.due_date).toLocaleString()})` : ''}${assigneeName ? ` — for ${assigneeName}` : ''}`,
+          message: `✅ Added task: ${t.title}${t.due_date ? ` (${recurrenceLabel ? `🔁 ${recurrenceLabel}, starting ` : 'due '}${new Date(t.due_date).toLocaleString()})` : ''}${assigneeName ? ` — for ${assigneeName}` : ''}`,
           data: t, undoId, entityId: t.id,
         });
       } else if (action === 'complete' && data.id) {
@@ -1418,7 +1468,12 @@ async function executeToolsServerSide(
         const assigneeName = opts?.workspaceMembers?.find((m) => m.user_id === assigneeId)?.display_name || null;
         notifyAssignee(assigneeId, 'event', e.id, e.title, assigneeName, self);
       }
-      out.push({ tool: 'schedule_event', ok: true, message: `📅 Scheduled: ${e.title} — ${new Date(e.start_time).toLocaleString()}`, data: e, undoId, entityId: e.id });
+      const recurrenceLabel = summarizeRRule(data.recurrenceRule);
+      out.push({
+        tool: 'schedule_event', ok: true,
+        message: `📅 Scheduled: ${e.title} — ${recurrenceLabel ? `🔁 ${recurrenceLabel}, starting ` : ''}${new Date(e.start_time).toLocaleString()}`,
+        data: e, undoId, entityId: e.id,
+      });
     } catch (e) { out.push({ tool: 'schedule_event', ok: false, message: `Failed: ${(e as Error).message}` }); }
   }
 
@@ -3240,6 +3295,50 @@ serve(async (req) => {
     const currentChannel = telegramUserIdHeader
       ? (tgChannelHint === 'tg_family' ? 'tg_family' : 'tg_private')
       : 'web';
+
+    // Telegram surfaces (and the voice channel) ship one user turn per
+    // request, so a follow-up like "yes" / "jes" / "do that one" arrives
+    // here with no prior assistant turn for the model to anchor on. Pull
+    // the most recent same-channel turns from the unified log and prepend
+    // them as real {role, content} messages so the AI sees what it just
+    // asked. Web already passes full history client-side, so skip the
+    // hydration there.
+    if (
+      currentChannel !== 'web'
+      && userId !== 'anonymous'
+      && Array.isArray(messages)
+      && messages.length <= 2
+    ) {
+      try {
+        const { data: priorTurns } = await supabaseAdmin
+          .from('dori_conversations')
+          .select('role, content, created_at')
+          .eq('user_id', userId)
+          .eq('channel', currentChannel)
+          .order('created_at', { ascending: false })
+          .limit(8);
+        if (priorTurns && priorTurns.length > 0) {
+          // Skip the most-recent user turn if it matches the one already
+          // in `messages` (we just logged it on the previous request and
+          // this same request re-logs it before we read).
+          const currentUserContent = messages[messages.length - 1]?.content?.trim();
+          const hydrated: Message[] = [];
+          for (const t of priorTurns) {
+            const c = String(t.content || '').trim();
+            if (!c) continue;
+            if (hydrated.length === 0 && t.role === 'user' && c === currentUserContent) continue;
+            if (t.role !== 'user' && t.role !== 'assistant') continue;
+            hydrated.push({ role: t.role, content: c });
+          }
+          // priorTurns came back newest-first; reverse for chronological order
+          // and prepend so the caller-supplied `messages` (current turn) stays last.
+          hydrated.reverse();
+          messages.unshift(...hydrated);
+        }
+      } catch (e) {
+        console.warn('[same-channel history hydration] failed', (e as Error).message);
+      }
+    }
 
     // The latest user message drives semantic recall (RAG over notes,
     // episodic memories, past tasks/events, chat turns). Without it we
