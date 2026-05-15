@@ -59,14 +59,14 @@ async function sendMessage(chatId: number, text: string, lovableKey: string, tgK
   }
 }
 
-// Download a Telegram file by id and return a base64 data URL suitable for
-// the chat function's multimodal imageUrl field.
-async function downloadTelegramFile(
+// Download a Telegram file by id and return the raw bytes. Used by the
+// document-intake path which extracts text rather than passing the file
+// straight to a multimodal model.
+async function downloadTelegramFileBytes(
   fileId: string,
-  mime: string,
   lovableKey: string,
   tgKey: string,
-): Promise<string | null> {
+): Promise<Uint8Array | null> {
   try {
     const fileRes = await tg('getFile', { file_id: fileId }, lovableKey, tgKey);
     const filePath = fileRes?.result?.file_path;
@@ -78,16 +78,51 @@ async function downloadTelegramFile(
       console.error('file download failed', dl.status);
       return null;
     }
-    const bytes = new Uint8Array(await dl.arrayBuffer());
-    // std/encoding/base64 uses a native fast path, avoids the call-stack
-    // risk of String.fromCharCode.apply(...) on large Uint8Arrays, and doesn't
-    // allocate an intermediate Array.
-    const b64 = encodeBase64(bytes);
-    return `data:${mime || 'application/octet-stream'};base64,${b64}`;
+    return new Uint8Array(await dl.arrayBuffer());
   } catch (e) {
-    console.error('downloadTelegramFile error', e);
+    console.error('downloadTelegramFileBytes error', e);
     return null;
   }
+}
+
+// Download a Telegram file by id and return a base64 data URL suitable for
+// the chat function's multimodal imageUrl field.
+async function downloadTelegramFile(
+  fileId: string,
+  mime: string,
+  lovableKey: string,
+  tgKey: string,
+): Promise<string | null> {
+  const bytes = await downloadTelegramFileBytes(fileId, lovableKey, tgKey);
+  if (!bytes) return null;
+  // std/encoding/base64 uses a native fast path, avoids the call-stack
+  // risk of String.fromCharCode.apply(...) on large Uint8Arrays, and doesn't
+  // allocate an intermediate Array.
+  const b64 = encodeBase64(bytes);
+  return `data:${mime || 'application/octet-stream'};base64,${b64}`;
+}
+
+// Minimal PDF text extraction. This is *not* a full parser — it pulls the
+// strings inside `(...)` literals from text-showing operators (Tj / TJ),
+// which covers the majority of natively-typed PDFs (contracts, statements,
+// reports). Scanned/image-only PDFs return empty and the user is told to
+// paste text. Good enough for a chat summariser; for production accuracy
+// we'd ship a real parser.
+function extractPdfText(bytes: Uint8Array): string {
+  const raw = new TextDecoder('latin1').decode(bytes);
+  const out: string[] = [];
+  // Match all "(...)" string literals, handling escaped parens. The (?:...)
+  // alternation pulls everything between balanced parens lazily.
+  const re = /\(((?:\\\)|\\\(|[^()])*)\)\s*(?:Tj|TJ)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(raw)) !== null) {
+    const s = m[1]
+      .replace(/\\\(/g, '(').replace(/\\\)/g, ')')
+      .replace(/\\n/g, '\n').replace(/\\r/g, '').replace(/\\t/g, ' ')
+      .replace(/\\\\/g, '\\');
+    if (s.trim().length > 0) out.push(s);
+  }
+  return out.join(' ').replace(/\s+/g, ' ').trim();
 }
 
 // Download a Telegram file (voice/audio) and transcribe via Gemini.
@@ -843,6 +878,47 @@ Deno.serve(async (req) => {
         photoDataUrl = await downloadTelegramFile(msg.document.file_id, msg.document.mime_type, LOVABLE_API_KEY, TELEGRAM_API_KEY);
         photoCaption = msg.caption || null;
       }
+      // ---------- PDF / TEXT DOCUMENT → cache extracted text so summarise_document can read it ----------
+      // The image branch above already covers picture documents. This branch
+      // handles real documents (contracts, statements, slides, plain text).
+      // We grab the bytes, do a cheap text extraction (text/* directly, PDF
+      // via a regex on stream-text objects), and upsert one row per user in
+      // telegram_documents. The summarise_document tool reads that row.
+      let docNote: string | null = null;
+      if (
+        !photoDataUrl
+        && msg.document
+        && typeof msg.document.mime_type === 'string'
+        && !msg.document.mime_type.startsWith('image/')
+      ) {
+        const mime = msg.document.mime_type;
+        const isText = mime.startsWith('text/') || mime === 'application/json' || mime === 'application/xml';
+        const isPdf = mime === 'application/pdf';
+        if (isText || isPdf) {
+          try {
+            const bytes = await downloadTelegramFileBytes(msg.document.file_id, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            let extracted = '';
+            if (bytes && isText) {
+              extracted = new TextDecoder('utf-8', { fatal: false }).decode(bytes).slice(0, 30_000);
+            } else if (bytes && isPdf) {
+              extracted = extractPdfText(bytes).slice(0, 30_000);
+            }
+            if (extracted.trim().length > 0) {
+              await supabase.from('telegram_documents').upsert({
+                user_id: link.user_id,
+                filename: msg.document.file_name || 'document',
+                mime_type: mime,
+                size_bytes: msg.document.file_size || null,
+                extracted_text: extracted,
+              }, { onConflict: 'user_id' });
+              docNote = `A user uploaded "${msg.document.file_name || 'a document'}" (${mime}, ${extracted.length} chars of extracted text). Briefly say you've received it (1 line) and ask whether they want a summary, a contract review, or to extract action items. If their caption already names an intent, route to the summarise_document tool with that intent.`;
+              msg.text = (msg.caption?.trim() && msg.caption.trim()) || docNote;
+            }
+          } catch (e) {
+            console.warn('document intake failed', (e as Error).message);
+          }
+        }
+      }
       // What the user *visibly* sent — the caption if any, otherwise a short
       // placeholder. Used for storage in `telegram_messages` and for follow-up
       // conversation history so a later "what was it?" sees a sensible prior
@@ -859,7 +935,7 @@ Deno.serve(async (req) => {
           || 'A user shared this picture in chat. First, briefly tell us what it is (1–2 sentences). Then, if it looks like a calendar / receipt / business card / to-do / prescription / bill, propose the matching action (add events, log expense, save contact, create tasks, save note) and queue it for confirmation. If nothing actionable, just describe what you see.';
       }
 
-      if (!msg.text && !photoDataUrl) continue;
+      if (!msg.text && !photoDataUrl && !docNote) continue;
 
       // Track if original message was voice — used later to decide voice vs text reply
       const wasVoiceMessage = !!textFromVoice;

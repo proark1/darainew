@@ -16,17 +16,23 @@ export function expandRecurrence(
   rangeStart: Date,
   rangeEnd: Date,
   endDate?: Date,
-  originalId: string = ''
+  originalId: string = '',
+  exceptions?: ReadonlySet<string>,
 ): RecurrenceInstance[] {
   const rule = parseRRuleString(rrule);
   if (!rule) return [];
 
   const instances: RecurrenceInstance[] = [];
   const effectiveEnd = endDate && isBefore(endDate, rangeEnd) ? endDate : rangeEnd;
-  
+
   let currentDate = startOfDay(new Date(startDate));
   const maxIterations = 500; // Increased safety limit for longer ranges
   let iterations = 0;
+
+  // Cheap YYYY-MM-DD key for the exception set lookup. Format must match
+  // what the manage_exception tool stores (date column → toISOString slice).
+  const ymd = (d: Date): string =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
   // If the start date is after range end, no instances to return
   if (isAfter(currentDate, effectiveEnd)) {
@@ -38,8 +44,9 @@ export function expandRecurrence(
 
     // Check if this date is within our range (use >= and <= for inclusive)
     const isInRange = !isBefore(currentDate, startOfDay(rangeStart)) && !isAfter(currentDate, effectiveEnd);
-    
-    if (isInRange) {
+    const isException = exceptions?.has(ymd(currentDate)) ?? false;
+
+    if (isInRange && !isException) {
       // For weekly recurrence with specific days, check if the day matches
       if (rule.frequency === 'weekly' && rule.daysOfWeek?.length) {
         const dayOfWeek = getDay(currentDate);
@@ -87,22 +94,26 @@ export function expandRecurrence(
 /**
  * Expand recurring items (tasks or events) into all instances within a range
  */
-export function expandRecurringItems<T extends { 
-  id: string; 
-  dueDate?: Date; 
+export function expandRecurringItems<T extends {
+  id: string;
+  dueDate?: Date;
   startTime?: Date;
-  recurrenceRule?: string; 
+  recurrenceRule?: string;
   recurrenceEnd?: Date;
 }>(
   items: T[],
   rangeStart: Date,
-  rangeEnd: Date
+  rangeEnd: Date,
+  // Map of parent id → Set of "YYYY-MM-DD" dates that should be skipped
+  // (from the recurrence_exceptions table). Optional — when omitted no
+  // dates are skipped, preserving the legacy expansion behaviour.
+  exceptionsByParentId?: ReadonlyMap<string, ReadonlySet<string>>,
 ): (T & { instanceDate?: Date; isRecurrenceInstance?: boolean })[] {
   const result: (T & { instanceDate?: Date; isRecurrenceInstance?: boolean })[] = [];
 
   items.forEach(item => {
     const itemDate = item.dueDate || item.startTime;
-    
+
     if (!item.recurrenceRule || !itemDate) {
       // Non-recurring item, include as-is if within range
       result.push(item);
@@ -114,7 +125,8 @@ export function expandRecurringItems<T extends {
         rangeStart,
         rangeEnd,
         item.recurrenceEnd,
-        item.id
+        item.id,
+        exceptionsByParentId?.get(item.id),
       );
 
       instances.forEach((instance, index) => {
@@ -124,9 +136,9 @@ export function expandRecurringItems<T extends {
           instanceDate: instance.date,
           isRecurrenceInstance: index > 0,
           ...(item.dueDate ? { dueDate: instance.date } : {}),
-          ...(item.startTime ? { 
+          ...(item.startTime ? {
             startTime: instance.date,
-            endTime: item.startTime && (item as any).endTime 
+            endTime: item.startTime && (item as any).endTime
               ? new Date(instance.date.getTime() + ((item as any).endTime.getTime() - item.startTime.getTime()))
               : undefined
           } : {}),

@@ -239,6 +239,7 @@ Task JSON fields:
     · "every year" / "annually" → "FREQ=YEARLY"
     · "every Tuesday until July" → "FREQ=WEEKLY;BYDAY=TU;UNTIL=20260731T235959Z"  (append UNTIL=YYYYMMDDTHHMMSSZ when the user gives an end date / "until X" / "for the next N weeks")
   Weekday codes: MO TU WE TH FR SA SU.
+  To SKIP a single occurrence of an already-existing recurring task/event ("not this Tuesday", "cancel just next week's class"), use the manage_exception tool — do NOT edit the RRULE.
 - "assignee": string (OPTIONAL — only valid inside a workspace; a teammate's display name or @handle. Use the ACTIVE WORKSPACE members list to pick one)
 - "status": "backlog"|"in_progress"|"blocked"|"done" (optional)
 - "estimateMinutes": number (optional — saved as a comment "estimate: Nm" on the task)
@@ -264,6 +265,7 @@ Event JSON fields:
     · "every day" → "FREQ=DAILY"
     · "every month on the 5th" → "FREQ=MONTHLY;BYMONTHDAY=5"
     · "every Tuesday until July" → "FREQ=WEEKLY;BYDAY=TU;UNTIL=20260731T235959Z" (append UNTIL=YYYYMMDDTHHMMSSZ for "until X" / "for the next N weeks")
+  To SKIP a single occurrence ("we don't have practice this Tuesday"), use the manage_exception tool — do NOT edit the RRULE.
 - "assignee": string (OPTIONAL — a teammate's display name when inside a workspace)
 
 TOOL: find_time
@@ -476,7 +478,8 @@ Settings JSON fields (all optional — only include the keys the user actually w
 - "voiceProactiveEnabled": boolean
 - "pushNotificationsEnabled": boolean
 - "enabled": boolean (master switch for ALL proactive nudges)
-Examples: "Snooze my morning digest to 9am" → {"morningBriefingTime":"09:00"}. "Quiet hours from 11pm to 7am" → {"quietHoursEnabled":true,"quietHoursStart":"23:00","quietHoursEnd":"07:00"}. "Turn off contract renewal nudges" → {"contractRenewalsEnabled":false}.
+- "timezone": IANA timezone string (e.g. "Europe/Berlin", "Asia/Tokyo") — use this when the user says "I'm in Tokyo this week, treat my schedule as Tokyo time" or "set my timezone to UTC". Persists on profiles so reminders, digests, and context all pick it up.
+Examples: "Snooze my morning digest to 9am" → {"morningBriefingTime":"09:00"}. "Quiet hours from 11pm to 7am" → {"quietHoursEnabled":true,"quietHoursStart":"23:00","quietHoursEnd":"07:00"}. "Turn off contract renewal nudges" → {"contractRenewalsEnabled":false}. "I'm in Tokyo for the week" → {"timezone":"Asia/Tokyo"}.
 
 TOOL: recent_actions
 Use this when the user asks "what did you just do" / "show your last actions".
@@ -592,11 +595,79 @@ TOOL: send_family_message
 Use this when the user wants the bot to relay a message to another family member ("tell my wife I'm late", "ask Salih if he did his homework", "let mom know dinner is at 7"). Delivered as a Telegram message from the bot to the target's linked private chat. Goes through the approval gate so the user confirms wording before it's sent.
 Format: <tool>send_family_message</tool><msg>JSON_OBJECT</msg>
 Msg JSON fields:
-- "to": string (required — the family member's name, relationship like "wife"/"mom"/"son", or workspace member display name)
+- "to": string OR string[] (required — one recipient or a list. Use a list for broadcasts like "tell everyone dinner is at 7" → ["wife", "Salih", "Asad"]. Each value can be a family member's name, relationship like "wife"/"mom"/"son", or workspace member display name. The literal string "everyone" / "family" expands to every linked workspace member except the sender.)
 - "body": string (required — the actual message to deliver; write in the recipient's preferred language when known)
 - "fromLabel": string (optional — defaults to the sender's display name; appears as "From <fromLabel>: ..." in the recipient's chat)
 
-Resolution order: (1) workspace_members display_name, (2) family_members name. If neither resolves to a Telegram-linked user, the tool reports back to the sender so they can retry with a clearer name. Do NOT use this for the sender themselves — for self-reminders use set_reminder.
+Resolution order per recipient: (1) workspace_members display_name, (2) family_members name. If a recipient doesn't resolve to a Telegram-linked user, that one is reported back to the sender; the others still go through. Do NOT use this for the sender themselves — for self-reminders use set_reminder.
+
+TOOL: family_poll
+Use this when the user wants to put a yes/no or multiple-choice question to the family group ("ask the family pizza or sushi tonight", "should we go to the lake on Sunday?"). Creates a native Telegram poll in the linked family group chat so everyone can tap to vote.
+Format: <tool>family_poll</tool><poll>JSON_OBJECT</poll>
+Poll JSON fields:
+- "question": string (required, max 300 chars)
+- "options": string[] (required, 2-10 items)
+- "anonymous": boolean (optional, default true — non-anonymous lets the user see who voted)
+- "multipleAnswers": boolean (optional, default false)
+Only works when a /linkfamily group is connected; the tool reports back if no group is linked.
+
+TOOL: manage_exception
+Use this to SKIP a single occurrence of an existing recurring task or event (without touching the RRULE). Triggers: "skip next Tuesday", "no class this week", "we're not having dinner Sunday", "cancel just tomorrow's instance".
+Format: <tool>manage_exception</tool><exception>JSON_OBJECT</exception>
+Exception JSON fields:
+- "parentKind": "task" | "event" (required)
+- "query": string (required — title fragment of the recurring parent, e.g. "Kickboxen", "team standup")
+- "date": ISO date string (required — the calendar date in the user's timezone that should be skipped)
+- "reason": string (optional)
+
+TOOL: manage_focus
+Time tracking — start/stop deep-work sessions and answer "how much time on X this week".
+Format: <tool>manage_focus</tool><action>start|stop|query</action><focus>JSON_OBJECT</focus>
+Focus JSON fields:
+- For action=start: "taskQuery": string (optional — title fragment of the task you're working on) OR "label": string (when not tied to a task). "category": "business"|"personal"|"family"|"shared"|"focus" (optional, default "focus").
+- For action=stop: no fields needed (closes the user's currently open session).
+- For action=query: "since": ISO date or "this_week"|"today"|"last_7_days"|"last_30_days" (required), "taskQuery": string (optional — narrows to one task).
+
+TOOL: fetch_url
+Use when the user pastes a URL and asks to summarise it, save it as a note, or extract action items.
+Format: <tool>fetch_url</tool><url>JSON_OBJECT</url>
+URL JSON fields:
+- "url": string (required)
+- "intent": "summarise" | "save_note" | "extract_tasks" (optional, default "summarise")
+
+TOOL: summarise_document
+Use when the user has uploaded a PDF/document to Telegram (it arrives as a multimodal attachment with mime application/pdf or text/*) and asks for a summary, contract review, or action extraction. The tool reads the cached text from the latest document, runs a structured analysis pass, and can optionally save a note + create tasks. Skip if the user only said "save it" — use manage_note instead.
+Format: <tool>summarise_document</tool><doc>JSON_OBJECT</doc>
+Doc JSON fields:
+- "intent": "summary" | "contract_review" | "extract_tasks" (required)
+- "saveNote": boolean (optional — also writes the summary to a note when true)
+
+TOOL: translate
+Translate arbitrary text (NOT a stored email — for email translation use email_action). The model can also just respond in the target language, but emit this tool when the user explicitly asks ("translate this sentence to Turkish", "say it in German").
+Format: <tool>translate</tool><translate>{"text":"...","targetLang":"tr"|"de"|"en"|"fr"|"es"|"ar"|"it"|"pt"|"ru"|"zh"}</translate>
+
+TOOL: rewrite_text
+Use this to rewrite arbitrary text in a different tone or length — works for emails before send, messages before broadcast, or notes the user is drafting.
+Format: <tool>rewrite_text</tool><rewrite>JSON_OBJECT</rewrite>
+Rewrite JSON fields:
+- "text": string (required)
+- "tone": "formal"|"casual"|"friendly"|"brief"|"warm"|"firm" (optional)
+- "length": "shorter"|"longer"|"same" (optional, default "same")
+- "language": ISO language code (optional — defaults to the input's language)
+
+TOOL: email_to_task
+Use this when the user pastes / forwards an email and says "turn this into a task" / "make a to-do out of this" / "remind me to follow up on this email".
+Format: <tool>email_to_task</tool><e2t>JSON_OBJECT</e2t>
+JSON fields:
+- "subject": string (required — the email subject or a short title)
+- "body": string (required — the email content; will be stored as the task description)
+- "from": string (optional — sender name/email; appended to the task description)
+- "dueDate": ISO date string (optional — when the AI infers a deadline from the body)
+- "priority": "high" | "medium" | "low" (optional, default medium)
+
+TOOL: get_capabilities
+Use this when the user asks "what can you do?" / "help" / "what are your features?" / "list your commands". Returns the structured capability sheet so you can summarise it back in the user's language.
+Format: <tool>get_capabilities</tool><q>{}</q>
 
 TOOL: get_summary
 Use this to retrieve a summary of specific data the user asks about.
@@ -1528,6 +1599,26 @@ async function executeToolsServerSide(
     try {
       const start = isoOrNull(data.startTime)!;
       const end = isoOrNull(data.endTime) || new Date(new Date(start).getTime() + 60 * 60 * 1000).toISOString();
+      // Inline conflict probe: warn (don't block) if the requested window
+      // overlaps any existing event for this user. Cheap query, fires
+      // before the insert so the confirmation message can flag it.
+      let conflictNote = '';
+      try {
+        const { data: clash } = await supabase.from('events')
+          .select('id, title, start_time, end_time')
+          .eq('user_id', userId)
+          .lt('start_time', end)
+          .gt('end_time', start)
+          .order('start_time').limit(2);
+        if (clash && clash.length > 0) {
+          const first = clash[0];
+          const when = new Date(first.start_time).toLocaleString('en-GB', {
+            weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+            timeZone: opts?.timezone,
+          });
+          conflictNote = ` ⚠️ Overlaps "${first.title}" (${when})${clash.length > 1 ? ` and ${clash.length - 1} more` : ''}`;
+        }
+      } catch (e) { console.warn('schedule_event conflict probe failed', (e as Error).message); }
       const assigneeId = resolveAssignee(data.assignee, opts?.workspaceMembers);
       const { data: e, error } = await insertWithSchemaCacheFallback(
         supabase,
@@ -1552,7 +1643,7 @@ async function executeToolsServerSide(
       const recurrenceLabel = summarizeRRule(data.recurrenceRule);
       out.push({
         tool: 'schedule_event', ok: true,
-        message: `📅 Scheduled: ${e.title} — ${recurrenceLabel ? `🔁 ${recurrenceLabel}, starting ` : ''}${new Date(e.start_time).toLocaleString()}`,
+        message: `📅 Scheduled: ${e.title} — ${recurrenceLabel ? `🔁 ${recurrenceLabel}, starting ` : ''}${new Date(e.start_time).toLocaleString()}${conflictNote}`,
         data: e, undoId, entityId: e.id,
       });
     } catch (e) { out.push({ tool: 'schedule_event', ok: false, message: `Failed: ${(e as Error).message}` }); }
@@ -2784,14 +2875,30 @@ async function executeToolsServerSide(
           friendlyChanges.push(`${inKey} → ${val ? 'on' : 'off'}`);
         }
       }
-      if (Object.keys(upd).length === 0) {
+      // Timezone lives on profiles, not proactive_settings — handle it
+      // separately so the rest of the proactive_settings upsert stays clean.
+      if (typeof (data as any).timezone === 'string') {
+        const tz = String((data as any).timezone).trim();
+        // Quick sanity check via Intl — invalid tz strings throw.
+        let tzValid = false;
+        try { new Intl.DateTimeFormat('en', { timeZone: tz }); tzValid = true; } catch { /* invalid */ }
+        if (tzValid) {
+          await supabase.from('profiles').update({ timezone: tz }).eq('user_id', userId);
+          friendlyChanges.push(`timezone → ${tz}`);
+        } else {
+          friendlyChanges.push(`timezone → (rejected, not a valid IANA name)`);
+        }
+      }
+      if (Object.keys(upd).length === 0 && friendlyChanges.length === 0) {
         out.push({ tool: 'manage_settings', ok: false, message: 'No valid setting fields provided.' });
         continue;
       }
-      // Upsert so first-time users get a row created automatically.
-      const { error } = await supabase.from('proactive_settings')
-        .upsert({ user_id: userId, ...upd, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
-      if (error) throw error;
+      if (Object.keys(upd).length > 0) {
+        // Upsert so first-time users get a row created automatically.
+        const { error } = await supabase.from('proactive_settings')
+          .upsert({ user_id: userId, ...upd, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+        if (error) throw error;
+      }
       out.push({
         tool: 'manage_settings', ok: true,
         message: `⚙️ Updated settings: ${friendlyChanges.join(', ')}`,
@@ -2809,70 +2916,27 @@ async function executeToolsServerSide(
       continue;
     }
     try {
-      const recipientName = String(data.to).trim();
+      // Accept either a single string or an array; "everyone" / "family" /
+      // "all" expand to the full workspace member list (sender excluded).
+      const raw = Array.isArray(data.to) ? data.to.map(String) : [String(data.to)];
+      const recipientNames: string[] = [];
+      for (const r of raw) {
+        const lower = r.trim().toLowerCase();
+        if (['everyone', 'family', 'all', 'all of us'].includes(lower)) {
+          if (opts?.workspaceMembers?.length) {
+            for (const wm of opts.workspaceMembers) {
+              if (wm.user_id !== userId && wm.display_name) recipientNames.push(wm.display_name);
+            }
+          }
+        } else if (r.trim().length > 0) {
+          recipientNames.push(r.trim());
+        }
+      }
+      if (recipientNames.length === 0) {
+        out.push({ tool: 'send_family_message', ok: false, message: 'No recipients resolved (try a specific name or invite them to the workspace first).' });
+        continue;
+      }
       const bodyText = String(data.body).slice(0, 3500);
-      // 1) Try workspace members (covers the family-as-workspace case where
-      //    everyone has their own login + Telegram link).
-      let recipientUserId: string | null = null;
-      let recipientDisplay = recipientName;
-      if (opts?.workspaceMembers?.length) {
-        const matchByName = opts.workspaceMembers.find((wm) => {
-          const dn = (wm.display_name || '').toLowerCase();
-          return dn === recipientName.toLowerCase() || dn.includes(recipientName.toLowerCase());
-        });
-        if (matchByName) {
-          recipientUserId = matchByName.user_id;
-          recipientDisplay = matchByName.display_name || recipientName;
-        }
-      }
-      // 2) Fall back to family_members lookup. Map relationship words
-      //    ("wife", "husband", "mom", "dad", "son", "daughter") onto stored
-      //    relationship values so "tell my wife" works without a name.
-      if (!recipientUserId) {
-        const relMap: Record<string, string[]> = {
-          wife: ['spouse'], husband: ['spouse'], partner: ['spouse'],
-          mom: ['parent'], mum: ['parent'], mother: ['parent'],
-          dad: ['parent'], father: ['parent'],
-          son: ['child'], daughter: ['child'], kid: ['child'],
-          brother: ['sibling'], sister: ['sibling'],
-        };
-        const rels = relMap[recipientName.toLowerCase()];
-        let famQuery = supabase.from('family_members')
-          .select('id, name, email, phone, notes, relationship')
-          .eq('user_id', userId).eq('is_active', true).limit(1);
-        if (rels && rels.length > 0) {
-          famQuery = famQuery.in('relationship', rels);
-        } else {
-          famQuery = famQuery.ilike('name', `%${recipientName}%`);
-        }
-        const { data: famRow } = await famQuery;
-        const fam = famRow?.[0];
-        if (fam) {
-          recipientDisplay = fam.name || recipientName;
-          // The family_members row doesn't itself carry a user_id of the
-          // member; we cannot reach a Telegram chat without one. Report
-          // gracefully so the user knows to invite that person to the
-          // workspace if they want bot-relayed messages.
-        }
-      }
-      if (!recipientUserId) {
-        out.push({
-          tool: 'send_family_message', ok: false,
-          message: `I couldn't find a Telegram-linked account for "${recipientName}". They need to be a workspace member with /linkbot done in this bot before I can relay messages to them.`,
-        });
-        continue;
-      }
-      // 3) Resolve recipient's private Telegram chat_id.
-      const { data: link } = await supabase.from('telegram_links')
-        .select('chat_id, is_active').eq('user_id', recipientUserId).maybeSingle();
-      if (!link?.chat_id || link.is_active === false) {
-        out.push({
-          tool: 'send_family_message', ok: false,
-          message: `${recipientDisplay} hasn't linked Telegram with the bot yet — ask them to send /linkbot to enable relayed messages.`,
-        });
-        continue;
-      }
-      // 4) Post via the connector gateway. Same auth shape sendDoriReply uses.
       let senderName = data.fromLabel as string | undefined;
       if (!senderName) {
         const { data: senderProfile } = await supabase.from('profiles')
@@ -2886,29 +2950,568 @@ async function executeToolsServerSide(
         out.push({ tool: 'send_family_message', ok: false, message: 'Telegram bot credentials are not configured server-side.' });
         continue;
       }
+      const relMap: Record<string, string[]> = {
+        wife: ['spouse'], husband: ['spouse'], partner: ['spouse'],
+        mom: ['parent'], mum: ['parent'], mother: ['parent'],
+        dad: ['parent'], father: ['parent'],
+        son: ['child'], daughter: ['child'], kid: ['child'],
+        brother: ['sibling'], sister: ['sibling'],
+      };
       const composed = `💬 <b>From ${fromLabel}</b>\n${bodyText}`;
-      const res = await fetch('https://connector-gateway.lovable.dev/telegram/sendMessage', {
+      const delivered: string[] = [];
+      const failures: string[] = [];
+      for (const recipientName of recipientNames) {
+        // 1) Workspace member by display name.
+        let recipientUserId: string | null = null;
+        let recipientDisplay = recipientName;
+        if (opts?.workspaceMembers?.length) {
+          const matchByName = opts.workspaceMembers.find((wm) => {
+            const dn = (wm.display_name || '').toLowerCase();
+            return dn === recipientName.toLowerCase() || dn.includes(recipientName.toLowerCase());
+          });
+          if (matchByName) {
+            recipientUserId = matchByName.user_id;
+            recipientDisplay = matchByName.display_name || recipientName;
+          }
+        }
+        // 2) Family-members fallback (relationship word or name match).
+        if (!recipientUserId) {
+          const rels = relMap[recipientName.toLowerCase()];
+          let famQuery = supabase.from('family_members')
+            .select('id, name, relationship')
+            .eq('user_id', userId).eq('is_active', true).limit(1);
+          famQuery = rels && rels.length > 0
+            ? famQuery.in('relationship', rels)
+            : famQuery.ilike('name', `%${recipientName}%`);
+          const { data: famRow } = await famQuery;
+          if (famRow?.[0]) recipientDisplay = famRow[0].name || recipientName;
+        }
+        if (!recipientUserId) {
+          failures.push(`${recipientDisplay} (no linked account)`);
+          continue;
+        }
+        // 3) Their private Telegram chat_id.
+        const { data: link } = await supabase.from('telegram_links')
+          .select('chat_id, is_active').eq('user_id', recipientUserId).maybeSingle();
+        if (!link?.chat_id || link.is_active === false) {
+          failures.push(`${recipientDisplay} (Telegram not linked)`);
+          continue;
+        }
+        // 4) Deliver.
+        const res = await fetch('https://connector-gateway.lovable.dev/telegram/sendMessage', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${lovableKey}`,
+            'X-Connection-Api-Key': telegramKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ chat_id: link.chat_id, text: composed.slice(0, 4000), parse_mode: 'HTML' }),
+        });
+        if (!res.ok) {
+          failures.push(`${recipientDisplay} (HTTP ${res.status})`);
+        } else {
+          delivered.push(recipientDisplay);
+        }
+      }
+      const preview = bodyText.length > 60 ? bodyText.slice(0, 57) + '…' : bodyText;
+      const parts: string[] = [];
+      if (delivered.length > 0) parts.push(`📨 Sent to ${delivered.join(', ')}: "${preview}"`);
+      if (failures.length > 0) parts.push(`⚠️ Couldn't reach ${failures.join(', ')}.`);
+      out.push({
+        tool: 'send_family_message',
+        ok: delivered.length > 0,
+        message: parts.join(' ') || 'No recipients reached.',
+      });
+    } catch (e) {
+      out.push({ tool: 'send_family_message', ok: false, message: `Failed: ${(e as Error).message}` });
+    }
+  }
+
+  // ---------- family_poll (post a native Telegram poll into the linked family group) ----------
+  for (const m of text.matchAll(/<tool>family_poll<\/tool>\s*<poll>(\{[\s\S]*?\})<\/poll>/g)) {
+    const data = safeJSON(m[1]);
+    if (!data?.question || !Array.isArray(data.options) || data.options.length < 2) {
+      out.push({ tool: 'family_poll', ok: false, message: 'question + at least 2 options required.' });
+      continue;
+    }
+    try {
+      const options = (data.options as unknown[]).map(String).filter((s) => s.trim().length > 0).slice(0, 10);
+      if (options.length < 2) {
+        out.push({ tool: 'family_poll', ok: false, message: 'Need at least 2 non-empty options.' });
+        continue;
+      }
+      // Either the user owns the group link or they're the linked partner.
+      const { data: group } = await supabase.from('telegram_group_links')
+        .select('chat_id, title, is_active')
+        .or(`owner_user_id.eq.${userId},partner_user_id.eq.${userId}`)
+        .eq('is_active', true)
+        .maybeSingle();
+      if (!group?.chat_id) {
+        out.push({
+          tool: 'family_poll', ok: false,
+          message: "No linked family group. Add me to the group and run /linkfamily first.",
+        });
+        continue;
+      }
+      const lovableKey = Deno.env.get('LOVABLE_API_KEY');
+      const telegramKey = Deno.env.get('TELEGRAM_API_KEY');
+      if (!lovableKey || !telegramKey) {
+        out.push({ tool: 'family_poll', ok: false, message: 'Telegram bot credentials are not configured server-side.' });
+        continue;
+      }
+      const res = await fetch('https://connector-gateway.lovable.dev/telegram/sendPoll', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${lovableKey}`,
           'X-Connection-Api-Key': telegramKey,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ chat_id: link.chat_id, text: composed.slice(0, 4000), parse_mode: 'HTML' }),
+        body: JSON.stringify({
+          chat_id: group.chat_id,
+          question: String(data.question).slice(0, 300),
+          options,
+          is_anonymous: data.anonymous !== false,
+          allows_multiple_answers: !!data.multipleAnswers,
+        }),
       });
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
-        out.push({ tool: 'send_family_message', ok: false, message: `Telegram delivery failed (${res.status}): ${errText.slice(0, 200)}` });
+        out.push({ tool: 'family_poll', ok: false, message: `Poll failed (${res.status}): ${errText.slice(0, 200)}` });
         continue;
       }
       out.push({
-        tool: 'send_family_message', ok: true,
-        message: `📨 Sent to ${recipientDisplay} on Telegram: "${bodyText.length > 80 ? bodyText.slice(0, 77) + '…' : bodyText}"`,
+        tool: 'family_poll', ok: true,
+        message: `🗳️ Posted poll to ${group.title || 'family group'}: "${String(data.question).slice(0, 80)}"`,
       });
     } catch (e) {
-      out.push({ tool: 'send_family_message', ok: false, message: `Failed: ${(e as Error).message}` });
+      out.push({ tool: 'family_poll', ok: false, message: `Failed: ${(e as Error).message}` });
     }
   }
+
+  // ---------- manage_exception (skip a single occurrence of a recurring task/event) ----------
+  for (const m of text.matchAll(/<tool>manage_exception<\/tool>\s*<exception>(\{[\s\S]*?\})<\/exception>/g)) {
+    const data = safeJSON(m[1]);
+    if (!data?.parentKind || !data.query || !data.date) {
+      out.push({ tool: 'manage_exception', ok: false, message: 'parentKind, query and date are required.' });
+      continue;
+    }
+    if (data.parentKind !== 'task' && data.parentKind !== 'event') {
+      out.push({ tool: 'manage_exception', ok: false, message: 'parentKind must be "task" or "event".' });
+      continue;
+    }
+    try {
+      const table = data.parentKind === 'task' ? 'tasks' : 'events';
+      const { data: rows } = await supabase.from(table)
+        .select('id, title, recurrence_rule')
+        .eq('user_id', userId)
+        .ilike('title', `%${data.query}%`)
+        .not('recurrence_rule', 'is', null)
+        .limit(1);
+      const parent = rows?.[0];
+      if (!parent) {
+        out.push({ tool: 'manage_exception', ok: false, message: `No recurring ${data.parentKind} matches "${data.query}".` });
+        continue;
+      }
+      const exDate = (() => {
+        const d = new Date(data.date);
+        if (isNaN(d.getTime())) return null;
+        return d.toISOString().slice(0, 10);
+      })();
+      if (!exDate) {
+        out.push({ tool: 'manage_exception', ok: false, message: `Invalid date: ${data.date}` });
+        continue;
+      }
+      const { error } = await supabase.from('recurrence_exceptions').upsert({
+        user_id: userId,
+        parent_kind: data.parentKind,
+        parent_id: parent.id,
+        exception_date: exDate,
+        reason: data.reason || null,
+      }, { onConflict: 'parent_kind,parent_id,exception_date' });
+      if (error) throw error;
+      const when = new Date(exDate + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' });
+      out.push({
+        tool: 'manage_exception', ok: true,
+        message: `🚫 Skipping "${parent.title}" on ${when}.`,
+      });
+    } catch (e) {
+      out.push({ tool: 'manage_exception', ok: false, message: `Failed: ${(e as Error).message}` });
+    }
+  }
+
+  // ---------- manage_focus (time tracking) ----------
+  for (const m of text.matchAll(/<tool>manage_focus<\/tool>\s*<action>(\w+)<\/action>\s*<focus>(\{[\s\S]*?\})<\/focus>/g)) {
+    const action = m[1];
+    const data = safeJSON(m[2]) || {};
+    try {
+      if (action === 'start') {
+        // Resolve task if a query was provided.
+        let taskId: string | null = null;
+        let label = (data.label as string | undefined) || null;
+        if (data.taskQuery) {
+          const { data: tasks } = await supabase.from('tasks')
+            .select('id, title').eq('user_id', userId)
+            .ilike('title', `%${data.taskQuery}%`).limit(1);
+          if (tasks?.[0]) { taskId = tasks[0].id; label = label || tasks[0].title; }
+        }
+        if (!taskId && !label) {
+          out.push({ tool: 'manage_focus', ok: false, message: 'Provide either taskQuery or label to start a focus session.' });
+          continue;
+        }
+        const category = ['business', 'personal', 'family', 'shared', 'focus'].includes(String(data.category))
+          ? data.category : 'focus';
+        const { data: inserted, error } = await supabase.from('focus_sessions').insert({
+          user_id: userId, task_id: taskId, label,
+          category, started_at: new Date().toISOString(),
+          workspace_id: opts?.workspaceId || null,
+        }).select('id, started_at, label').single();
+        if (error) {
+          // 23505 = unique violation → already an open session.
+          if (String(error.code) === '23505') {
+            out.push({ tool: 'manage_focus', ok: false, message: 'You already have an open focus session — stop it first.' });
+            continue;
+          }
+          throw error;
+        }
+        out.push({
+          tool: 'manage_focus', ok: true,
+          message: `🎯 Focus session started: ${inserted.label || 'session'} at ${new Date(inserted.started_at).toLocaleTimeString()}`,
+          entityId: inserted.id,
+        });
+      } else if (action === 'stop') {
+        const { data: open } = await supabase.from('focus_sessions')
+          .select('id, started_at, label').eq('user_id', userId).is('ended_at', null)
+          .order('started_at', { ascending: false }).limit(1);
+        const session = open?.[0];
+        if (!session) {
+          out.push({ tool: 'manage_focus', ok: false, message: 'No open focus session to stop.' });
+          continue;
+        }
+        const endedAt = new Date().toISOString();
+        await supabase.from('focus_sessions').update({ ended_at: endedAt }).eq('id', session.id);
+        const mins = Math.max(0, Math.floor((new Date(endedAt).getTime() - new Date(session.started_at).getTime()) / 60000));
+        out.push({
+          tool: 'manage_focus', ok: true,
+          message: `🛑 Stopped: ${session.label || 'session'} — ${mins} min logged.`,
+        });
+      } else if (action === 'query') {
+        const sinceArg = String(data.since || 'this_week');
+        const now = new Date();
+        let since: Date;
+        if (sinceArg === 'today') {
+          since = new Date(now); since.setHours(0, 0, 0, 0);
+        } else if (sinceArg === 'last_7_days' || sinceArg === 'this_week') {
+          since = new Date(now.getTime() - 7 * 86400000);
+        } else if (sinceArg === 'last_30_days') {
+          since = new Date(now.getTime() - 30 * 86400000);
+        } else {
+          const parsed = new Date(sinceArg);
+          if (isNaN(parsed.getTime())) { out.push({ tool: 'manage_focus', ok: false, message: `Unrecognised since: ${sinceArg}` }); continue; }
+          since = parsed;
+        }
+        let q = supabase.from('focus_sessions')
+          .select('label, task_id, duration_minutes, started_at, tasks(title)')
+          .eq('user_id', userId).not('ended_at', 'is', null)
+          .gte('started_at', since.toISOString());
+        if (data.taskQuery) {
+          // Filter by task title via a separate lookup since PostgREST joins
+          // don't ilike across the joined table easily.
+          const { data: t } = await supabase.from('tasks').select('id')
+            .eq('user_id', userId).ilike('title', `%${data.taskQuery}%`).limit(20);
+          const ids = (t || []).map((r: any) => r.id);
+          if (ids.length === 0) { out.push({ tool: 'manage_focus', ok: true, message: `📊 No focus time logged on "${data.taskQuery}" since ${since.toLocaleDateString()}.` }); continue; }
+          q = q.in('task_id', ids);
+        }
+        const { data: rows } = await q;
+        const sessions = rows || [];
+        const totalMin = sessions.reduce((n: number, r: any) => n + (r.duration_minutes || 0), 0);
+        // Group by task title (or free-text label).
+        const buckets: Record<string, number> = {};
+        for (const r of sessions as any[]) {
+          const key = r.tasks?.title || r.label || '(unnamed)';
+          buckets[key] = (buckets[key] || 0) + (r.duration_minutes || 0);
+        }
+        const topLines = Object.entries(buckets)
+          .sort((a, b) => b[1] - a[1]).slice(0, 5)
+          .map(([k, v]) => `  • ${k}: ${Math.floor(v / 60)}h ${v % 60}m`);
+        out.push({
+          tool: 'manage_focus', ok: true,
+          message: `📊 Focus since ${since.toLocaleDateString()}: ${Math.floor(totalMin / 60)}h ${totalMin % 60}m across ${sessions.length} session${sessions.length === 1 ? '' : 's'}.\n${topLines.join('\n')}`.trim(),
+        });
+      } else {
+        out.push({ tool: 'manage_focus', ok: false, message: `Unknown action "${action}". Use start/stop/query.` });
+      }
+    } catch (e) {
+      out.push({ tool: 'manage_focus', ok: false, message: `Failed: ${(e as Error).message}` });
+    }
+  }
+
+  // ---------- fetch_url (pull a webpage and summarise / save) ----------
+  for (const m of text.matchAll(/<tool>fetch_url<\/tool>\s*<url>(\{[\s\S]*?\})<\/url>/g)) {
+    const data = safeJSON(m[1]); if (!data?.url) {
+      out.push({ tool: 'fetch_url', ok: false, message: 'URL is required.' });
+      continue;
+    }
+    try {
+      let url: URL;
+      try { url = new URL(String(data.url)); } catch {
+        out.push({ tool: 'fetch_url', ok: false, message: `Invalid URL: ${data.url}` });
+        continue;
+      }
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        out.push({ tool: 'fetch_url', ok: false, message: 'Only http(s) URLs are allowed.' });
+        continue;
+      }
+      // Cheap fetch with a short timeout and a sensible UA. We strip HTML
+      // server-side rather than passing megabytes to the model.
+      const controller = new AbortController();
+      const tm = setTimeout(() => controller.abort(), 12_000);
+      let html = '';
+      try {
+        const resp = await fetch(url.toString(), {
+          headers: { 'User-Agent': 'DarAI/1.0 (link summariser)' },
+          signal: controller.signal,
+        });
+        if (!resp.ok) {
+          out.push({ tool: 'fetch_url', ok: false, message: `Fetch failed: ${resp.status} ${resp.statusText}` });
+          continue;
+        }
+        const buf = await resp.text();
+        html = buf.slice(0, 200_000); // hard cap on bytes processed
+      } finally {
+        clearTimeout(tm);
+      }
+      const title = (html.match(/<title[^>]*>([^<]+)<\/title>/i) || [, ''])[1].trim().slice(0, 200) || url.hostname;
+      // Crude text extraction: strip scripts/styles, then tags. Good enough
+      // for an LLM summary; not a full reader-mode parser.
+      const stripped = html
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 8_000);
+      const intent = String(data.intent || 'summarise');
+      const lovableKey = Deno.env.get('LOVABLE_API_KEY');
+      if (!lovableKey) {
+        out.push({ tool: 'fetch_url', ok: false, message: 'AI gateway not configured server-side.' });
+        continue;
+      }
+      const askMap: Record<string, string> = {
+        summarise: 'Summarise the page in 4-6 bullet points, ending with a one-line "why it matters" framing.',
+        save_note: 'Distil the page into a note: a short title, then 3-7 key bullet points the user will scan later.',
+        extract_tasks: 'Extract concrete, actionable to-dos for the reader. Return them as a numbered list. Skip generic advice.',
+      };
+      const ask = askMap[intent] || askMap.summarise;
+      const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${lovableKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            { role: 'system', content: 'You compress webpages into useful summaries. Be specific, no fluff.' },
+            { role: 'user', content: `URL: ${url.toString()}\nTitle: ${title}\n\nContent:\n${stripped}\n\nTask: ${ask}` },
+          ],
+        }),
+      });
+      const aiJson: any = await aiResp.json().catch(() => null);
+      const reply = aiJson?.choices?.[0]?.message?.content?.trim() || '(no summary)';
+      // Optionally persist as a note if the user wanted it saved.
+      if (intent === 'save_note') {
+        try {
+          await supabase.from('notes').insert({
+            user_id: userId,
+            title: title.slice(0, 200),
+            content: `${url.toString()}\n\n${reply}`,
+            tags: ['link', 'web'],
+          });
+        } catch (e) { console.warn('fetch_url note insert failed', (e as Error).message); }
+      }
+      out.push({
+        tool: 'fetch_url', ok: true,
+        message: `🔗 ${title}\n${reply}`,
+      });
+    } catch (e) {
+      out.push({ tool: 'fetch_url', ok: false, message: `Failed: ${(e as Error).message}` });
+    }
+  }
+
+  // ---------- summarise_document (uses the latest cached document for this user) ----------
+  for (const m of text.matchAll(/<tool>summarise_document<\/tool>\s*<doc>(\{[\s\S]*?\})<\/doc>/g)) {
+    const data = safeJSON(m[1]) || {};
+    const intent = String(data.intent || 'summary');
+    try {
+      // Pull the most recent telegram_documents row for this user.
+      const { data: docRow } = await supabase.from('telegram_documents')
+        .select('id, filename, mime_type, extracted_text, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (!docRow?.extracted_text) {
+        out.push({
+          tool: 'summarise_document', ok: false,
+          message: "I don't have a recent document on file. Send the PDF (or paste the text) and try again.",
+        });
+        continue;
+      }
+      const lovableKey = Deno.env.get('LOVABLE_API_KEY');
+      if (!lovableKey) {
+        out.push({ tool: 'summarise_document', ok: false, message: 'AI gateway not configured server-side.' });
+        continue;
+      }
+      const askMap: Record<string, string> = {
+        summary: 'Summarise the document in 5-8 bullet points. End with a one-line "what to do next" framing.',
+        contract_review: 'Review this as a contract. Call out: parties, term, auto-renewal, notice period, fees, termination clauses, anything unusual. Be terse.',
+        extract_tasks: 'Extract concrete to-dos for the reader. Numbered list. Skip generic advice.',
+      };
+      const ask = askMap[intent] || askMap.summary;
+      const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${lovableKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            { role: 'system', content: 'You analyse uploaded documents. Be specific, terse, and structured.' },
+            { role: 'user', content: `Filename: ${docRow.filename}\nType: ${docRow.mime_type}\n\nContent:\n${docRow.extracted_text.slice(0, 15_000)}\n\nTask: ${ask}` },
+          ],
+        }),
+      });
+      const aiJson: any = await aiResp.json().catch(() => null);
+      const reply = aiJson?.choices?.[0]?.message?.content?.trim() || '(no analysis)';
+      if (data.saveNote) {
+        try {
+          await supabase.from('notes').insert({
+            user_id: userId,
+            title: `${docRow.filename} — ${intent}`.slice(0, 200),
+            content: reply,
+            tags: ['document', intent],
+          });
+        } catch (e) { console.warn('summarise_document note insert failed', (e as Error).message); }
+      }
+      out.push({
+        tool: 'summarise_document', ok: true,
+        message: `📄 ${docRow.filename}\n${reply}`,
+      });
+    } catch (e) {
+      out.push({ tool: 'summarise_document', ok: false, message: `Failed: ${(e as Error).message}` });
+    }
+  }
+
+  // ---------- translate (free-text translation) ----------
+  for (const m of text.matchAll(/<tool>translate<\/tool>\s*<translate>(\{[\s\S]*?\})<\/translate>/g)) {
+    const data = safeJSON(m[1]);
+    if (!data?.text || !data?.targetLang) {
+      out.push({ tool: 'translate', ok: false, message: 'text + targetLang required.' });
+      continue;
+    }
+    try {
+      const lovableKey = Deno.env.get('LOVABLE_API_KEY');
+      if (!lovableKey) { out.push({ tool: 'translate', ok: false, message: 'AI gateway not configured.' }); continue; }
+      const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${lovableKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            { role: 'system', content: 'You are a translator. Output ONLY the translation, no commentary, no quotes.' },
+            { role: 'user', content: `Translate to ${data.targetLang}:\n\n${String(data.text).slice(0, 6000)}` },
+          ],
+        }),
+      });
+      const aiJson: any = await aiResp.json().catch(() => null);
+      const reply = aiJson?.choices?.[0]?.message?.content?.trim() || '';
+      if (!reply) { out.push({ tool: 'translate', ok: false, message: 'Translation came back empty.' }); continue; }
+      out.push({ tool: 'translate', ok: true, message: `🌐 ${reply}` });
+    } catch (e) {
+      out.push({ tool: 'translate', ok: false, message: `Failed: ${(e as Error).message}` });
+    }
+  }
+
+  // ---------- rewrite_text (tone / length adjustment on arbitrary text) ----------
+  for (const m of text.matchAll(/<tool>rewrite_text<\/tool>\s*<rewrite>(\{[\s\S]*?\})<\/rewrite>/g)) {
+    const data = safeJSON(m[1]);
+    if (!data?.text) { out.push({ tool: 'rewrite_text', ok: false, message: 'text is required.' }); continue; }
+    try {
+      const lovableKey = Deno.env.get('LOVABLE_API_KEY');
+      if (!lovableKey) { out.push({ tool: 'rewrite_text', ok: false, message: 'AI gateway not configured.' }); continue; }
+      const directives: string[] = [];
+      if (data.tone) directives.push(`Tone: ${data.tone}`);
+      if (data.length && data.length !== 'same') directives.push(`Make it ${data.length}`);
+      if (data.language) directives.push(`Write in ${data.language}`);
+      directives.push('Preserve the original meaning. Output only the rewrite, no commentary.');
+      const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${lovableKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            { role: 'system', content: 'You rewrite text to spec. Output only the rewrite.' },
+            { role: 'user', content: `${directives.join('. ')}\n\nText:\n${String(data.text).slice(0, 6000)}` },
+          ],
+        }),
+      });
+      const aiJson: any = await aiResp.json().catch(() => null);
+      const reply = aiJson?.choices?.[0]?.message?.content?.trim() || '';
+      if (!reply) { out.push({ tool: 'rewrite_text', ok: false, message: 'Rewrite came back empty.' }); continue; }
+      out.push({ tool: 'rewrite_text', ok: true, message: `✏️ ${reply}` });
+    } catch (e) {
+      out.push({ tool: 'rewrite_text', ok: false, message: `Failed: ${(e as Error).message}` });
+    }
+  }
+
+  // ---------- email_to_task (forward an email and turn it into a task) ----------
+  for (const m of text.matchAll(/<tool>email_to_task<\/tool>\s*<e2t>(\{[\s\S]*?\})<\/e2t>/g)) {
+    const data = safeJSON(m[1]);
+    if (!data?.subject || !data?.body) {
+      out.push({ tool: 'email_to_task', ok: false, message: 'subject + body required.' });
+      continue;
+    }
+    try {
+      const title = String(data.subject).slice(0, 200);
+      const from = data.from ? `From: ${data.from}\n\n` : '';
+      const description = `${from}${String(data.body).slice(0, 4000)}`;
+      const due = isoOrNull(data.dueDate);
+      const priority = ['high', 'medium', 'low'].includes(String(data.priority)) ? data.priority : 'medium';
+      const { data: t, error } = await supabase.from('tasks').insert({
+        user_id: userId, title, description, category: 'business',
+        priority, due_date: due,
+        workspace_id: opts?.workspaceId || null,
+      }).select('id, title').single();
+      if (error) throw error;
+      const undoId = await undoCreate('tasks', t.id, `task from email "${t.title}"`, 'task');
+      out.push({
+        tool: 'email_to_task', ok: true,
+        message: `📧→✅ Saved as task: ${t.title}${due ? ` (due ${new Date(due).toLocaleDateString()})` : ''}`,
+        undoId, entityId: t.id,
+      });
+    } catch (e) {
+      out.push({ tool: 'email_to_task', ok: false, message: `Failed: ${(e as Error).message}` });
+    }
+  }
+
+  // ---------- get_capabilities (static feature list for "what can you do?" questions) ----------
+  for (const _m of text.matchAll(/<tool>get_capabilities<\/tool>\s*<q>(\{[\s\S]*?\})<\/q>/g)) {
+    const sections: string[] = [
+      '📅 *Calendar* — add/move/cancel events, recurring with UNTIL/EXDATE, conflict-aware scheduling, list upcoming.',
+      '✅ *Tasks* — add/update/complete, recurring rules, assignees, bulk reschedule/cancel.',
+      '⏰ *Reminders* — one-off or recurring ("every Sunday 6 PM"), snooze from notifications.',
+      '🎯 *Focus / time tracking* — start/stop focus blocks, "how much time on X this week".',
+      '👨‍👩‍👧 *Family* — store members + birthdays, send messages, broadcast, family polls.',
+      '🧠 *Memory* — long-term facts, preferences, recent entities, "forget about X".',
+      '💬 *Conversation* — multi-turn context, follow-up resolution, language switching.',
+      '🖼️ *Vision & docs* — read receipts, business cards, flyers, contracts; summarise PDFs.',
+      '🔗 *Web* — search the web, fetch a URL, summarise / extract tasks.',
+      '✍️ *Writing* — compose / draft / send email, rewrite for tone, translate to any language.',
+      '🛒 *Modules* — notes, shopping list, contacts, contracts, habits, wellbeing, goals, projects, trips, expenses, budget.',
+      '⚙️ *Settings* — morning digest time, quiet hours, per-feature nudges, locale.',
+    ];
+    out.push({
+      tool: 'get_capabilities', ok: true,
+      message: ['Here\'s what I can do:', ...sections].join('\n'),
+    });
+  }
+
+
 
   // ---------- recent_actions ----------
   for (const _m of text.matchAll(/<tool>recent_actions<\/tool>\s*<query>(\{[\s\S]*?\})<\/query>/g)) {

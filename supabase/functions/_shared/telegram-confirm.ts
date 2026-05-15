@@ -114,7 +114,11 @@ const YES_PATTERNS = [
   /^(?:\s*)(?:✅|👍|👌)/,
 ];
 const NO_PATTERNS = [
-  /^(?:\s*)(?:n|no|nope|nah|cancel|stop|reject|skip|don't|do not|nicht|nein|abbrechen|stopp|ablehnen|lass|lass stecken)\b/i,
+  // Single-word / short rejection phrases. "cancel that", "scrap it",
+  // "nevermind", "forget it" all resolve to the same intent as the
+  // ❌ Cancel button on the inline keyboard. Limit length to keep
+  // ambiguous longer messages routed to the AI instead.
+  /^(?:\s*)(?:n|no|nope|nah|cancel|cancel that|scrap (?:it|that)|nevermind|never mind|forget it|forget that|abort|drop it|kill it|stop|reject|skip|don't|do not|nicht|nein|abbrechen|stopp|ablehnen|lass|lass stecken|vergiss(?: es)?|hau weg)\b/i,
   /^(?:\s*)(?:❌|👎)/,
 ];
 
