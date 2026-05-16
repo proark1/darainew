@@ -242,3 +242,6 @@ verify_jwt = false
 
 [functions.telegram-family-morning-digest]
 verify_jwt = false
+
+[functions.telegram-weekly-briefing]
+verify_jwt = false
