@@ -9061,6 +9061,7 @@ export type Database = {
         Args: { _group_id: string; _user_id: string }
         Returns: boolean
       }
+      is_superadmin: { Args: { check_user_id: string }; Returns: boolean }
       is_workspace_admin: {
         Args: { _user_id: string; _workspace_id: string }
         Returns: boolean
