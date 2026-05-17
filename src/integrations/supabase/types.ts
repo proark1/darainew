@@ -332,14 +332,9 @@ export type Database = {
           created_at: string
           entity_id: string | null
           entity_type: string | null
-          expires_at: string | null
           id: string
-          plan_id: string | null
-          plan_step_id: string | null
           reason: string
           rejected_at: string | null
-          source: string
-          source_ref: string | null
           status: string
           user_id: string
         }
@@ -350,14 +345,9 @@ export type Database = {
           created_at?: string
           entity_id?: string | null
           entity_type?: string | null
-          expires_at?: string | null
           id?: string
-          plan_id?: string | null
-          plan_step_id?: string | null
           reason: string
           rejected_at?: string | null
-          source?: string
-          source_ref?: string | null
           status?: string
           user_id: string
         }
@@ -368,14 +358,9 @@ export type Database = {
           created_at?: string
           entity_id?: string | null
           entity_type?: string | null
-          expires_at?: string | null
           id?: string
-          plan_id?: string | null
-          plan_step_id?: string | null
           reason?: string
           rejected_at?: string | null
-          source?: string
-          source_ref?: string | null
           status?: string
           user_id?: string
         }
