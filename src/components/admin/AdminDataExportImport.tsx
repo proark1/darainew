@@ -323,6 +323,12 @@ export function AdminDataExportImport() {
               <strong>Heads up.</strong> The export downloads <em>everything</em> in the public
               schema. Treat the file like a password — it contains personal data for every user.
             </p>
+            <p className="text-xs text-muted-foreground">
+              First time?{' '}
+              <code className="text-xs">supabase functions deploy admin-data-export admin-data-import</code>{' '}
+              and apply the latest migration. Without those, the buttons above will report the
+              edge function as unreachable.
+            </p>
             <Separator className="bg-amber-500/20" />
             <ul className="space-y-1 text-muted-foreground text-xs list-disc list-inside">
               <li>

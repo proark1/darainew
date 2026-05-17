@@ -75,7 +75,16 @@ async function invokeFn<T = unknown>(name: string, body: unknown): Promise<T> {
     // Edge functions return {error: '...'} with non-2xx, supabase-js
     // surfaces both — prefer the typed body when present.
     const inner = (data as { error?: string } | null)?.error;
-    throw new Error(inner || error.message);
+    let msg = inner || error.message;
+    // FunctionsFetchError ("Failed to send a request to the Edge
+    // Function") almost always means the function isn't deployed on the
+    // target project, or a CORS preflight failed. Reword so the admin
+    // knows where to look — the generic message routinely sends people
+    // hunting for client bugs that don't exist.
+    if (!inner && /failed to send a request to the edge function/i.test(error.message)) {
+      msg = `Edge function "${name}" is unreachable. Deploy it with: supabase functions deploy ${name}`;
+    }
+    throw new Error(msg);
   }
   const innerErr = (data as { error?: string } | null)?.error;
   if (innerErr) throw new Error(innerErr);

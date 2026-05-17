@@ -92,26 +92,46 @@ export function useAdminAnalytics() {
     const startDate = dateRange.start.toISOString();
     const endDate = dateRange.end.toISOString();
 
-    // Fetch events in date range
-    const { data: eventsData } = await supabase
-      .from('analytics_events')
-      .select('*')
-      .gte('created_at', startDate)
-      .lte('created_at', endDate)
-      .order('created_at', { ascending: false });
+    // Hard cap on the unbounded scans below. Without a limit, an active
+    // project can have hundreds of thousands of events in a 7-day window
+    // and PostgREST will 500 with a statement-timeout long before all
+    // rows come back. 20k full rows is enough for the in-browser
+    // aggregation (top-events, unique-users) to be meaningful while
+    // keeping the request well under a second.
+    //
+    // Accuracy caveat: when the window has more than MAX_ROWS events,
+    // the "unique users" and event-count totals here are lower bounds.
+    // For a precise figure on a high-volume project, switch this to a
+    // server-side aggregation RPC.
+    const MAX_ROWS = 20_000;
 
-    // Fetch AI usage in date range
-    const { data: aiData } = await supabase
-      .from('ai_usage')
-      .select('*')
-      .gte('created_at', startDate)
-      .lte('created_at', endDate)
-      .order('created_at', { ascending: false });
+    // Three independent reads — fire them in parallel so the dashboard
+    // load time is bounded by the slowest, not their sum.
+    const [eventsRes, aiRes, totalUsersRes] = await Promise.all([
+      supabase
+        .from('analytics_events')
+        .select('*')
+        .gte('created_at', startDate)
+        .lte('created_at', endDate)
+        .order('created_at', { ascending: false })
+        .limit(MAX_ROWS),
+      supabase
+        .from('ai_usage')
+        .select('*')
+        .gte('created_at', startDate)
+        .lte('created_at', endDate)
+        .order('created_at', { ascending: false })
+        .limit(MAX_ROWS),
+      supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true }),
+    ]);
 
-    // Fetch all profiles for user count
-    const { count: totalUsers } = await supabase
-      .from('profiles')
-      .select('*', { count: 'exact', head: true });
+    const { data: eventsData, error: eventsErr } = eventsRes;
+    const { data: aiData, error: aiErr } = aiRes;
+    const { count: totalUsers } = totalUsersRes;
+    if (eventsErr) console.warn('[useAdminAnalytics] analytics_events:', eventsErr.message);
+    if (aiErr) console.warn('[useAdminAnalytics] ai_usage:', aiErr.message);
 
     if (eventsData) {
       setEvents(eventsData as AnalyticsEvent[]);
@@ -212,19 +232,36 @@ export function useAdminAnalytics() {
 
     if (!profiles) return;
 
-    // Get event counts per user
-    const { data: eventsData } = await supabase
-      .from('analytics_events')
-      .select('user_id, created_at')
-      .gte('created_at', startDate)
-      .lte('created_at', endDate);
+    // Higher cap than fetchOverview (50k vs 20k) because these queries
+    // only project two columns per row, so the payload — and the time
+    // PostgREST needs to assemble it — stays comparable. Same accuracy
+    // caveat as fetchOverview: per-user totals are lower bounds when
+    // the window has more than MAX_ROWS events.
+    const MAX_ROWS = 50_000;
 
-    // Get AI usage per user
-    const { data: aiData } = await supabase
-      .from('ai_usage')
-      .select('user_id, total_tokens')
-      .gte('created_at', startDate)
-      .lte('created_at', endDate);
+    // Both reads are independent of each other (and of the profiles
+    // fetch above) — run them in parallel.
+    const [eventsRes, aiRes] = await Promise.all([
+      supabase
+        .from('analytics_events')
+        .select('user_id, created_at')
+        .gte('created_at', startDate)
+        .lte('created_at', endDate)
+        .order('created_at', { ascending: false })
+        .limit(MAX_ROWS),
+      supabase
+        .from('ai_usage')
+        .select('user_id, total_tokens')
+        .gte('created_at', startDate)
+        .lte('created_at', endDate)
+        .order('created_at', { ascending: false })
+        .limit(MAX_ROWS),
+    ]);
+
+    const { data: eventsData, error: eventsErr } = eventsRes;
+    const { data: aiData, error: aiErr } = aiRes;
+    if (eventsErr) console.warn('[useAdminAnalytics] analytics_events:', eventsErr.message);
+    if (aiErr) console.warn('[useAdminAnalytics] ai_usage:', aiErr.message);
 
     const userEventCounts: Record<string, { count: number; lastActive: string }> = {};
     const userAITokens: Record<string, number> = {};
