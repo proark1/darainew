@@ -30,7 +30,15 @@ AS $$
 $$;
 
 REVOKE ALL ON FUNCTION public.is_superadmin(uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.is_superadmin(uuid) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.is_superadmin(uuid) TO anon, authenticated, service_role;
+
+-- The original is_admin (20251219094734_*.sql) was created without any
+-- grant/revoke hardening, so PUBLIC retained EXECUTE. Bring it in line
+-- with is_superadmin: lock it down, then re-grant to the roles that
+-- actually evaluate RLS (anon included so unauthenticated requests get
+-- a clean "no rows" rather than a permission error).
+REVOKE ALL ON FUNCTION public.is_admin(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_admin(uuid) TO anon, authenticated, service_role;
 
 -- analytics_events
 DROP POLICY IF EXISTS "Admins can view all analytics events" ON public.analytics_events;
