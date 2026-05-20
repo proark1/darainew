@@ -91,6 +91,14 @@ export default defineConfig(() => ({
       includeAssets: ["favicon.ico", "robots.txt"],
       manifest: false, // We use public/manifest.json
       workbox: {
+        // Take over open tabs as soon as a new SW activates instead of
+        // waiting until every tab is closed. Without these, deploys
+        // could leave users pinned to an old precached bundle for
+        // days — which is how the realtime-channel bug after #6/#7
+        // stayed visible to refreshed clients.
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MiB limit
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
         runtimeCaching: [
