@@ -2,6 +2,53 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
+// One-shot: wipe an old VitePWA service worker + its precache the
+// first time a user lands on this bundle. After the realtime-channel
+// fixes in #6/#7 we saw users stuck on the pre-fix Index chunk because
+// the old SW (registered without skipWaiting) kept serving its
+// precached assets. This unregisters every SW under our origin,
+// purges Workbox/runtime caches, and forces one reload so the next
+// page load runs entirely against the freshly-deployed bundle. Gated
+// behind `darai.sw_killswitch_v1` so it only runs once per browser.
+// Reentry-safe: the flag is set before the reload so we can't loop.
+//
+// Returns true if a reload is in flight — caller should skip
+// rendering React in that case to avoid flashing a broken state.
+const KILLSWITCH_FLAG = "darai.sw_killswitch_v1";
+function runSwKillswitchOnce(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    if (window.localStorage.getItem(KILLSWITCH_FLAG)) return false;
+  } catch {
+    return false;
+  }
+  const hasSw = "serviceWorker" in navigator;
+  const hasCaches = "caches" in window;
+  if (!hasSw && !hasCaches) {
+    try { window.localStorage.setItem(KILLSWITCH_FLAG, "1"); } catch {}
+    return false;
+  }
+  try { window.localStorage.setItem(KILLSWITCH_FLAG, "1"); } catch {}
+  void (async () => {
+    try {
+      if (hasSw) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+      if (hasCaches) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch {
+      // best-effort
+    } finally {
+      window.location.reload();
+    }
+  })();
+  return true;
+}
+const killSwitchReloading = runSwKillswitchOnce();
+
 function mountFatalOverlay(title: string, detail?: string) {
   const rootEl = document.getElementById("root");
   if (!rootEl) return;
@@ -33,9 +80,11 @@ window.addEventListener("unhandledrejection", (e: PromiseRejectionEvent) => {
   mountFatalOverlay("DarAI couldn’t start", reason);
 });
 
-try {
-  createRoot(document.getElementById("root")!).render(<App />);
-} catch (e) {
-  const err = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-  mountFatalOverlay("DarAI couldn’t start", err);
+if (!killSwitchReloading) {
+  try {
+    createRoot(document.getElementById("root")!).render(<App />);
+  } catch (e) {
+    const err = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+    mountFatalOverlay("DarAI couldn’t start", err);
+  }
 }
