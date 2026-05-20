@@ -10,17 +10,16 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
 const TELEGRAM_API_KEY = Deno.env.get("TELEGRAM_API_KEY");
 
-const GATEWAY_URL = "https://connector-gateway.lovable.dev/telegram";
 
 async function generateBrief(event: any, ctx: any): Promise<string> {
-  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const resp = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
     method: "POST",
-    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: "gemini-2.5-flash",
       messages: [
         { role: "system", content: "Generate a sharp 30-second pre-meeting brief. 3-5 bullets max. Include: who you're meeting, last interaction summary, open threads, key context. Be concise and actionable." },
         { role: "user", content: `Meeting: "${event.title}" at ${event.start_time}\nLocation: ${event.location || 'N/A'}\nDescription: ${event.description || 'none'}\n\nRelevant context:\n${JSON.stringify(ctx)}` },
@@ -34,11 +33,9 @@ async function generateBrief(event: any, ctx: any): Promise<string> {
 
 async function sendTelegramBrief(chatId: number, eventTitle: string, brief: string) {
   if (!TELEGRAM_API_KEY) return;
-  await fetch(`${GATEWAY_URL}/sendMessage`, {
+  await fetch(`https://api.telegram.org/bot${TELEGRAM_API_KEY}/sendMessage`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "X-Connection-Api-Key": TELEGRAM_API_KEY,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({

@@ -13,7 +13,7 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
+const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')!;
 const TELEGRAM_API_KEY = Deno.env.get('TELEGRAM_API_KEY')!;
 
 interface HouseholdMember {
@@ -116,7 +116,7 @@ async function logSent(supabase: any, ctx: UserCtx, type: string, key: string, m
 async function send(ctx: UserCtx, text: string) {
   await sendDoriReply({
     chatId: ctx.chatId, text, preferVoice: ctx.preferVoice,
-    lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+    telegramKey: TELEGRAM_API_KEY,
   });
 }
 
@@ -345,11 +345,11 @@ async function emailActionItems(supabase: any, ctx: UserCtx) {
     `[${i}] from="${e.from_name || e.from_email}" subject="${e.subject || ''}" snippet="${(e.snippet || '').slice(0, 240)}"`
   ).join('\n');
 
-  const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+  const aiResp = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'google/gemini-2.5-flash',
+      model: 'gemini-2.5-flash',
       messages: [
         { role: 'system', content: `You scan recent emails for the user and extract ONLY emails that need action: a todo, a direct question to answer, or a payment/invoice due. Skip newsletters, marketing, receipts of completed actions, and FYI threads. Be conservative — only flag clearly actionable items.` },
         { role: 'user', content: `Here are ${emails.length} recent emails:\n${list}\n\nReturn the action items.` },

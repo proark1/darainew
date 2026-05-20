@@ -48,7 +48,7 @@ const DEFAULT_BOT_USERNAME = 'daraibot_bot';
 
 interface DiagnosticsResult {
   version?: string;
-  envVars: { LOVABLE_API_KEY: boolean; TELEGRAM_API_KEY: boolean };
+  envVars: { GEMINI_API_KEY: boolean; TELEGRAM_API_KEY: boolean };
   botInfo: { ok: boolean; username?: string; first_name?: string; id?: number; error?: string };
   botState: { update_offset: number; updated_at: string; lastTickSeconds: number | null } | null;
   link: { is_active: boolean; chat_id: number | null; telegram_username: string | null; linked_at: string | null } | null;
@@ -535,9 +535,9 @@ export function TelegramHubPanel() {
                   : diagnostics.botInfo.error ?? 'failed'}
               />
               <DiagnosticRow
-                label="LOVABLE_API_KEY set"
-                ok={diagnostics.envVars.LOVABLE_API_KEY}
-                detail={diagnostics.envVars.LOVABLE_API_KEY ? 'yes' : 'missing — set in Edge Function secrets'}
+                label="GEMINI_API_KEY set"
+                ok={diagnostics.envVars.GEMINI_API_KEY}
+                detail={diagnostics.envVars.GEMINI_API_KEY ? 'yes' : 'missing — set in Edge Function secrets'}
               />
               <DiagnosticRow
                 label="TELEGRAM_API_KEY set"

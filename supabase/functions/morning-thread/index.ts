@@ -164,14 +164,11 @@ serve(async (req) => {
         ].join("\n\n");
 
         try {
-          const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
           const TELEGRAM_API_KEY = Deno.env.get("TELEGRAM_API_KEY");
-          if (LOVABLE_API_KEY && TELEGRAM_API_KEY) {
-            await fetch("https://connector-gateway.lovable.dev/telegram/sendMessage", {
+          if (TELEGRAM_API_KEY) {
+            await fetch(`https://api.telegram.org/bot${TELEGRAM_API_KEY}/sendMessage`, {
               method: "POST",
               headers: {
-                Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                "X-Connection-Api-Key": TELEGRAM_API_KEY,
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({

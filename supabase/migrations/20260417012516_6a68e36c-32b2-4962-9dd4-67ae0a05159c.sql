@@ -1,5 +1,5 @@
 
--- Link table: connects a Lovable user to a Telegram chat
+-- Link table: connects a Dori user to a Telegram chat
 CREATE TABLE public.telegram_links (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL UNIQUE,

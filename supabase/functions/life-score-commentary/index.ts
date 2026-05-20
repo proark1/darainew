@@ -121,7 +121,7 @@ async function callGemini(
   prevScore: number,
   factors: any[],
 ): Promise<{ headline: string; commentary: string; suggestions: any[] }> {
-  const apiKey = Deno.env.get("LOVABLE_API_KEY");
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
   if (!apiKey) {
     return {
       headline: todayScore > prevScore ? "Trending up" : "Slight dip",
@@ -133,11 +133,11 @@ async function callGemini(
   const prompt = `User Life Score: today ${todayScore}, yesterday ${prevScore}. Factors: ${JSON.stringify(factors)}. Recent checkins: ${JSON.stringify(checkins.slice(0, 3))}. Write a SHORT (max 2 sentence) commentary as Dori (warm, direct, German-context personal assistant). Return JSON: { "headline": "5-7 word headline", "commentary": "1-2 sentences", "suggestions": [{"label": "...", "action": "..."}] (0-2 items)}.`;
 
   try {
-    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const resp = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "gemini-2.5-flash",
         messages: [
           { role: "system", content: "You are Dori, a warm personal assistant. Always respond with valid JSON only." },
           { role: "user", content: prompt },

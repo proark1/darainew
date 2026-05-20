@@ -10,7 +10,7 @@
 // safely on error. Entity extraction is opportunistic; a missed
 // extraction must never block the underlying memory write.
 
-const EXTRACTION_MODEL = 'google/gemini-2.5-flash';
+const EXTRACTION_MODEL = 'gemini-2.5-flash';
 
 export type EntityKind =
   | 'person'
@@ -115,8 +115,8 @@ export async function extractEntities(text: string): Promise<ExtractionResult> {
   const cleaned = (text || '').slice(0, 8000).replace(/\s+/g, ' ').trim().slice(0, 4000);
   if (cleaned.length < 12) return { entities: [], model: null };
 
-  const lovableKey = Deno.env.get('LOVABLE_API_KEY');
-  if (!lovableKey) {
+  const geminiKey = Deno.env.get('GEMINI_API_KEY');
+  if (!geminiKey) {
     // No provider configured — silently no-op. We don't fall back to
     // direct Gemini for tool-calls; the calling layer already handles
     // the "no extraction" case gracefully.
@@ -124,10 +124,10 @@ export async function extractEntities(text: string): Promise<ExtractionResult> {
   }
 
   try {
-    const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${lovableKey}`,
+        Authorization: `Bearer ${geminiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

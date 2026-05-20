@@ -2,7 +2,7 @@
 // self-diagnose from Settings → Telegram → Diagnose.
 //
 // Checks:
-//   - Env var presence (LOVABLE_API_KEY, TELEGRAM_API_KEY) — booleans only, never values
+//   - Env var presence (GEMINI_API_KEY, TELEGRAM_API_KEY) — booleans only, never values
 //   - Telegram bot reachability via getMe (confirms TELEGRAM_API_KEY is valid)
 //   - telegram_bot_state.update_offset + updated_at (confirms cron is actually running)
 //   - Current user's personal + group link rows
@@ -14,8 +14,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const GATEWAY_URL = 'https://connector-gateway.lovable.dev/telegram';
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -23,7 +21,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY') ?? '';
+    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
     const TELEGRAM_API_KEY = Deno.env.get('TELEGRAM_API_KEY') ?? '';
 
     const authHeader = req.headers.get('Authorization');
@@ -49,26 +47,24 @@ Deno.serve(async (req) => {
 
     // 1. Env vars
     const envVars = {
-      LOVABLE_API_KEY: Boolean(LOVABLE_API_KEY),
+      GEMINI_API_KEY: Boolean(GEMINI_API_KEY),
       TELEGRAM_API_KEY: Boolean(TELEGRAM_API_KEY),
     };
 
-    // 2. getMe — confirms bot token is valid and gateway is reachable
+    // 2. getMe — confirms bot token is valid
     let botInfo: { ok: boolean; username?: string; first_name?: string; id?: number; error?: string } = { ok: false };
-    if (LOVABLE_API_KEY && TELEGRAM_API_KEY) {
+    if (TELEGRAM_API_KEY) {
       try {
-        const r = await fetch(`${GATEWAY_URL}/getMe`, {
+        const r = await fetch(`https://api.telegram.org/bot${TELEGRAM_API_KEY}/getMe`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-            'X-Connection-Api-Key': TELEGRAM_API_KEY,
             'Content-Type': 'application/json',
           },
           body: '{}',
         });
         const data = await r.json().catch(() => null);
         if (!r.ok) {
-          botInfo = { ok: false, error: `gateway ${r.status}: ${JSON.stringify(data)}` };
+          botInfo = { ok: false, error: `telegram ${r.status}: ${JSON.stringify(data)}` };
         } else if (data?.result) {
           botInfo = {
             ok: true,
@@ -83,7 +79,7 @@ Deno.serve(async (req) => {
         botInfo = { ok: false, error: e instanceof Error ? e.message : String(e) };
       }
     } else {
-      botInfo = { ok: false, error: 'missing LOVABLE_API_KEY or TELEGRAM_API_KEY' };
+      botInfo = { ok: false, error: 'missing TELEGRAM_API_KEY' };
     }
 
     // 3. Cron / bot state — updated_at moves forward every tick

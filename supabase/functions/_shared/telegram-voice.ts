@@ -2,14 +2,12 @@
 // Falls back to text if voice generation fails or message is too long.
 import { encode as base64Encode } from 'https://deno.land/std@0.168.0/encoding/base64.ts';
 
-const GATEWAY_URL = 'https://connector-gateway.lovable.dev/telegram';
 const MAX_VOICE_CHARS = 600; // ~30s at normal speed
 
 export interface SendOpts {
   chatId: number;
   text: string;
   preferVoice?: boolean;
-  lovableKey: string;
   telegramKey: string;
   // IANA-like tag from profiles.locale ("en-US", "de", "fr-FR"…). Used
   // to pick a Gemini TTS voice that suits the language. Null/undefined
@@ -43,12 +41,10 @@ function pickVoiceForLocale(locale?: string | null): string {
   }
 }
 
-async function sendText(chatId: number, text: string, lovableKey: string, telegramKey: string) {
-  await fetch(`${GATEWAY_URL}/sendMessage`, {
+async function sendText(chatId: number, text: string, telegramKey: string) {
+  await fetch(`https://api.telegram.org/bot${telegramKey}/sendMessage`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${lovableKey}`,
-      'X-Connection-Api-Key': telegramKey,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ chat_id: chatId, text: text.slice(0, 4000), parse_mode: 'HTML' }),
@@ -88,7 +84,7 @@ function pcmToWav(pcm: Uint8Array, sampleRate = 24000): Uint8Array {
 }
 
 async function generateVoiceWav(text: string, voiceName = 'Kore'): Promise<Uint8Array | null> {
-  const apiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('LOVABLE_API_KEY');
+  const apiKey = Deno.env.get('GEMINI_API_KEY');
   if (!apiKey) return null;
   try {
     const r = await fetch(
@@ -132,7 +128,6 @@ async function sendVoiceNote(
   chatId: number,
   audio: Uint8Array,
   caption: string,
-  lovableKey: string,
   telegramKey: string,
 ): Promise<boolean> {
   try {
@@ -142,11 +137,9 @@ async function sendVoiceNote(
     // directly assignable to lib.dom's BlobPart (ArrayBuffer-only) but works at runtime.
     fd.append('voice', new Blob([audio as unknown as BlobPart], { type: 'audio/wav' }), 'reply.wav');
     if (caption) fd.append('caption', caption.slice(0, 1000));
-    const r = await fetch(`${GATEWAY_URL}/sendVoice`, {
+    const r = await fetch(`https://api.telegram.org/bot${telegramKey}/sendVoice`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${lovableKey}`,
-        'X-Connection-Api-Key': telegramKey,
       },
       body: fd,
     });
@@ -166,18 +159,18 @@ async function sendVoiceNote(
  * send as a voice note (with original text as caption). Otherwise send as text.
  */
 export async function sendDoriReply(opts: SendOpts): Promise<void> {
-  const { chatId, text, preferVoice, lovableKey, telegramKey, locale } = opts;
+  const { chatId, text, preferVoice, telegramKey, locale } = opts;
   const cleanForVoice = stripHtml(text);
 
   if (preferVoice && cleanForVoice.length > 0 && cleanForVoice.length <= MAX_VOICE_CHARS) {
     const audio = await generateVoiceWav(cleanForVoice, pickVoiceForLocale(locale));
     if (audio && audio.length > 0) {
-      const ok = await sendVoiceNote(chatId, audio, text, lovableKey, telegramKey);
+      const ok = await sendVoiceNote(chatId, audio, text, telegramKey);
       if (ok) return;
     }
     // fall through to text on any failure
   }
-  await sendText(chatId, text, lovableKey, telegramKey);
+  await sendText(chatId, text, telegramKey);
 }
 
 // Base64 helper (kept here so callers don't need to import separately).

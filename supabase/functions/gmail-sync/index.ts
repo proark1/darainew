@@ -47,22 +47,22 @@ async function analyzeWithAI(
   contactContext: string,
   userName?: string
 ): Promise<Record<string, EmailAnalysis>> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY || emails.length === 0) return {};
+  const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+  if (!GEMINI_API_KEY || emails.length === 0) return {};
 
   const emailSummaries = emails.map((e, i) =>
     `${i}: From "${e.from_name}" <${e.from_email}> | Subject: "${e.subject}" | Preview: "${e.snippet?.slice(0, 120)}"`
   ).join('\n');
 
   try {
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${GEMINI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite',
+        model: 'gemini-2.5-flash-lite',
         messages: [
           {
             role: 'system',

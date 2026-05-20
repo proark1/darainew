@@ -29,7 +29,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const MODEL = 'google/gemini-2.5-flash';
+const MODEL = 'gemini-2.5-flash';
 const MAX_BLOCKS = 60;
 const KIND_VALUES = ['deep', 'shallow', 'meeting', 'admin', 'break', 'errand'];
 
@@ -170,8 +170,8 @@ serve(async (req) => {
     for (const r of (slipRes.data ?? []) as any[]) slipMap.set(r.task_id, Number(r.slip_risk));
     const stats = (statsRes.data ?? []) as any[];
 
-    const lovableKey = Deno.env.get('LOVABLE_API_KEY');
-    if (!lovableKey) return json({ error: 'AI not configured' }, 503);
+    const geminiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!geminiKey) return json({ error: 'AI not configured' }, 503);
 
     try {
       await assertWithinQuota(admin, user.id);
@@ -211,10 +211,10 @@ serve(async (req) => {
     const startMs = Date.now();
     let aiResp: Response;
     try {
-      aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      aiResp = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${lovableKey}`,
+          Authorization: `Bearer ${geminiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

@@ -1,4 +1,4 @@
-// Classifies recently-synced emails using Lovable AI Gemini Flash.
+// Classifies recently-synced emails using Gemini Flash.
 // Triggered: after gmail-sync, or via cron daily, or manually.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -7,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -102,11 +102,11 @@ Deno.serve(async (req) => {
       `[${i}] from="${e.from_name || e.from_email}" subject="${e.subject || ""}" snippet="${(e.snippet || "").slice(0, 200)}"`
     ).join("\n");
 
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiResp = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "gemini-2.5-flash",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: `Classify these ${todo.length} emails:\n${list}` },

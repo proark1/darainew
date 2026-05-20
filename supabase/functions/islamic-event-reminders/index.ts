@@ -54,13 +54,11 @@ function nextGregorianFor(hijriMonth: number, hijriDay: number, from: Date): Dat
   return null;
 }
 
-async function sendTelegramMessage(chatId: number, text: string, lovableKey: string, telegramKey: string): Promise<boolean> {
+async function sendTelegramMessage(chatId: number, text: string, telegramKey: string): Promise<boolean> {
   try {
-    const response = await fetch('https://connector-gateway.lovable.dev/telegram/sendMessage', {
+    const response = await fetch(`https://api.telegram.org/bot${telegramKey}/sendMessage`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${lovableKey}`,
-        'X-Connection-Api-Key': telegramKey,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -80,7 +78,6 @@ Deno.serve(async () => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const lovableKey = Deno.env.get('LOVABLE_API_KEY')!;
     const telegramKey = Deno.env.get('TELEGRAM_API_KEY')!;
 
     const admin = createClient(supabaseUrl, serviceKey);
@@ -186,7 +183,6 @@ Prepare your heart and increase your worship on this blessed day.
             const sent = await sendTelegramMessage(
               telegramLink.chat_id as number,
               message,
-              lovableKey,
               telegramKey
             );
 

@@ -5,7 +5,6 @@
 // can dispatch without parsing JSON. Every producer+consumer uses the helpers
 // in this file so renames / scheme changes are local to one place.
 
-const GATEWAY_URL = 'https://connector-gateway.lovable.dev/telegram';
 
 // ── Callback-data scheme ───────────────────────────────────────────────────
 //
@@ -172,14 +171,11 @@ export function buildUndoKeyboard(undoId: string): Keyboard {
 export async function tgApi(
   method: string,
   body: Record<string, unknown>,
-  lovableKey: string,
   telegramKey: string,
 ): Promise<Response> {
-  return fetch(`${GATEWAY_URL}/${method}`, {
+  return fetch(`https://api.telegram.org/bot${telegramKey}/${method}`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${lovableKey}`,
-      'X-Connection-Api-Key': telegramKey,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
@@ -190,14 +186,12 @@ export async function tgEditReplyMarkup(
   chatId: number,
   messageId: number,
   keyboard: Keyboard | null,
-  lovableKey: string,
   telegramKey: string,
 ): Promise<void> {
   try {
     await tgApi(
       'editMessageReplyMarkup',
       { chat_id: chatId, message_id: messageId, reply_markup: keyboard || { inline_keyboard: [] } },
-      lovableKey,
       telegramKey,
     );
   } catch (e) {

@@ -5,8 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const GATEWAY_URL = 'https://connector-gateway.lovable.dev/telegram';
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
+const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')!;
 const TELEGRAM_API_KEY = Deno.env.get('TELEGRAM_API_KEY')!;
 
 const COMMANDS = [
@@ -85,11 +84,9 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    const r = await fetch(`${GATEWAY_URL}/setMyCommands`, {
+    const r = await fetch(`https://api.telegram.org/bot${TELEGRAM_API_KEY}/setMyCommands`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'X-Connection-Api-Key': TELEGRAM_API_KEY,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ commands: COMMANDS }),

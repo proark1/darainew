@@ -28,7 +28,6 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
 
-  const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
   const telegramKey = Deno.env.get('TELEGRAM_API_KEY') || '';
 
   const sinceIso = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
@@ -81,7 +80,7 @@ serve(async (req) => {
         .limit(5);
 
       // 3) Push Telegram digest if there's something the human needs to decide on.
-      if (u.telegram_chat_id && actionEmails && actionEmails.length > 0 && lovableKey && telegramKey) {
+      if (u.telegram_chat_id && actionEmails && actionEmails.length > 0 && telegramKey) {
         // Dedupe: only send digest once per hour per user.
         const dedupKey = `email_digest_${new Date().toISOString().slice(0, 13)}`; // hour bucket
         const { data: dup } = await sb
@@ -103,7 +102,6 @@ serve(async (req) => {
             chatId: u.telegram_chat_id,
             text,
             preferVoice: false, // digests are always text — too long for voice
-            lovableKey,
             telegramKey,
           });
 
