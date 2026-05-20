@@ -14,7 +14,8 @@ type State = {
 function describeError(error: unknown) {
   if (!error) return "Unknown error";
   if (error instanceof Error) {
-    return `${error.name}: ${error.message}`;
+    const head = `${error.name}: ${error.message}`;
+    return error.stack ? `${head}\n\n${error.stack}` : head;
   }
   try {
     return JSON.stringify(error);
@@ -77,11 +78,9 @@ export class ErrorBoundary extends React.Component<Props, State> {
             The app hit an unexpected error and couldn’t render this screen.
           </p>
 
-          {import.meta.env.DEV && (
-            <pre className="mt-4 w-full overflow-auto rounded-lg border border-border bg-muted/30 p-3 text-left text-xs text-muted-foreground">
-              {errorText}
-            </pre>
-          )}
+          <pre className="mt-4 max-h-72 w-full overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-muted/30 p-3 text-left text-xs text-muted-foreground">
+            {errorText}
+          </pre>
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <Button onClick={this.handleReload}>Reload</Button>
