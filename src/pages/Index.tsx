@@ -9,7 +9,6 @@ import { useAssistantConversations } from '@/hooks/useAssistantConversations';
 import { useTaskNotifications } from '@/hooks/useTaskNotifications';
 import { useEventNotifications } from '@/hooks/useEventNotifications';
 import { useSharedItemsRealtime } from '@/hooks/useSharedItemsRealtime';
-import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications';
 import { useSpaceSharedData } from '@/hooks/useSpaceSharedData';
 import { useTags } from '@/hooks/useTags';
 import { useProjects } from '@/hooks/useProjects';
@@ -125,10 +124,7 @@ const Index = () => {
 
   // Real-time notifications for shares
   useSharedItemsRealtime({ userId: user?.id, onNewShare: loadSharedItems });
-  
-  // Real-time notifications from database (for space sharing)
-  useRealtimeNotifications(user?.id);
-  
+
   // Space shared data (from space members)
   const { 
     sharedTasks: spaceSharedTasks, 
