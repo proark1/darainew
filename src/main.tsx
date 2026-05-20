@@ -28,7 +28,17 @@ function runSwKillswitchOnce(): boolean {
     try { window.localStorage.setItem(KILLSWITCH_FLAG, "1"); } catch {}
     return false;
   }
-  try { window.localStorage.setItem(KILLSWITCH_FLAG, "1"); } catch {}
+  // Persist the flag *and confirm it stuck* before we trigger the
+  // reload. If setItem silently fails (quota, private-mode quirks)
+  // and we reload anyway, the flag wouldn't be set on the next load
+  // and the killswitch would fire again — infinite loop. Better to
+  // skip the wipe entirely than to brick the app.
+  try {
+    window.localStorage.setItem(KILLSWITCH_FLAG, "1");
+    if (window.localStorage.getItem(KILLSWITCH_FLAG) !== "1") return false;
+  } catch {
+    return false;
+  }
   void (async () => {
     try {
       if (hasSw) {
