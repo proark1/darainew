@@ -12,8 +12,8 @@
 //   - Streamed deltas leak XML to surfaces that forget to filter.
 //
 // Native function-calling fixes all three. Most modern model APIs
-// (Gemini via Lovable's gateway, OpenAI, Anthropic-via-bedrock) accept
-// an OpenAI-style `tools` array and return structured `tool_calls` on
+// (Gemini's OpenAI-compatible endpoint, OpenAI, Anthropic) accept an
+// OpenAI-style `tools` array and return structured `tool_calls` on
 // the message. The XML path stays as a fallback so we don't break
 // existing surfaces in flight; we prefer native when present.
 

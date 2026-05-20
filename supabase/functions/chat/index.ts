@@ -2280,12 +2280,12 @@ async function executeToolsServerSide(
       const target = rows?.[0];
       if (!target) { out.push({ tool: 'draft_email_reply', ok: false, message: `No email matches "${data.emailQuery}"` }); continue; }
 
-      const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-      const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+      const aiResp = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': `Bearer ${GEMINI_API_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash-lite',
+          model: 'gemini-2.5-flash-lite',
           messages: [
             { role: 'system', content: `You draft email replies. Tone: ${data.tone || 'professional'}. Keep it concise (2-5 sentences). Return only the reply body, no subject.` },
             { role: 'user', content: `Reply to email:\nFrom: ${target.from_name} <${target.from_email}>\nSubject: ${target.subject}\nContent: ${target.snippet || target.ai_summary || ''}\n\nInstruction: ${data.instruction || 'Write an appropriate reply.'}` },
@@ -3089,9 +3089,8 @@ async function executeToolsServerSide(
         senderName = senderProfile?.display_name || 'Family member';
       }
       const fromLabel = String(senderName).slice(0, 80);
-      const lovableKey = Deno.env.get('LOVABLE_API_KEY');
       const telegramKey = Deno.env.get('TELEGRAM_API_KEY');
-      if (!lovableKey || !telegramKey) {
+      if (!telegramKey) {
         out.push({ tool: 'send_family_message', ok: false, message: 'Telegram bot credentials are not configured server-side.' });
         continue;
       }
@@ -3143,11 +3142,9 @@ async function executeToolsServerSide(
           continue;
         }
         // 4) Deliver.
-        const res = await fetch('https://connector-gateway.lovable.dev/telegram/sendMessage', {
+        const res = await fetch(`https://api.telegram.org/bot${telegramKey}/sendMessage`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${lovableKey}`,
-            'X-Connection-Api-Key': telegramKey,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ chat_id: link.chat_id, text: composed.slice(0, 4000), parse_mode: 'HTML' }),
@@ -3198,17 +3195,14 @@ async function executeToolsServerSide(
         });
         continue;
       }
-      const lovableKey = Deno.env.get('LOVABLE_API_KEY');
       const telegramKey = Deno.env.get('TELEGRAM_API_KEY');
-      if (!lovableKey || !telegramKey) {
+      if (!telegramKey) {
         out.push({ tool: 'family_poll', ok: false, message: 'Telegram bot credentials are not configured server-side.' });
         continue;
       }
-      const res = await fetch('https://connector-gateway.lovable.dev/telegram/sendPoll', {
+      const res = await fetch(`https://api.telegram.org/bot${telegramKey}/sendPoll`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${lovableKey}`,
-          'X-Connection-Api-Key': telegramKey,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -3438,8 +3432,8 @@ async function executeToolsServerSide(
         .trim()
         .slice(0, 8_000);
       const intent = String(data.intent || 'summarise');
-      const lovableKey = Deno.env.get('LOVABLE_API_KEY');
-      if (!lovableKey) {
+      const geminiKey = Deno.env.get('GEMINI_API_KEY');
+      if (!geminiKey) {
         out.push({ tool: 'fetch_url', ok: false, message: 'AI gateway not configured server-side.' });
         continue;
       }
@@ -3449,11 +3443,11 @@ async function executeToolsServerSide(
         extract_tasks: 'Extract concrete, actionable to-dos for the reader. Return them as a numbered list. Skip generic advice.',
       };
       const ask = askMap[intent] || askMap.summarise;
-      const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      const aiResp = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${lovableKey}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': `Bearer ${geminiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
+          model: 'gemini-2.5-flash',
           messages: [
             { role: 'system', content: 'You compress webpages into useful summaries. Be specific, no fluff.' },
             { role: 'user', content: `URL: ${url.toString()}\nTitle: ${title}\n\nContent:\n${stripped}\n\nTask: ${ask}` },
@@ -3499,8 +3493,8 @@ async function executeToolsServerSide(
         });
         continue;
       }
-      const lovableKey = Deno.env.get('LOVABLE_API_KEY');
-      if (!lovableKey) {
+      const geminiKey = Deno.env.get('GEMINI_API_KEY');
+      if (!geminiKey) {
         out.push({ tool: 'summarise_document', ok: false, message: 'AI gateway not configured server-side.' });
         continue;
       }
@@ -3510,11 +3504,11 @@ async function executeToolsServerSide(
         extract_tasks: 'Extract concrete to-dos for the reader. Numbered list. Skip generic advice.',
       };
       const ask = askMap[intent] || askMap.summary;
-      const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      const aiResp = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${lovableKey}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': `Bearer ${geminiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
+          model: 'gemini-2.5-flash',
           messages: [
             { role: 'system', content: 'You analyse uploaded documents. Be specific, terse, and structured.' },
             { role: 'user', content: `Filename: ${docRow.filename}\nType: ${docRow.mime_type}\n\nContent:\n${docRow.extracted_text.slice(0, 15_000)}\n\nTask: ${ask}` },
@@ -3550,13 +3544,13 @@ async function executeToolsServerSide(
       continue;
     }
     try {
-      const lovableKey = Deno.env.get('LOVABLE_API_KEY');
-      if (!lovableKey) { out.push({ tool: 'translate', ok: false, message: 'AI gateway not configured.' }); continue; }
-      const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      const geminiKey = Deno.env.get('GEMINI_API_KEY');
+      if (!geminiKey) { out.push({ tool: 'translate', ok: false, message: 'AI gateway not configured.' }); continue; }
+      const aiResp = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${lovableKey}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': `Bearer ${geminiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
+          model: 'gemini-2.5-flash',
           messages: [
             { role: 'system', content: 'You are a translator. Output ONLY the translation, no commentary, no quotes.' },
             { role: 'user', content: `Translate to ${data.targetLang}:\n\n${String(data.text).slice(0, 6000)}` },
@@ -3577,18 +3571,18 @@ async function executeToolsServerSide(
     const data = safeJSON(m[1]);
     if (!data?.text) { out.push({ tool: 'rewrite_text', ok: false, message: 'text is required.' }); continue; }
     try {
-      const lovableKey = Deno.env.get('LOVABLE_API_KEY');
-      if (!lovableKey) { out.push({ tool: 'rewrite_text', ok: false, message: 'AI gateway not configured.' }); continue; }
+      const geminiKey = Deno.env.get('GEMINI_API_KEY');
+      if (!geminiKey) { out.push({ tool: 'rewrite_text', ok: false, message: 'AI gateway not configured.' }); continue; }
       const directives: string[] = [];
       if (data.tone) directives.push(`Tone: ${data.tone}`);
       if (data.length && data.length !== 'same') directives.push(`Make it ${data.length}`);
       if (data.language) directives.push(`Write in ${data.language}`);
       directives.push('Preserve the original meaning. Output only the rewrite, no commentary.');
-      const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      const aiResp = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${lovableKey}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': `Bearer ${geminiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
+          model: 'gemini-2.5-flash',
           messages: [
             { role: 'system', content: 'You rewrite text to spec. Output only the rewrite.' },
             { role: 'user', content: `${directives.join('. ')}\n\nText:\n${String(data.text).slice(0, 6000)}` },
@@ -4154,13 +4148,13 @@ async function executeToolsServerSide(
       const limit = Math.min(20, Number(data.limit) || 10);
       const { data: emails } = await supabase.from('emails').select('subject,from_email,snippet,received_at').eq('user_id', userId).eq('is_read', false).order('received_at', { ascending: false }).limit(limit);
       if (!emails?.length) { out.push({ tool: 'summarize_emails', ok: true, message: '📭 No unread emails.' }); continue; }
-      const apiKey = Deno.env.get('LOVABLE_API_KEY');
+      const apiKey = Deno.env.get('GEMINI_API_KEY');
       if (!apiKey) { out.push({ tool: 'summarize_emails', ok: false, message: 'AI key missing.' }); continue; }
       const list = emails.map((e: any, i: number) => `${i+1}. From ${e.from_email} — "${e.subject}": ${(e.snippet || '').slice(0, 200)}`).join('\n');
       const prompt = `Summarize these ${emails.length} unread emails into a 3-5 bullet briefing in the user's language. Group by topic. Highlight anything urgent.\n\n${list}`;
-      const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      const aiResp = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
         method: 'POST', headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'google/gemini-2.5-flash', messages: [{ role: 'user', content: prompt }] }),
+        body: JSON.stringify({ model: 'gemini-2.5-flash', messages: [{ role: 'user', content: prompt }] }),
       }).then(r => r.json()).catch(() => null);
       const summary = aiResp?.choices?.[0]?.message?.content || 'Summary unavailable.';
       out.push({ tool: 'summarize_emails', ok: true, message: `📧 <b>Inbox briefing (${emails.length})</b>\n${summary}` });
@@ -4595,7 +4589,7 @@ serve(async (req) => {
     let events: ChatRequest['events'] = reqBody.events;
 
     const personalityAddition = personalityPrompts[personality] || personalityPrompts.balanced;
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 
     // Resolve the active workspace server-side — but NEVER trust the caller's
     // claim without checking the authenticated user is actually a member.
@@ -4663,8 +4657,8 @@ serve(async (req) => {
       throw new Error("At least one message is required");
     }
     
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    if (!GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is not configured");
     }
 
     // Determine which channel this request is coming from (for unified memory)
@@ -5378,7 +5372,7 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
       } : null,
     });
 
-    const model = 'google/gemini-3-flash-preview';
+    const model = 'gemini-3-flash-preview';
     
     // Native function-calling is opt-in per request via a header so we
     // can roll it out one surface at a time. The legacy XML path stays
@@ -5394,10 +5388,10 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
         payload.tools = NATIVE_TOOLS;
         payload.tool_choice = 'auto';
       }
-      return fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      return fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Authorization': `Bearer ${GEMINI_API_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
@@ -5670,7 +5664,7 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
         const fullResp = await callAI(conversationMsgs, false);
         if (!fullResp.ok) {
           const t = await fullResp.text();
-          console.error(`Lovable AI (agent round ${round}) error:`, fullResp.status, t);
+          console.error(`Gemini (agent round ${round}) error:`, fullResp.status, t);
           if (round === 0) {
             return new Response(JSON.stringify({ error: 'AI service error', detail: t }), {
               status: fullResp.status === 429 ? 429 : fullResp.status === 402 ? 402 : 500,
@@ -5775,7 +5769,7 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
 
     if (!streamResponse.ok) {
       const errorText = await streamResponse.text();
-      console.error("Lovable AI error:", streamResponse.status, errorText);
+      console.error("Gemini error:", streamResponse.status, errorText);
       await logAIUsage(supabaseAdmin, userId, 'chat', model, 0, 0, 0, 'error', { error: errorText, personality });
       
       if (streamResponse.status === 429) {

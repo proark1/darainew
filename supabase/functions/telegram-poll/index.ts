@@ -27,7 +27,6 @@ import {
   runUndo,
 } from '../_shared/dori-undo.ts';
 
-const GATEWAY_URL = 'https://connector-gateway.lovable.dev/telegram';
 const MAX_RUNTIME_MS = 55_000;
 const MIN_REMAINING_MS = 5_000;
 
@@ -36,12 +35,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-async function tg(method: string, body: Record<string, unknown>, lovableKey: string, tgKey: string) {
-  const r = await fetch(`${GATEWAY_URL}/${method}`, {
+async function tg(method: string, body: Record<string, unknown>, tgKey: string) {
+  const r = await fetch(`https://api.telegram.org/bot${tgKey}/${method}`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${lovableKey}`,
-      'X-Connection-Api-Key': tgKey,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
@@ -51,9 +48,9 @@ async function tg(method: string, body: Record<string, unknown>, lovableKey: str
   return data;
 }
 
-async function sendMessage(chatId: number, text: string, lovableKey: string, tgKey: string) {
+async function sendMessage(chatId: number, text: string, tgKey: string) {
   try {
-    await tg('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' }, lovableKey, tgKey);
+    await tg('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' }, tgKey);
   } catch (e) {
     console.error('sendMessage failed:', e);
   }
@@ -64,16 +61,13 @@ async function sendMessage(chatId: number, text: string, lovableKey: string, tgK
 // straight to a multimodal model.
 async function downloadTelegramFileBytes(
   fileId: string,
-  lovableKey: string,
   tgKey: string,
 ): Promise<Uint8Array | null> {
   try {
-    const fileRes = await tg('getFile', { file_id: fileId }, lovableKey, tgKey);
+    const fileRes = await tg('getFile', { file_id: fileId }, tgKey);
     const filePath = fileRes?.result?.file_path;
     if (!filePath) return null;
-    const dl = await fetch(`${GATEWAY_URL}/file/${filePath}`, {
-      headers: { 'Authorization': `Bearer ${lovableKey}`, 'X-Connection-Api-Key': tgKey },
-    });
+    const dl = await fetch(`https://api.telegram.org/file/bot${tgKey}/${filePath}`);
     if (!dl.ok) {
       console.error('file download failed', dl.status);
       return null;
@@ -90,10 +84,9 @@ async function downloadTelegramFileBytes(
 async function downloadTelegramFile(
   fileId: string,
   mime: string,
-  lovableKey: string,
   tgKey: string,
 ): Promise<string | null> {
-  const bytes = await downloadTelegramFileBytes(fileId, lovableKey, tgKey);
+  const bytes = await downloadTelegramFileBytes(fileId, tgKey);
   if (!bytes) return null;
   // std/encoding/base64 uses a native fast path, avoids the call-stack
   // risk of String.fromCharCode.apply(...) on large Uint8Arrays, and doesn't
@@ -130,19 +123,17 @@ function extractPdfText(bytes: Uint8Array): string {
 async function transcribeTelegramVoice(
   fileId: string,
   mime: string,
-  lovableKey: string,
+  geminiKey: string,
   tgKey: string,
 ): Promise<string | null> {
   try {
     // 1) Resolve file_path
-    const fileRes = await tg('getFile', { file_id: fileId }, lovableKey, tgKey);
+    const fileRes = await tg('getFile', { file_id: fileId }, tgKey);
     const filePath = fileRes?.result?.file_path;
     if (!filePath) return null;
 
-    // 2) Download file bytes via gateway
-    const dl = await fetch(`${GATEWAY_URL}/file/${filePath}`, {
-      headers: { 'Authorization': `Bearer ${lovableKey}`, 'X-Connection-Api-Key': tgKey },
-    });
+    // 2) Download file bytes via Telegram Bot API
+    const dl = await fetch(`https://api.telegram.org/file/bot${tgKey}/${filePath}`);
     if (!dl.ok) {
       console.error('voice download failed', dl.status);
       return null;
@@ -152,13 +143,13 @@ async function transcribeTelegramVoice(
     // 3) Base64 encode via std/encoding/base64 (native, no chunking needed).
     const base64Audio = encodeBase64(bytes);
 
-    // 4) Transcribe via Lovable AI Gateway (Gemini supports audio inline as data URL)
+    // 4) Transcribe via Gemini (audio inline as data URL)
     const audioMime = mime || 'audio/ogg';
-    const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const aiRes = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${lovableKey}`, 'Content-Type': 'application/json' },
+      headers: { 'Authorization': `Bearer ${geminiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'gemini-2.5-flash',
         messages: [
           {
             role: 'system',
@@ -371,7 +362,6 @@ async function handleTaskCallback(
   cb: any,
   payload: { op: 'complete' | 'snooze1h' | 'snooze1d' | 'delete'; taskId: string },
   tappingUserId: string | undefined,
-  lovableKey: string,
   telegramKey: string,
   supabaseUrl: string,
   serviceKey: string,
@@ -379,12 +369,12 @@ async function handleTaskCallback(
   const { data: task } = await supabase.from('tasks')
     .select('*').eq('id', payload.taskId).maybeSingle();
   if (!task) {
-    await tgAnswerCallback(cb.id, 'Task not found.', lovableKey, telegramKey);
-    if (cb.message?.message_id) await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, lovableKey, telegramKey);
+    await tgAnswerCallback(cb.id, 'Task not found.', telegramKey);
+    if (cb.message?.message_id) await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, telegramKey);
     return;
   }
   if (tappingUserId && tappingUserId !== task.user_id) {
-    await tgAnswerCallback(cb.id, 'Only the owner can touch this task.', lovableKey, telegramKey);
+    await tgAnswerCallback(cb.id, 'Only the owner can touch this task.', telegramKey);
     return;
   }
 
@@ -414,13 +404,13 @@ async function handleTaskCallback(
     label: `${payload.op} task "${task.title}"`, snapshot: undoSnap,
   });
 
-  await tgAnswerCallback(cb.id, outcome.slice(0, 180), lovableKey, telegramKey);
+  await tgAnswerCallback(cb.id, outcome.slice(0, 180), telegramKey);
   if (cb.message?.message_id) {
-    await tgEditMessageText(cb.message.chat.id, cb.message.message_id, outcome, lovableKey, telegramKey);
+    await tgEditMessageText(cb.message.chat.id, cb.message.message_id, outcome, telegramKey);
     if (undoId) {
-      await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, buildUndoKeyboard(undoId), lovableKey, telegramKey);
+      await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, buildUndoKeyboard(undoId), telegramKey);
     } else {
-      await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, lovableKey, telegramKey);
+      await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, telegramKey);
     }
   }
   // Silence unused-param warning on supabaseUrl/serviceKey — kept for API uniformity.
@@ -432,18 +422,17 @@ async function handleShopCallback(
   cb: any,
   payload: { op: 'check' | 'uncheck' | 'remove'; itemId: string },
   tappingUserId: string | undefined,
-  lovableKey: string,
   telegramKey: string,
 ) {
   const { data: item } = await supabase.from('shopping_list_items')
     .select('*').eq('id', payload.itemId).maybeSingle();
   if (!item) {
-    await tgAnswerCallback(cb.id, 'Item not found.', lovableKey, telegramKey);
-    if (cb.message?.message_id) await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, lovableKey, telegramKey);
+    await tgAnswerCallback(cb.id, 'Item not found.', telegramKey);
+    if (cb.message?.message_id) await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, telegramKey);
     return;
   }
   if (tappingUserId && tappingUserId !== item.user_id) {
-    await tgAnswerCallback(cb.id, 'Only the owner can touch this item.', lovableKey, telegramKey);
+    await tgAnswerCallback(cb.id, 'Only the owner can touch this item.', telegramKey);
     return;
   }
 
@@ -468,13 +457,13 @@ async function handleShopCallback(
     label: `${payload.op} shopping item "${item.name}"`, snapshot: undoSnap,
   });
 
-  await tgAnswerCallback(cb.id, outcome.slice(0, 180), lovableKey, telegramKey);
+  await tgAnswerCallback(cb.id, outcome.slice(0, 180), telegramKey);
   if (cb.message?.message_id) {
-    await tgEditMessageText(cb.message.chat.id, cb.message.message_id, outcome, lovableKey, telegramKey);
+    await tgEditMessageText(cb.message.chat.id, cb.message.message_id, outcome, telegramKey);
     if (undoId) {
-      await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, buildUndoKeyboard(undoId), lovableKey, telegramKey);
+      await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, buildUndoKeyboard(undoId), telegramKey);
     } else {
-      await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, lovableKey, telegramKey);
+      await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, telegramKey);
     }
   }
 }
@@ -484,18 +473,17 @@ async function handleEventCallback(
   cb: any,
   payload: { op: 'details' | 'cancel'; eventId: string },
   tappingUserId: string | undefined,
-  lovableKey: string,
   telegramKey: string,
 ) {
   const { data: ev } = await supabase.from('events')
     .select('*').eq('id', payload.eventId).maybeSingle();
   if (!ev) {
-    await tgAnswerCallback(cb.id, 'Event not found.', lovableKey, telegramKey);
-    if (cb.message?.message_id) await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, lovableKey, telegramKey);
+    await tgAnswerCallback(cb.id, 'Event not found.', telegramKey);
+    if (cb.message?.message_id) await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, telegramKey);
     return;
   }
   if (tappingUserId && tappingUserId !== ev.user_id) {
-    await tgAnswerCallback(cb.id, 'Only the owner can touch this event.', lovableKey, telegramKey);
+    await tgAnswerCallback(cb.id, 'Only the owner can touch this event.', telegramKey);
     return;
   }
 
@@ -506,9 +494,9 @@ async function handleEventCallback(
       ev.location ? `📍 ${ev.location}` : '',
       ev.description ? `\n${ev.description}` : '',
     ].filter(Boolean).join('\n');
-    await tgAnswerCallback(cb.id, '', lovableKey, telegramKey);
+    await tgAnswerCallback(cb.id, '', telegramKey);
     if (cb.message?.message_id) {
-      await tgEditMessageText(cb.message.chat.id, cb.message.message_id, details, lovableKey, telegramKey);
+      await tgEditMessageText(cb.message.chat.id, cb.message.message_id, details, telegramKey);
     }
   } else if (payload.op === 'cancel') {
     await supabase.from('events').delete().eq('id', ev.id);
@@ -517,13 +505,13 @@ async function handleEventCallback(
       label: `cancelled event "${ev.title}"`,
       snapshot: { kind: 'reinsert', table: 'events', row: ev },
     });
-    await tgAnswerCallback(cb.id, '❌ Cancelled', lovableKey, telegramKey);
+    await tgAnswerCallback(cb.id, '❌ Cancelled', telegramKey);
     if (cb.message?.message_id) {
-      await tgEditMessageText(cb.message.chat.id, cb.message.message_id, `❌ Cancelled event: ${ev.title}`, lovableKey, telegramKey);
+      await tgEditMessageText(cb.message.chat.id, cb.message.message_id, `❌ Cancelled event: ${ev.title}`, telegramKey);
       if (undoId) {
-        await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, buildUndoKeyboard(undoId), lovableKey, telegramKey);
+        await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, buildUndoKeyboard(undoId), telegramKey);
       } else {
-        await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, lovableKey, telegramKey);
+        await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, telegramKey);
       }
     }
   }
@@ -534,18 +522,17 @@ async function handleContractCallback(
   cb: any,
   payload: { op: 'snooze7' | 'handled' | 'details'; contractId: string },
   tappingUserId: string | undefined,
-  lovableKey: string,
   telegramKey: string,
 ) {
   const { data: c } = await supabase.from('contracts')
     .select('*').eq('id', payload.contractId).maybeSingle();
   if (!c) {
-    await tgAnswerCallback(cb.id, 'Contract not found.', lovableKey, telegramKey);
-    if (cb.message?.message_id) await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, lovableKey, telegramKey);
+    await tgAnswerCallback(cb.id, 'Contract not found.', telegramKey);
+    if (cb.message?.message_id) await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, telegramKey);
     return;
   }
   if (tappingUserId && tappingUserId !== c.user_id) {
-    await tgAnswerCallback(cb.id, 'Only the owner can touch this contract.', lovableKey, telegramKey);
+    await tgAnswerCallback(cb.id, 'Only the owner can touch this contract.', telegramKey);
     return;
   }
 
@@ -557,9 +544,9 @@ async function handleContractCallback(
       c.end_date ? `🏁 Ends ${new Date(c.end_date).toLocaleDateString()}` : '',
       c.notes ? `\n${c.notes}` : '',
     ].filter(Boolean).join('\n');
-    await tgAnswerCallback(cb.id, '', lovableKey, telegramKey);
+    await tgAnswerCallback(cb.id, '', telegramKey);
     if (cb.message?.message_id) {
-      await tgEditMessageText(cb.message.chat.id, cb.message.message_id, details, lovableKey, telegramKey);
+      await tgEditMessageText(cb.message.chat.id, cb.message.message_id, details, telegramKey);
     }
   } else if (payload.op === 'handled' || payload.op === 'snooze7') {
     const newReminder = payload.op === 'handled'
@@ -574,13 +561,13 @@ async function handleContractCallback(
     const text = payload.op === 'handled'
       ? `✅ Marked "${c.name}" as handled.`
       : `⏰ Snoozed "${c.name}" for 7 days.`;
-    await tgAnswerCallback(cb.id, payload.op === 'handled' ? '✅ Marked handled' : '⏰ Snoozed 7 days', lovableKey, telegramKey);
+    await tgAnswerCallback(cb.id, payload.op === 'handled' ? '✅ Marked handled' : '⏰ Snoozed 7 days', telegramKey);
     if (cb.message?.message_id) {
-      await tgEditMessageText(cb.message.chat.id, cb.message.message_id, text, lovableKey, telegramKey);
+      await tgEditMessageText(cb.message.chat.id, cb.message.message_id, text, telegramKey);
       if (undoId) {
-        await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, buildUndoKeyboard(undoId), lovableKey, telegramKey);
+        await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, buildUndoKeyboard(undoId), telegramKey);
       } else {
-        await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, lovableKey, telegramKey);
+        await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, telegramKey);
       }
     }
   }
@@ -595,7 +582,6 @@ async function handlePlanCallback(
   cb: any,
   payload: { op: 'run_next' | 'skip' | 'abort'; planId: string },
   tappingUserId: string | undefined,
-  lovableKey: string,
   telegramKey: string,
   supabaseUrl: string,
   serviceKey: string,
@@ -606,14 +592,14 @@ async function handlePlanCallback(
     .eq('id', payload.planId)
     .maybeSingle();
   if (!plan) {
-    await tgAnswerCallback(cb.id, 'Plan not found.', lovableKey, telegramKey);
+    await tgAnswerCallback(cb.id, 'Plan not found.', telegramKey);
     if (cb.message?.message_id) {
-      await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, lovableKey, telegramKey);
+      await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, telegramKey);
     }
     return;
   }
   if (tappingUserId && tappingUserId !== plan.user_id) {
-    await tgAnswerCallback(cb.id, 'Only the owner can drive this plan.', lovableKey, telegramKey);
+    await tgAnswerCallback(cb.id, 'Only the owner can drive this plan.', telegramKey);
     return;
   }
 
@@ -657,18 +643,18 @@ async function handlePlanCallback(
     resultText = `⚠️ ${(e as Error).message}`;
   }
 
-  await tgAnswerCallback(cb.id, updateOk ? '' : 'Failed', lovableKey, telegramKey);
+  await tgAnswerCallback(cb.id, updateOk ? '' : 'Failed', telegramKey);
   if (cb.message?.message_id) {
     const header = `📋 <b>${escape(plan.title)}</b>`;
     await tgEditMessageText(
       cb.message.chat.id,
       cb.message.message_id,
       `${header}\n\n${resultText}`,
-      lovableKey, telegramKey,
+      telegramKey,
     );
     // Re-attach the keyboard unless we hit a terminal state.
     if (action === 'abort') {
-      await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, lovableKey, telegramKey);
+      await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, telegramKey);
     } else {
       try {
         const { buildPlanRowKeyboard } = await import('../_shared/telegram-inline.ts');
@@ -676,7 +662,7 @@ async function handlePlanCallback(
           cb.message.chat.id,
           cb.message.message_id,
           buildPlanRowKeyboard(plan.id),
-          lovableKey, telegramKey,
+          telegramKey,
         );
       } catch { /* ignore */ }
     }
@@ -697,7 +683,7 @@ Deno.serve(async (req) => {
   // built-in function rate limits + timeouts bound worst-case abuse, and
   // expensive paths (voice transcription) only fire on real Telegram inputs.
   const startTime = Date.now();
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
+  const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')!;
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   const TELEGRAM_API_KEY = Deno.env.get('TELEGRAM_API_KEY')!;
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -723,7 +709,6 @@ Deno.serve(async (req) => {
       data = await tg(
         'getUpdates',
         { offset: currentOffset, timeout, allowed_updates: ['message', 'callback_query'] },
-        LOVABLE_API_KEY,
         TELEGRAM_API_KEY,
       );
       // (voice/audio arrive inside 'message' updates — no extra allowed_updates needed)
@@ -758,64 +743,64 @@ Deno.serve(async (req) => {
 
         try {
           if (!cbChatId) {
-            await tgAnswerCallback(cb.id, '', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            await tgAnswerCallback(cb.id, '', TELEGRAM_API_KEY);
           } else if (payload.kind === 'confirm' || payload.kind === 'reject') {
             const actionId = payload.kind === 'confirm' ? payload.actionId : payload.actionId;
             const { data: action } = await supabase.from('auto_actions_log')
               .select('*').eq('id', actionId).maybeSingle();
             if (!action) {
-              await tgAnswerCallback(cb.id, 'That action is no longer available.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              await tgAnswerCallback(cb.id, 'That action is no longer available.', TELEGRAM_API_KEY);
             } else if (!isActionableNow(action as any)) {
-              await tgAnswerCallback(cb.id, `This expired.`, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              await tgAnswerCallback(cb.id, `This expired.`, TELEGRAM_API_KEY);
               if (cbMessageId) {
                 await tgEditMessageText(cbChatId, cbMessageId,
                   `⏰ This confirmation expired — ask me again if you still want to "${action.reason}".`,
-                  LOVABLE_API_KEY, TELEGRAM_API_KEY);
+                  TELEGRAM_API_KEY);
               }
             } else if (tappingUserId && tappingUserId !== action.user_id) {
-              await tgAnswerCallback(cb.id, 'Only the person who asked Dori can confirm this.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              await tgAnswerCallback(cb.id, 'Only the person who asked Dori can confirm this.', TELEGRAM_API_KEY);
             } else {
               const outcome = payload.kind === 'confirm'
                 ? await approveAndExecutePending(supabase, action, supabaseUrl, serviceKey)
                 : await rejectPending(supabase, action.id, action.reason);
-              await tgAnswerCallback(cb.id, payload.kind === 'confirm' ? '✅ Done' : '❌ Cancelled', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              await tgAnswerCallback(cb.id, payload.kind === 'confirm' ? '✅ Done' : '❌ Cancelled', TELEGRAM_API_KEY);
               if (cbMessageId) {
-                await tgEditMessageText(cbChatId, cbMessageId, outcome, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+                await tgEditMessageText(cbChatId, cbMessageId, outcome, TELEGRAM_API_KEY);
               }
               try { await supabase.from('telegram_assistant_replies').insert({ chat_id: cbChatId, reply: outcome }); } catch { /* ignore */ }
             }
           } else if (payload.kind === 'undo') {
             const entry = await fetchUndoable(supabase, payload.undoId);
             if (!entry) {
-              await tgAnswerCallback(cb.id, '⏰ Undo window expired.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
-              if (cbMessageId) await tgEditReplyMarkup(cbChatId, cbMessageId, null, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              await tgAnswerCallback(cb.id, '⏰ Undo window expired.', TELEGRAM_API_KEY);
+              if (cbMessageId) await tgEditReplyMarkup(cbChatId, cbMessageId, null, TELEGRAM_API_KEY);
             } else if (tappingUserId && tappingUserId !== entry.user_id) {
-              await tgAnswerCallback(cb.id, 'Only the owner can undo this.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              await tgAnswerCallback(cb.id, 'Only the owner can undo this.', TELEGRAM_API_KEY);
             } else {
               const res = await runUndo(supabase, entry, supabaseUrl, serviceKey);
-              await tgAnswerCallback(cb.id, res.ok ? '↩️ Undone' : '⚠️', LOVABLE_API_KEY, TELEGRAM_API_KEY);
-              if (cbMessageId) await tgEditReplyMarkup(cbChatId, cbMessageId, null, LOVABLE_API_KEY, TELEGRAM_API_KEY);
-              await sendMessage(cbChatId, res.message, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              await tgAnswerCallback(cb.id, res.ok ? '↩️ Undone' : '⚠️', TELEGRAM_API_KEY);
+              if (cbMessageId) await tgEditReplyMarkup(cbChatId, cbMessageId, null, TELEGRAM_API_KEY);
+              await sendMessage(cbChatId, res.message, TELEGRAM_API_KEY);
             }
           } else if (payload.kind === 'task') {
-            await handleTaskCallback(supabase, cb, payload, tappingUserId, LOVABLE_API_KEY, TELEGRAM_API_KEY, supabaseUrl, serviceKey);
+            await handleTaskCallback(supabase, cb, payload, tappingUserId, TELEGRAM_API_KEY, supabaseUrl, serviceKey);
           } else if (payload.kind === 'shop') {
-            await handleShopCallback(supabase, cb, payload, tappingUserId, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            await handleShopCallback(supabase, cb, payload, tappingUserId, TELEGRAM_API_KEY);
           } else if (payload.kind === 'event') {
-            await handleEventCallback(supabase, cb, payload, tappingUserId, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            await handleEventCallback(supabase, cb, payload, tappingUserId, TELEGRAM_API_KEY);
           } else if (payload.kind === 'contract') {
-            await handleContractCallback(supabase, cb, payload, tappingUserId, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            await handleContractCallback(supabase, cb, payload, tappingUserId, TELEGRAM_API_KEY);
           } else if (payload.kind === 'plan') {
-            await handlePlanCallback(supabase, cb, payload, tappingUserId, LOVABLE_API_KEY, TELEGRAM_API_KEY, supabaseUrl, serviceKey);
+            await handlePlanCallback(supabase, cb, payload, tappingUserId, TELEGRAM_API_KEY, supabaseUrl, serviceKey);
           } else if (payload.kind === 'dismiss') {
-            await tgAnswerCallback(cb.id, '', LOVABLE_API_KEY, TELEGRAM_API_KEY);
-            if (cbMessageId) await tgEditReplyMarkup(cbChatId, cbMessageId, null, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            await tgAnswerCallback(cb.id, '', TELEGRAM_API_KEY);
+            if (cbMessageId) await tgEditReplyMarkup(cbChatId, cbMessageId, null, TELEGRAM_API_KEY);
           } else {
-            await tgAnswerCallback(cb.id, '', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            await tgAnswerCallback(cb.id, '', TELEGRAM_API_KEY);
           }
         } catch (e) {
           console.error('callback handler error', e);
-          await tgAnswerCallback(cb.id, '⚠️ Something went wrong.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          await tgAnswerCallback(cb.id, '⚠️ Something went wrong.', TELEGRAM_API_KEY);
         }
 
         await supabase
@@ -844,11 +829,11 @@ Deno.serve(async (req) => {
         const v = msg.voice || msg.audio;
         const mime = v.mime_type || 'audio/ogg';
         try {
-          await tg('sendChatAction', { chat_id: chatId, action: 'typing' }, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          await tg('sendChatAction', { chat_id: chatId, action: 'typing' }, TELEGRAM_API_KEY);
         } catch { /* ignore */ }
-        textFromVoice = await transcribeTelegramVoice(v.file_id, mime, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+        textFromVoice = await transcribeTelegramVoice(v.file_id, mime, GEMINI_API_KEY, TELEGRAM_API_KEY);
         if (!textFromVoice) {
-          await sendMessage(chatId, "🎙️ I couldn't understand that voice message. Try again or type it.", LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          await sendMessage(chatId, "🎙️ I couldn't understand that voice message. Try again or type it.", TELEGRAM_API_KEY);
           await supabase.from('telegram_bot_state').update({ update_offset: u.update_id + 1, updated_at: new Date().toISOString() }).eq('id', 1);
           currentOffset = u.update_id + 1;
           continue;
@@ -872,10 +857,10 @@ Deno.serve(async (req) => {
         const biggest = [...msg.photo].sort(
           (a: any, b: any) => ((b.width || 0) * (b.height || 0)) - ((a.width || 0) * (a.height || 0)),
         )[0];
-        photoDataUrl = await downloadTelegramFile(biggest.file_id, 'image/jpeg', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+        photoDataUrl = await downloadTelegramFile(biggest.file_id, 'image/jpeg', TELEGRAM_API_KEY);
         photoCaption = msg.caption || null;
       } else if (msg.document && typeof msg.document.mime_type === 'string' && msg.document.mime_type.startsWith('image/')) {
-        photoDataUrl = await downloadTelegramFile(msg.document.file_id, msg.document.mime_type, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+        photoDataUrl = await downloadTelegramFile(msg.document.file_id, msg.document.mime_type, TELEGRAM_API_KEY);
         photoCaption = msg.caption || null;
       }
       // ---------- PDF / TEXT DOCUMENT → cache extracted text so summarise_document can read it ----------
@@ -896,7 +881,7 @@ Deno.serve(async (req) => {
         const isPdf = mime === 'application/pdf';
         if (isText || isPdf) {
           try {
-            const bytes = await downloadTelegramFileBytes(msg.document.file_id, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            const bytes = await downloadTelegramFileBytes(msg.document.file_id, TELEGRAM_API_KEY);
             let extracted = '';
             if (bytes && isText) {
               extracted = new TextDecoder('utf-8', { fatal: false }).decode(bytes).slice(0, 30_000);
@@ -1019,12 +1004,12 @@ Deno.serve(async (req) => {
                 telegram_first_name: fromFirstName,
               }, { onConflict: 'telegram_user_id' });
             }
-            await sendMessage(chatId, `✅ <b>Linked successfully!</b>\n\nHi ${fromFirstName ?? 'there'}, I'm Dori — your personal assistant.`, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            await sendMessage(chatId, `✅ <b>Linked successfully!</b>\n\nHi ${fromFirstName ?? 'there'}, I'm Dori — your personal assistant.`, TELEGRAM_API_KEY);
           } else {
-            await sendMessage(chatId, '❌ This link code is invalid or expired.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            await sendMessage(chatId, '❌ This link code is invalid or expired.', TELEGRAM_API_KEY);
           }
         } else {
-          await sendMessage(chatId, '👋 Welcome! Open the Dori app → Settings → Telegram to connect.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          await sendMessage(chatId, '👋 Welcome! Open the Dori app → Settings → Telegram to connect.', TELEGRAM_API_KEY);
         }
         continue;
       }
@@ -1034,13 +1019,13 @@ Deno.serve(async (req) => {
         const parts = text.split(/\s+/);
         const code = parts[1]?.trim();
         if (!code) {
-          await sendMessage(chatId, '⚠️ Usage: /linkfamily <code> — generate a code in Settings → Telegram → Family Group.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          await sendMessage(chatId, '⚠️ Usage: /linkfamily <code> — generate a code in Settings → Telegram → Family Group.', TELEGRAM_API_KEY);
           continue;
         }
         const { data: glink } = await supabase.from('telegram_group_links').select('*').eq('link_code', code).maybeSingle();
         const isExpired = glink?.link_code_expires_at && new Date(glink.link_code_expires_at) <= new Date();
         if (!glink || isExpired) {
-          await sendMessage(chatId, '❌ Invalid or expired family link code.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          await sendMessage(chatId, '❌ Invalid or expired family link code.', TELEGRAM_API_KEY);
           continue;
         }
         await supabase.from('telegram_group_links').update({
@@ -1060,7 +1045,7 @@ Deno.serve(async (req) => {
             telegram_first_name: fromFirstName,
           }, { onConflict: 'telegram_user_id' });
         }
-        await sendMessage(chatId, `✅ <b>Family group linked!</b>\n\nWrite naturally — I'll save tasks, shopping items, and events for your shared space.\n\nYour partner should send <code>/linkme &lt;their-code&gt;</code> here so I know who's who.\nType /help for more commands.`, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+        await sendMessage(chatId, `✅ <b>Family group linked!</b>\n\nWrite naturally — I'll save tasks, shopping items, and events for your shared space.\n\nYour partner should send <code>/linkme &lt;their-code&gt;</code> here so I know who's who.\nType /help for more commands.`, TELEGRAM_API_KEY);
         continue;
       }
 
@@ -1069,12 +1054,12 @@ Deno.serve(async (req) => {
         const parts = text.split(/\s+/);
         const code = parts[1]?.trim();
         if (!code) {
-          await sendMessage(chatId, '⚠️ Usage: /linkworkspace <invite-code>. Generate a code in the app at Settings → Workspaces.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          await sendMessage(chatId, '⚠️ Usage: /linkworkspace <invite-code>. Generate a code in the app at Settings → Workspaces.', TELEGRAM_API_KEY);
           continue;
         }
         const { data: invite } = await supabase.from('workspace_invite_codes').select('workspace_id, revoked_at, expires_at').eq('code', code).maybeSingle();
         if (!invite || invite.revoked_at || (invite.expires_at && new Date(invite.expires_at) < new Date())) {
-          await sendMessage(chatId, '❌ Invalid or expired workspace code.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          await sendMessage(chatId, '❌ Invalid or expired workspace code.', TELEGRAM_API_KEY);
           continue;
         }
         // Upsert the link. chat_id is UNIQUE so re-linking just rebinds.
@@ -1109,7 +1094,7 @@ Deno.serve(async (req) => {
         await sendMessage(
           chatId,
           `✅ <b>Workspace linked!</b>\n\nThis group is now bound to <b>${ws?.name || 'the workspace'}</b>. Everything we add here will live inside that space.\n\nTeammates can send <code>/linkme &lt;their-code&gt;</code> so I know who's who.`,
-          LOVABLE_API_KEY, TELEGRAM_API_KEY,
+          TELEGRAM_API_KEY,
         );
         continue;
       }
@@ -1119,13 +1104,13 @@ Deno.serve(async (req) => {
         const parts = text.split(/\s+/);
         const code = parts[1]?.trim();
         if (!code) {
-          await sendMessage(chatId, '⚠️ Generate a personal link code in Settings → Telegram, then send: /linkme <code>', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          await sendMessage(chatId, '⚠️ Generate a personal link code in Settings → Telegram, then send: /linkme <code>', TELEGRAM_API_KEY);
           continue;
         }
         const { data: link } = await supabase.from('telegram_links').select('user_id, link_code_expires_at').eq('link_code', code).maybeSingle();
         const isExpired = link?.link_code_expires_at && new Date(link.link_code_expires_at) <= new Date();
         if (!link || isExpired) {
-          await sendMessage(chatId, '❌ Invalid or expired code.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          await sendMessage(chatId, '❌ Invalid or expired code.', TELEGRAM_API_KEY);
           continue;
         }
         if (fromId) {
@@ -1136,7 +1121,7 @@ Deno.serve(async (req) => {
             telegram_first_name: fromFirstName,
           }, { onConflict: 'telegram_user_id' });
         }
-        await sendMessage(chatId, `✅ ${fromFirstName ?? 'You'} are now linked. Items you add will be tagged to you.`, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+        await sendMessage(chatId, `✅ ${fromFirstName ?? 'You'} are now linked. Items you add will be tagged to you.`, TELEGRAM_API_KEY);
         continue;
       }
 
@@ -1159,7 +1144,7 @@ Deno.serve(async (req) => {
           const hasMention = BOT_MENTION.test(rawText);
           const addressesDori = ADDRESSES_DORI.test(rawText.trim());
           if (rawText.startsWith('/') || hasMention || addressesDori) {
-            await sendMessage(chatId, '🔒 This group isn\'t linked yet. Either /linkfamily for a family space or /linkworkspace for a startup team — grab a code in the app.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            await sendMessage(chatId, '🔒 This group isn\'t linked yet. Either /linkfamily for a family space or /linkworkspace for a startup team — grab a code in the app.', TELEGRAM_API_KEY);
           }
           continue;
         }
@@ -1194,7 +1179,7 @@ Deno.serve(async (req) => {
           .replace(STRIP_ADDRESS, '')
           .trim() || text;
 
-        tg('sendChatAction', { chat_id: chatId, action: 'typing' }, LOVABLE_API_KEY, TELEGRAM_API_KEY).catch(() => {});
+        tg('sendChatAction', { chat_id: chatId, action: 'typing' }, TELEGRAM_API_KEY).catch(() => {});
 
         // ── PHOTO in group → bypass text-only router and call Dori directly with imageUrl.
         // Resolve the sender's app user_id (via telegram_user_map) so the action is
@@ -1212,7 +1197,7 @@ Deno.serve(async (req) => {
           }
           if (!actingUserId) actingUserId = glink?.owner_user_id ?? null;
           if (!actingUserId) {
-            await sendMessage(chatId, "📸 I can read photos here, but this group isn't linked to a personal account yet. Run /linkfamily or have a member link via Settings → Telegram.", LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            await sendMessage(chatId, "📸 I can read photos here, but this group isn't linked to a personal account yet. Run /linkfamily or have a member link via Settings → Telegram.", TELEGRAM_API_KEY);
             await supabase.from('telegram_messages').upsert({
               update_id: u.update_id, chat_id: chatId, text: photoUserText ?? text, raw_update: u, processed: true,
             }, { onConflict: 'update_id' });
@@ -1226,7 +1211,7 @@ Deno.serve(async (req) => {
             const phResp = await tg('sendMessage', {
               chat_id: chatId,
               text: '🔍 Reading the picture…',
-            }, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            }, TELEGRAM_API_KEY);
             placeholderMessageId = phResp?.result?.message_id ?? null;
           } catch (e) {
             console.warn('group photo placeholder send failed', e);
@@ -1265,25 +1250,25 @@ Deno.serve(async (req) => {
 
           if (placeholderMessageId && outgoingText) {
             try {
-              await tgEditMessageText(chatId, placeholderMessageId, outgoingText.slice(0, 4000), LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              await tgEditMessageText(chatId, placeholderMessageId, outgoingText.slice(0, 4000), TELEGRAM_API_KEY);
               if (latestUndoId) {
-                await tgEditReplyMarkup(chatId, placeholderMessageId, buildUndoKeyboard(latestUndoId), LOVABLE_API_KEY, TELEGRAM_API_KEY);
+                await tgEditReplyMarkup(chatId, placeholderMessageId, buildUndoKeyboard(latestUndoId), TELEGRAM_API_KEY);
               }
             } catch (e) {
               console.warn('group photo placeholder edit failed, falling back to send', e);
-              await sendMessage(chatId, outgoingText, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              await sendMessage(chatId, outgoingText, TELEGRAM_API_KEY);
               if (latestUndoId) {
-                await tgSendWithKeyboard(chatId, '↩️ Tap to undo the last action.', buildUndoKeyboard(latestUndoId), LOVABLE_API_KEY, TELEGRAM_API_KEY);
+                await tgSendWithKeyboard(chatId, '↩️ Tap to undo the last action.', buildUndoKeyboard(latestUndoId), TELEGRAM_API_KEY);
               }
             }
           } else if (outgoingText) {
-            await sendMessage(chatId, outgoingText, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+            await sendMessage(chatId, outgoingText, TELEGRAM_API_KEY);
             if (latestUndoId) {
-              await tgSendWithKeyboard(chatId, '↩️ Tap to undo the last action.', buildUndoKeyboard(latestUndoId), LOVABLE_API_KEY, TELEGRAM_API_KEY);
+              await tgSendWithKeyboard(chatId, '↩️ Tap to undo the last action.', buildUndoKeyboard(latestUndoId), TELEGRAM_API_KEY);
             }
           } else if (placeholderMessageId) {
             // No text reply, only queued confirmations — drop the stale "Reading…".
-            try { await tg('deleteMessage', { chat_id: chatId, message_id: placeholderMessageId }, LOVABLE_API_KEY, TELEGRAM_API_KEY); }
+            try { await tg('deleteMessage', { chat_id: chatId, message_id: placeholderMessageId }, TELEGRAM_API_KEY); }
             catch { /* ignore */ }
           }
 
@@ -1293,7 +1278,7 @@ Deno.serve(async (req) => {
               chatId,
               prompt,
               buildConfirmKeyboard(q.actionId!),
-              LOVABLE_API_KEY,
+              GEMINI_API_KEY,
               TELEGRAM_API_KEY,
             );
             try {
@@ -1335,7 +1320,7 @@ Deno.serve(async (req) => {
           });
         } catch (e) {
           console.error('router invoke failed', e);
-          await sendMessage(chatId, '⚠️ Router unavailable, try again shortly.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          await sendMessage(chatId, '⚠️ Router unavailable, try again shortly.', TELEGRAM_API_KEY);
         }
 
         await supabase.from('telegram_messages').upsert({
@@ -1353,7 +1338,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (!link || !link.is_active) {
-        await sendMessage(chatId, '🔒 This chat isn\'t linked yet. Open Dori → Settings → Telegram to connect.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+        await sendMessage(chatId, '🔒 This chat isn\'t linked yet. Open Dori → Settings → Telegram to connect.', TELEGRAM_API_KEY);
         continue;
       }
 
@@ -1390,14 +1375,14 @@ Deno.serve(async (req) => {
             lines.push('\nUse <code>/workspace off</code> to return to Personal.');
             await sendDoriReply({
               chatId, text: lines.join('\n'), preferVoice: wasVoiceMessage,
-              lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+              telegramKey: TELEGRAM_API_KEY,
             });
           } else if (['off', 'personal', 'none', 'clear'].includes(arg.toLowerCase())) {
             await supabase.from('telegram_links').update({ active_workspace_id: null }).eq('user_id', link.user_id);
             await sendDoriReply({
               chatId, text: '✅ Cleared — next commands run in your Personal space.',
               preferVoice: wasVoiceMessage,
-              lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+              telegramKey: TELEGRAM_API_KEY,
             });
           } else {
             // Resolve name → id against workspaces the user is actually a member of.
@@ -1416,7 +1401,7 @@ Deno.serve(async (req) => {
               await sendDoriReply({
                 chatId, text: `🤔 I don't see a workspace named "${arg}" you're a member of. Try <code>/workspace list</code>.`,
                 preferVoice: wasVoiceMessage,
-                lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+                telegramKey: TELEGRAM_API_KEY,
               });
             } else {
               await supabase.from('telegram_links')
@@ -1424,7 +1409,7 @@ Deno.serve(async (req) => {
               await sendDoriReply({
                 chatId, text: `✅ Switched to <b>${match.icon || '📁'} ${match.name}</b>. New tasks / events / notes I create here will live in that workspace. <code>/workspace off</code> to go back to Personal.`,
                 preferVoice: wasVoiceMessage,
-                lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+                telegramKey: TELEGRAM_API_KEY,
               });
             }
           }
@@ -1466,7 +1451,7 @@ Deno.serve(async (req) => {
           }
           await sendDoriReply({
             chatId, text: reply, preferVoice: wasVoiceMessage,
-            lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+            telegramKey: TELEGRAM_API_KEY,
           });
           await supabase.from('telegram_messages').upsert({
             update_id: u.update_id, chat_id: chatId, text, raw_update: u, processed: true,
@@ -1511,11 +1496,11 @@ Deno.serve(async (req) => {
           }
           await sendDoriReply({
             chatId, text: parts.join('\n'), preferVoice: wasVoiceMessage,
-            lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+            telegramKey: TELEGRAM_API_KEY,
           });
         } catch (e) {
           console.error('/me failed', e);
-          await sendMessage(chatId, '⚠️ Could not build your digest. Try again shortly.', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          await sendMessage(chatId, '⚠️ Could not build your digest. Try again shortly.', TELEGRAM_API_KEY);
         }
         await supabase.from('telegram_messages').upsert({
           update_id: u.update_id, chat_id: chatId, text, raw_update: u, processed: true,
@@ -1531,13 +1516,13 @@ Deno.serve(async (req) => {
           await sendDoriReply({
             chatId, text: "⏰ Nothing to undo — the 5-minute window has passed or you haven't done anything yet.",
             preferVoice: wasVoiceMessage,
-            lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+            telegramKey: TELEGRAM_API_KEY,
           });
         } else {
           const res = await runUndo(supabase, entry, supabaseUrl, serviceKey);
           await sendDoriReply({
             chatId, text: res.message, preferVoice: wasVoiceMessage,
-            lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+            telegramKey: TELEGRAM_API_KEY,
           });
         }
         await supabase.from('telegram_messages').upsert({
@@ -1558,7 +1543,7 @@ Deno.serve(async (req) => {
             : await rejectPending(supabase, pending.id, pending.reason);
           await sendDoriReply({
             chatId, text: outcome, preferVoice: wasVoiceMessage,
-            lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+            telegramKey: TELEGRAM_API_KEY,
           });
           await supabase.from('telegram_messages').upsert({
             update_id: u.update_id, chat_id: chatId, text, raw_update: u, processed: true,
@@ -1568,7 +1553,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      tg('sendChatAction', { chat_id: chatId, action: 'typing' }, LOVABLE_API_KEY, TELEGRAM_API_KEY).catch(() => {});
+      tg('sendChatAction', { chat_id: chatId, action: 'typing' }, TELEGRAM_API_KEY).catch(() => {});
 
       // Instant placeholder so the user sees acknowledgment in ~100ms instead
       // of waiting 5-15s for the full AI round to finish. Streaming path will
@@ -1578,7 +1563,7 @@ Deno.serve(async (req) => {
         const phResp = await tg('sendMessage', {
           chat_id: chatId,
           text: photoDataUrl ? '🔍 Reading your photo…' : '🤔 Thinking…',
-        }, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+        }, TELEGRAM_API_KEY);
         placeholderMessageId = phResp?.result?.message_id ?? null;
       } catch (e) {
         console.warn('placeholder send failed', e);
@@ -1598,7 +1583,7 @@ Deno.serve(async (req) => {
         lastEditAt = Date.now();
         lastEditedLen = latestText.length;
         try {
-          await tgEditMessageText(chatId, placeholderMessageId, latestText.slice(0, 4000) + ' …', LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          await tgEditMessageText(chatId, placeholderMessageId, latestText.slice(0, 4000) + ' …', TELEGRAM_API_KEY);
         } catch (e) { console.warn('streaming edit failed', e); }
       };
       const streamCbs = placeholderMessageId && !photoDataUrl
@@ -1669,28 +1654,28 @@ Deno.serve(async (req) => {
       if (placeholderMessageId && outgoingText && !preferVoice) {
         // Update the placeholder in place → the user sees the same message
         // transform from "🤔 Thinking…" into the real answer. Feels instant.
-        await tgEditMessageText(chatId, placeholderMessageId, outgoingText.slice(0, 4000), LOVABLE_API_KEY, TELEGRAM_API_KEY);
+        await tgEditMessageText(chatId, placeholderMessageId, outgoingText.slice(0, 4000), TELEGRAM_API_KEY);
         if (latestUndoId) {
-          await tgEditReplyMarkup(chatId, placeholderMessageId, buildUndoKeyboard(latestUndoId), LOVABLE_API_KEY, TELEGRAM_API_KEY);
+          await tgEditReplyMarkup(chatId, placeholderMessageId, buildUndoKeyboard(latestUndoId), TELEGRAM_API_KEY);
         }
       } else {
         // Voice path, or we failed to place a placeholder — delete the stale
         // placeholder if any, then send via the normal (potentially-voice) path.
         if (placeholderMessageId) {
-          try { await tg('deleteMessage', { chat_id: chatId, message_id: placeholderMessageId }, LOVABLE_API_KEY, TELEGRAM_API_KEY); }
+          try { await tg('deleteMessage', { chat_id: chatId, message_id: placeholderMessageId }, TELEGRAM_API_KEY); }
           catch { /* ignore */ }
         }
         if (outgoingText) {
           await sendDoriReply({
             chatId, text: outgoingText, preferVoice, locale: userLocale,
-            lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+            telegramKey: TELEGRAM_API_KEY,
           });
           if (latestUndoId) {
             await tgSendWithKeyboard(
               chatId,
               '↩️ Tap to undo the last action.',
               buildUndoKeyboard(latestUndoId),
-              LOVABLE_API_KEY,
+              GEMINI_API_KEY,
               TELEGRAM_API_KEY,
             );
           }
@@ -1703,7 +1688,7 @@ Deno.serve(async (req) => {
           chatId,
           prompt,
           buildConfirmKeyboard(q.actionId!),
-          LOVABLE_API_KEY,
+          GEMINI_API_KEY,
           TELEGRAM_API_KEY,
         );
       }

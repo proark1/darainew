@@ -6,15 +6,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const GATEWAY_URL = 'https://connector-gateway.lovable.dev/telegram';
 
-async function getBotUsername(lovableKey: string, tgKey: string): Promise<string | null> {
+async function getBotUsername(tgKey: string): Promise<string | null> {
   try {
-    const r = await fetch(`${GATEWAY_URL}/getMe`, {
+    const r = await fetch(`https://api.telegram.org/bot${tgKey}/getMe`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${lovableKey}`,
-        'X-Connection-Api-Key': tgKey,
         'Content-Type': 'application/json',
       },
       body: '{}',
@@ -38,7 +35,6 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
     const TELEGRAM_API_KEY = Deno.env.get('TELEGRAM_API_KEY')!;
 
     const authHeader = req.headers.get('Authorization');
@@ -85,22 +81,20 @@ Deno.serve(async (req) => {
       // and has the same env vars + admin client on hand.
       const runPoll = body.runPoll === true;
 
-      // 1. getMe — validates bot token + gateway reachability
+      // 1. getMe — validates bot token
       let botInfo: { ok: boolean; username?: string; first_name?: string; id?: number; error?: string } = { ok: false };
-      if (LOVABLE_API_KEY && TELEGRAM_API_KEY) {
+      if (TELEGRAM_API_KEY) {
         try {
-          const r = await fetch(`${GATEWAY_URL}/getMe`, {
+          const r = await fetch(`https://api.telegram.org/bot${TELEGRAM_API_KEY}/getMe`, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-              'X-Connection-Api-Key': TELEGRAM_API_KEY,
               'Content-Type': 'application/json',
             },
             body: '{}',
           });
           const data = await r.json().catch(() => null);
           if (!r.ok) {
-            botInfo = { ok: false, error: `gateway ${r.status}: ${JSON.stringify(data).slice(0, 200)}` };
+            botInfo = { ok: false, error: `telegram ${r.status}: ${JSON.stringify(data).slice(0, 200)}` };
           } else if (data?.result) {
             botInfo = { ok: true, username: data.result.username, first_name: data.result.first_name, id: data.result.id };
           } else {
@@ -110,7 +104,7 @@ Deno.serve(async (req) => {
           botInfo = { ok: false, error: e instanceof Error ? e.message : String(e) };
         }
       } else {
-        botInfo = { ok: false, error: 'missing LOVABLE_API_KEY or TELEGRAM_API_KEY' };
+        botInfo = { ok: false, error: 'missing TELEGRAM_API_KEY' };
       }
 
       // 2. bot_state — cron freshness
@@ -153,7 +147,7 @@ Deno.serve(async (req) => {
 
       return new Response(JSON.stringify({
         version: 'diagnose-v2',
-        envVars: { LOVABLE_API_KEY: Boolean(LOVABLE_API_KEY), TELEGRAM_API_KEY: Boolean(TELEGRAM_API_KEY) },
+        envVars: { GEMINI_API_KEY: Boolean(Deno.env.get('GEMINI_API_KEY')), TELEGRAM_API_KEY: Boolean(TELEGRAM_API_KEY) },
         botInfo,
         botState: botState ? { ...botState, lastTickSeconds } : null,
         link,
@@ -166,7 +160,7 @@ Deno.serve(async (req) => {
     // Generate code
     const code = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
     const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-    const botUsername = await getBotUsername(LOVABLE_API_KEY, TELEGRAM_API_KEY);
+    const botUsername = await getBotUsername(TELEGRAM_API_KEY);
 
     if (scope === 'group') {
       // Find an accepted partner (first one) for this owner

@@ -9,7 +9,7 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
 
 interface DetectedTrip {
   destination: string;
@@ -25,11 +25,11 @@ async function aiDetectTrips(events: any[]): Promise<DetectedTrip[]> {
     `[${i}] title="${e.title}" location="${e.location || ''}" start=${e.start_time} end=${e.end_time}`
   ).join("\n");
 
-  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const resp = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
     method: "POST",
-    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: "gemini-2.5-flash",
       messages: [
         { role: "system", content: "Detect travel/trips from calendar events. A trip = travel to a different city/country, multi-day, OR contains flight/hotel/conference keywords. Group consecutive events at same location into one trip." },
         { role: "user", content: `Events:\n${list}` },

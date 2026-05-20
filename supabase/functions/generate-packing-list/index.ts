@@ -20,7 +20,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const MODEL = 'google/gemini-2.5-flash';
+const MODEL = 'gemini-2.5-flash';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const SYSTEM_PROMPT = [
@@ -128,9 +128,9 @@ serve(async (req) => {
       extraContext ? `\nExtra context from the user: ${extraContext}` : '',
     ].filter(Boolean).join('\n');
 
-    const lovableKey = Deno.env.get('LOVABLE_API_KEY');
-    if (!lovableKey) {
-      return json({ error: 'LOVABLE_API_KEY not configured' }, 503);
+    const geminiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!geminiKey) {
+      return json({ error: 'GEMINI_API_KEY not configured' }, 503);
     }
 
     try {
@@ -140,10 +140,10 @@ serve(async (req) => {
       return json({ error: (e as Error).message, code }, code === 'quota_exceeded' ? 429 : 500);
     }
 
-    const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const aiResp = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${lovableKey}`,
+        Authorization: `Bearer ${geminiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

@@ -1,5 +1,5 @@
 // Admin: dump the whole database to a JSON file (or load one back in).
-// Built so the admin can leave Lovable + Supabase without losing data —
+// Built so the admin can migrate off Supabase without losing data —
 // pure JSON, no provider-specific format. The actual heavy lifting lives
 // in the `useAdminDataExport` hook; this component is just the UI shell.
 

@@ -55,7 +55,7 @@ AI-powered life dashboard and personal assistant. Built for productivity, health
 | UI | Tailwind CSS 3, shadcn/ui, Radix UI, Framer Motion |
 | State | TanStack React Query, React Context |
 | Backend | Supabase (Auth, Database, Realtime, Storage, Edge Functions) |
-| AI | Google Gemini, OpenAI Realtime API (via Lovable AI Gateway) |
+| AI | Google Gemini, OpenAI Realtime API |
 | Mobile | Capacitor 8 (iOS + Android) |
 | PWA | Vite PWA Plugin with offline caching |
 | Forms | React Hook Form + Zod validation |
@@ -107,12 +107,12 @@ Supabase Edge Functions require these secrets (set via Supabase Dashboard):
 | Secret | Used By |
 |--------|---------|
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-to-server functions |
-| `LOVABLE_API_KEY` | AI Gateway (Gemini, OpenAI) |
+| `GEMINI_API_KEY` | Google Gemini (chat, embeddings, TTS, Live) |
 | `OPENAI_API_KEY` | OpenAI Realtime, TTS, STT |
+| `TELEGRAM_API_KEY` | Telegram Bot API |
 | `GOOGLE_CLIENT_ID` | Calendar/Gmail OAuth |
 | `GOOGLE_CLIENT_SECRET` | Calendar/Gmail OAuth |
 | `PERPLEXITY_API_KEY` | Web search |
-| `GEMINI_API_KEY` | Gemini Live |
 | `APP_URL` | CORS origin restriction |
 | `MEETINGBOT_BASE_URL` | Meeting copilot (no trailing slash) — see [proark1/MeetingBot](https://github.com/proark1/MeetingBot) |
 | `MEETINGBOT_API_KEY` | Bearer token (`sk_live_…`) generated in MeetingBot's `/auth/keys` |

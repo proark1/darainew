@@ -9,7 +9,7 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -39,11 +39,11 @@ Deno.serve(async (req) => {
       density[day] = (density[day] ?? 0) + 1;
     }
 
-    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const resp = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "gemini-2.5-flash",
         messages: [
           { role: "system", content: "You are an energy-aware scheduling coach. Combine recent energy/mood/sleep with calendar density to give ONE concise (2-3 sentence) suggestion for today. Identify low-energy patterns and suggest moving deep work to higher-energy days. Be encouraging, never preachy." },
           { role: "user", content: `Today: ${now.toISOString().slice(0, 10)}\n\nLast 7 days check-ins:\n${JSON.stringify(checkinsRes.data ?? [])}\n\nCalendar density next 7 days (date → meeting count):\n${JSON.stringify(density)}\n\nOpen high-priority tasks:\n${JSON.stringify((tasksRes.data ?? []).filter(t => t.priority === 'high'))}` },

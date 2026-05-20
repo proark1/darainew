@@ -28,19 +28,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const GATEWAY_URL = 'https://connector-gateway.lovable.dev/telegram';
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
 const TELEGRAM_API_KEY = Deno.env.get('TELEGRAM_API_KEY')!;
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 async function tgSend(chatId: number, text: string, replyMarkup?: unknown) {
   try {
-    await fetch(`${GATEWAY_URL}/sendMessage`, {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_API_KEY}/sendMessage`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'X-Connection-Api-Key': TELEGRAM_API_KEY,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -476,7 +472,6 @@ async function sendTappableShoppingList(
   chatId: number,
   supabase: any,
   ownerId: string,
-  lovableKey: string,
   telegramKey: string,
 ): Promise<boolean> {
   const { data: lists } = await supabase.from('shopping_lists')
@@ -501,7 +496,6 @@ async function sendTappableShoppingList(
         chatId,
         `• ${item.quantity > 1 ? `${item.quantity}× ` : ''}${item.name}`,
         buildShoppingRowKeyboard(item.id, false),
-        lovableKey,
         telegramKey,
       );
       totalSent++;
@@ -516,7 +510,6 @@ async function sendTappableAgenda(
   supabase: any,
   memberIds: string[],
   dayOffset: number,
-  lovableKey: string,
   telegramKey: string,
 ): Promise<boolean> {
   const start = new Date(); start.setDate(start.getDate() + dayOffset); start.setHours(0, 0, 0, 0);
@@ -546,14 +539,14 @@ async function sendTappableAgenda(
     if (sent >= MAX_CARDS) break;
     const t = new Date(e.start_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     const line = `🕐 ${t} — <b>${e.title}</b>${e.location ? `\n📍 ${e.location}` : ''}`;
-    await tgSendWithKeyboard(chatId, line, buildEventRowKeyboard(e.id), lovableKey, telegramKey);
+    await tgSendWithKeyboard(chatId, line, buildEventRowKeyboard(e.id), telegramKey);
     sent++;
   }
   for (const t of tasks || []) {
     if (sent >= MAX_CARDS) break;
     const pr = t.priority === 'high' ? '🔴' : t.priority === 'low' ? '⚪️' : '🟡';
     const line = `${pr} <b>${t.title}</b>`;
-    await tgSendWithKeyboard(chatId, line, buildTaskRowKeyboard(t.id), lovableKey, telegramKey);
+    await tgSendWithKeyboard(chatId, line, buildTaskRowKeyboard(t.id), telegramKey);
     sent++;
   }
   if (totalItems > sent) {
@@ -1181,11 +1174,11 @@ Deno.serve(async (req) => {
 
   // ─── Schedule ────────────────────────────────────────────
   if (lower === '/today' || lower === '/agenda') {
-    await sendTappableAgenda(chat_id, supabase, memberIds, 0, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+    await sendTappableAgenda(chat_id, supabase, memberIds, 0, TELEGRAM_API_KEY);
     return new Response('{"ok":true}', { headers: corsHeaders });
   }
   if (lower === '/tomorrow') {
-    await sendTappableAgenda(chat_id, supabase, memberIds, 1, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+    await sendTappableAgenda(chat_id, supabase, memberIds, 1, TELEGRAM_API_KEY);
     return new Response('{"ok":true}', { headers: corsHeaders });
   }
   if (lower === '/week') {
@@ -1200,16 +1193,16 @@ Deno.serve(async (req) => {
     if (/meeting/i.test(trimmed)) {
       await tgSend(chat_id, await handleUpcomingMeetings(supabase, memberIds, household, userTimezone));
     } else if (/tomorrow/i.test(trimmed)) {
-      await sendTappableAgenda(chat_id, supabase, memberIds, 1, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+      await sendTappableAgenda(chat_id, supabase, memberIds, 1, TELEGRAM_API_KEY);
     } else if (/week/i.test(trimmed)) {
       await tgSend(chat_id, await handleWeek(supabase, memberIds, household));
     } else {
-      await sendTappableAgenda(chat_id, supabase, memberIds, 0, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+      await sendTappableAgenda(chat_id, supabase, memberIds, 0, TELEGRAM_API_KEY);
     }
     return new Response('{"ok":true}', { headers: corsHeaders });
   }
   if (lower === '/shopping' || lower === '/list') {
-    const sent = await sendTappableShoppingList(chat_id, supabase, group.owner_user_id, LOVABLE_API_KEY, TELEGRAM_API_KEY);
+    const sent = await sendTappableShoppingList(chat_id, supabase, group.owner_user_id, TELEGRAM_API_KEY);
     if (!sent) await tgSend(chat_id, '🛒 No active shopping lists.');
     return new Response('{"ok":true}', { headers: corsHeaders });
   }
@@ -1258,7 +1251,7 @@ Deno.serve(async (req) => {
       const due = c.renewal_date || c.end_date;
       const when = due ? ` (until ${new Date(due).toLocaleDateString('en-GB')})` : '';
       const line = `• <b>${c.name}</b>${c.provider ? ` — ${c.provider}` : ''}${cost}${when}`;
-      await tgSendWithKeyboard(chat_id, line, buildContractRowKeyboard(c.id), LOVABLE_API_KEY, TELEGRAM_API_KEY);
+      await tgSendWithKeyboard(chat_id, line, buildContractRowKeyboard(c.id), TELEGRAM_API_KEY);
     }
     return new Response('{"ok":true}', { headers: corsHeaders });
   }
@@ -1714,20 +1707,18 @@ Deno.serve(async (req) => {
           chat_id,
           finalMsg.slice(0, 4000),
           buildUndoKeyboard(latestUndoId),
-          LOVABLE_API_KEY,
           TELEGRAM_API_KEY,
         );
       } else {
         await sendDoriReply({
           chatId: chat_id, text: finalMsg.slice(0, 4000), preferVoice, locale: voiceLocale,
-          lovableKey: LOVABLE_API_KEY, telegramKey: TELEGRAM_API_KEY,
+          telegramKey: TELEGRAM_API_KEY,
         });
         if (latestUndoId) {
           await tgSendWithKeyboard(
             chat_id,
             '↩️ Tap to undo the last action.',
             buildUndoKeyboard(latestUndoId),
-            LOVABLE_API_KEY,
             TELEGRAM_API_KEY,
           );
         }
@@ -1740,7 +1731,6 @@ Deno.serve(async (req) => {
         chat_id,
         prompt,
         buildConfirmKeyboard(q.actionId!),
-        LOVABLE_API_KEY,
         TELEGRAM_API_KEY,
       );
       try {

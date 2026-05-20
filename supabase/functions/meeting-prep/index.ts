@@ -8,9 +8,8 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
+const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')!;
 const TELEGRAM_API_KEY = Deno.env.get('TELEGRAM_API_KEY');
-const TELEGRAM_GATEWAY = 'https://connector-gateway.lovable.dev/telegram';
 
 interface EventRow {
   id: string;
@@ -27,11 +26,9 @@ interface EventRow {
 async function sendTelegram(chatId: number, text: string) {
   if (!TELEGRAM_API_KEY) return;
   try {
-    await fetch(`${TELEGRAM_GATEWAY}/sendMessage`, {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_API_KEY}/sendMessage`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'X-Connection-Api-Key': TELEGRAM_API_KEY,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
@@ -43,14 +40,14 @@ async function sendTelegram(chatId: number, text: string) {
 
 async function generatePrep(event: EventRow, contactNotes: string): Promise<string> {
   try {
-    const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Authorization': `Bearer ${GEMINI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
+        model: 'gemini-3-flash-preview',
         messages: [
           { role: 'system', content: 'You are Dori, a concise personal assistant. Generate a 1-2 sentence "what to remember" prep note for an upcoming meeting. Be warm, specific, actionable. No fluff.' },
           { role: 'user', content: `Meeting: ${event.title}\nWhen: ${event.start_time}\nLocation: ${event.location || 'n/a'}\nNotes: ${event.description || 'none'}\nContext from past interactions: ${contactNotes || 'no prior context'}` },

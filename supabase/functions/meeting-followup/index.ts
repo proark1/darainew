@@ -8,18 +8,15 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
+const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')!;
 const TELEGRAM_API_KEY = Deno.env.get('TELEGRAM_API_KEY');
-const TELEGRAM_GATEWAY = 'https://connector-gateway.lovable.dev/telegram';
 
 async function sendTelegram(chatId: number, text: string) {
   if (!TELEGRAM_API_KEY) return;
   try {
-    await fetch(`${TELEGRAM_GATEWAY}/sendMessage`, {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_API_KEY}/sendMessage`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'X-Connection-Api-Key': TELEGRAM_API_KEY,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),

@@ -6,7 +6,7 @@
 // Flow:
 //   1. Insert vision_captures row (status='classifying').
 //   2. Generate a short-lived signed URL for the uploaded image.
-//   3. Call Gemini Vision via the Lovable gateway with a forced
+//   3. Call Gemini Vision via the generativelanguage API with a forced
 //      tool-call. The tool's schema makes it return classification +
 //      per-kind structured fields in one round-trip.
 //   4. Patch the row with extracted data (status='extracted').
@@ -24,7 +24,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const MODEL = 'google/gemini-2.5-flash';
+const MODEL = 'gemini-2.5-flash';
 
 const ALLOWED_KINDS = [
   'receipt', 'business_card', 'medication', 'whiteboard',
@@ -211,11 +211,11 @@ serve(async (req) => {
       return json({ error: 'Could not sign image URL' }, 500);
     }
 
-    const lovableKey = Deno.env.get('LOVABLE_API_KEY');
-    if (!lovableKey) {
+    const geminiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!geminiKey) {
       await admin.from('vision_captures').update({
         status: 'error',
-        error_message: 'LOVABLE_API_KEY not configured',
+        error_message: 'GEMINI_API_KEY not configured',
       }).eq('id', row.id);
       return json({ error: 'AI not configured' }, 503);
     }
@@ -239,10 +239,10 @@ serve(async (req) => {
 
     let aiResp: Response;
     try {
-      aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      aiResp = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${lovableKey}`,
+          Authorization: `Bearer ${geminiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

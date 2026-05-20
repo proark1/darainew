@@ -4,14 +4,11 @@
 // and dimension. Mixing dims would corrupt the IVFFlat index — so the
 // dimension is locked to 768 and asserted at runtime.
 //
-// Provider chain:
-//   1. Lovable AI gateway (preferred — same key the rest of Dori uses).
-//   2. Direct Gemini (fallback when LOVABLE_API_KEY is absent).
-//
+// Uses Gemini's text-embedding-004 via the native generativelanguage API.
 // Returns L2-normalised vectors so cosine == dot product downstream.
 
 const EMBED_DIM = 768;
-const EMBED_MODEL = 'google/text-embedding-004';
+const EMBED_MODEL = 'text-embedding-004';
 
 export interface EmbeddingResult {
   vector: number[];
@@ -25,61 +22,32 @@ export async function embedText(text: string): Promise<EmbeddingResult> {
     throw new Error('embedText: empty input');
   }
 
-  const lovableKey = Deno.env.get('LOVABLE_API_KEY');
   const geminiKey = Deno.env.get('GEMINI_API_KEY');
+  if (!geminiKey) {
+    throw new Error('embedText: GEMINI_API_KEY is not configured');
+  }
 
-  if (lovableKey) {
-    const res = await fetch('https://ai.gateway.lovable.dev/v1/embeddings', {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${EMBED_MODEL}:embedContent?key=${geminiKey}`,
+    {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${lovableKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ model: EMBED_MODEL, input: cleaned }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const vec = data?.data?.[0]?.embedding as number[] | undefined;
-      if (Array.isArray(vec) && vec.length === EMBED_DIM) {
-        return { vector: l2Normalise(vec), model: EMBED_MODEL, dim: EMBED_DIM };
-      }
-      // Some gateway responses come back at native dimensionality
-      // (e.g. 3072 for OpenAI-style text-embedding-3-large). Reduce
-      // to EMBED_DIM via Matryoshka truncation + renormalise.
-      if (Array.isArray(vec) && vec.length > EMBED_DIM) {
-        return { vector: l2Normalise(vec.slice(0, EMBED_DIM)), model: EMBED_MODEL, dim: EMBED_DIM };
-      }
-      console.warn('[embedText] Lovable returned unexpected shape, falling back', {
-        len: Array.isArray(vec) ? vec.length : 'n/a',
-      });
-    } else {
-      console.warn('[embedText] Lovable embedding failed', res.status, await res.text().catch(() => ''));
-    }
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: { parts: [{ text: cleaned }] },
+        taskType: 'RETRIEVAL_DOCUMENT',
+      }),
+    },
+  );
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`embedText: Gemini embedding failed [${res.status}]: ${errText.slice(0, 200)}`);
   }
-
-  if (geminiKey) {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${geminiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: { parts: [{ text: cleaned }] },
-          taskType: 'RETRIEVAL_DOCUMENT',
-        }),
-      },
-    );
-    if (res.ok) {
-      const data = await res.json();
-      const vec = data?.embedding?.values as number[] | undefined;
-      if (Array.isArray(vec) && vec.length === EMBED_DIM) {
-        return { vector: l2Normalise(vec), model: 'gemini/text-embedding-004', dim: EMBED_DIM };
-      }
-    }
-    console.warn('[embedText] Gemini embedding failed', res.status);
+  const data = await res.json();
+  const vec = data?.embedding?.values as number[] | undefined;
+  if (!Array.isArray(vec) || vec.length !== EMBED_DIM) {
+    throw new Error(`embedText: unexpected vector shape (len=${Array.isArray(vec) ? vec.length : 'n/a'})`);
   }
-
-  throw new Error('embedText: no embedding provider configured (need LOVABLE_API_KEY or GEMINI_API_KEY)');
+  return { vector: l2Normalise(vec), model: EMBED_MODEL, dim: EMBED_DIM };
 }
 
 // pgvector accepts both array and stringified-vector literals, but

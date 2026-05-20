@@ -9,7 +9,7 @@ serve(async (req) => {
     const error = url.searchParams.get('error');
 
     // Get the app URL for redirect
-    const appUrl = Deno.env.get('APP_URL') || 'https://femilfmcmqmdbncmgcxh.lovableproject.com';
+    const appUrl = Deno.env.get('APP_URL') || '';
 
     if (error) {
       console.error('OAuth error:', error);
@@ -167,7 +167,7 @@ serve(async (req) => {
     return Response.redirect(`${appUrl}/auth/calendar-callback?success=true`);
   } catch (error) {
     console.error('Error in calendar-oauth-callback:', error);
-    const appUrl = Deno.env.get('APP_URL') || 'https://femilfmcmqmdbncmgcxh.lovableproject.com';
+    const appUrl = Deno.env.get('APP_URL') || '';
     return Response.redirect(`${appUrl}/auth/calendar-callback?error=unexpected_error`);
   }
 });

@@ -6,7 +6,6 @@
 // reply with plain text ("yes"/"no"/"ja"/"nein"/…) and we resolve that against
 // the most recently queued pending action for that chat.
 
-const GATEWAY_URL = 'https://connector-gateway.lovable.dev/telegram';
 
 export interface PendingAction {
   id: string;
@@ -25,15 +24,12 @@ export async function tgSendWithKeyboard(
   chatId: number,
   text: string,
   keyboard: any,
-  lovableKey: string,
   telegramKey: string,
 ): Promise<void> {
   try {
-    await fetch(`${GATEWAY_URL}/sendMessage`, {
+    await fetch(`https://api.telegram.org/bot${telegramKey}/sendMessage`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${lovableKey}`,
-        'X-Connection-Api-Key': telegramKey,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -61,15 +57,12 @@ export function buildConfirmKeyboard(actionId: string) {
 export async function tgAnswerCallback(
   callbackQueryId: string,
   text: string,
-  lovableKey: string,
   telegramKey: string,
 ): Promise<void> {
   try {
-    await fetch(`${GATEWAY_URL}/answerCallbackQuery`, {
+    await fetch(`https://api.telegram.org/bot${telegramKey}/answerCallbackQuery`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${lovableKey}`,
-        'X-Connection-Api-Key': telegramKey,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ callback_query_id: callbackQueryId, text: text.slice(0, 200) }),
@@ -83,15 +76,12 @@ export async function tgEditMessageText(
   chatId: number,
   messageId: number,
   text: string,
-  lovableKey: string,
   telegramKey: string,
 ): Promise<void> {
   try {
-    await fetch(`${GATEWAY_URL}/editMessageText`, {
+    await fetch(`https://api.telegram.org/bot${telegramKey}/editMessageText`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${lovableKey}`,
-        'X-Connection-Api-Key': telegramKey,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

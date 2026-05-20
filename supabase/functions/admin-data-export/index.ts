@@ -10,8 +10,8 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-// Echo the caller's Origin instead of pinning to APP_URL — Lovable's
-// preview deploys land on rotating subdomains, and a static APP_URL
+// Echo the caller's Origin instead of pinning to APP_URL — preview
+// deploys can land on rotating subdomains, and a static APP_URL
 // breaks every preview's CORS preflight. We still gate access via the
 // admin JWT check below, so the echoed origin doesn't open up anything
 // that wasn't already protected.
