@@ -37,7 +37,8 @@ const taskFields = {
   dueDate: { type: 'string', description: 'ISO date string when the task is due' },
   recurrenceRule: { type: 'string', description: 'RRULE string (e.g. FREQ=WEEKLY;INTERVAL=2)' },
   assignee: { type: 'string', description: 'Workspace member display name (workspace mode only)' },
-  id: { type: 'string', description: 'Task id, required for update/delete/complete' },
+  id: { type: 'string', description: 'Task id, preferred for update/delete/complete when known' },
+  query: { type: 'string', description: 'Title fragment to fuzzy-match the task when you do not have an id (update/delete/complete only). For UPDATE, always use query for identification — title is the new value. For delete/complete with no id, query (preferred) or title may be used as the search key.' },
 };
 
 const eventFields = {
