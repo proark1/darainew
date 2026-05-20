@@ -64,7 +64,7 @@ function splitStatements(sql: string): string[] {
 
   while (i < len) {
     const c = sql[i];
-    const next2 = sql.substr(i, 2);
+    const next2 = sql.slice(i, i + 2);
 
     // Line comment — copy to end-of-line
     if (next2 === '--') {
@@ -101,11 +101,18 @@ function splitStatements(sql: string): string[] {
       continue;
     }
 
-    // Double-quoted identifier
+    // Double-quoted identifier — handle "" escape (Postgres doubles the
+    // quote inside a quoted identifier the same way single-quoted strings
+    // double the apostrophe).
     if (c === '"') {
       cur += c;
       i++;
       while (i < len) {
+        if (sql[i] === '"' && sql[i + 1] === '"') {
+          cur += '""';
+          i += 2;
+          continue;
+        }
         cur += sql[i];
         if (sql[i] === '"') { i++; break; }
         i++;
@@ -168,9 +175,10 @@ function shouldSkip(stmt: string): boolean {
   // Realtime publications.
   if (/^(ALTER|CREATE|DROP)\s+PUBLICATION\b/.test(head)) return true;
 
-  // Supabase-only extensions.
-  if (/^CREATE\s+EXTENSION\b.*\bpg_net\b/i.test(stmt)) return true;
-  if (/^CREATE\s+EXTENSION\b.*\bsupabase_vault\b/i.test(stmt)) return true;
+  // Supabase-only extensions. Match against `head` so leading comments
+  // can't sneak past the ^ anchor; `head` is uppercased.
+  if (/^CREATE\s+EXTENSION\b.*\bPG_NET\b/.test(head)) return true;
+  if (/^CREATE\s+EXTENSION\b.*\bSUPABASE_VAULT\b/.test(head)) return true;
 
   // Anything touching Supabase-managed schemas.
   if (/\b(storage|vault|realtime|net|extensions|cron)\s*\./i.test(stmt) &&

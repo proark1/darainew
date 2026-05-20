@@ -1573,9 +1573,6 @@ EXECUTE FUNCTION public.update_updated_at_column();
 -- 20251222012623_d9fd92d6-c66a-4a00-97a1-8e4964eb0257.sql
 -- ──────────────────────────────────────────────────────────────────────
 
--- Enable pg_net extension for HTTP requests from database
-CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
-
 -- Create function to send push notification when item is shared
 CREATE OR REPLACE FUNCTION public.notify_shared_item()
 RETURNS TRIGGER
