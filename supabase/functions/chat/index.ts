@@ -245,7 +245,8 @@ Task JSON fields:
 - "estimateMinutes": number (optional — saved as a comment "estimate: Nm" on the task)
 - "completionNote": string (optional — for action=complete; appended as a comment)
 - "fromNoteQuery": string (only for action=add — when set, look up the matching note's content and seed the task description from it)
-- "id": string (only for update/delete/complete actions)
+- "id": string (preferred for update/delete/complete when you have it)
+- "query": string (for update/delete/complete — title fragment to fuzzy-match the task when you don't have an id. Send EITHER id OR query/title for these actions; the executor will look up by title against the user's open tasks and report ambiguity if multiple match.)
 
 TOOL: schedule_event
 Use this to schedule calendar events.
@@ -1592,34 +1593,81 @@ async function executeToolsServerSide(
           message: `✅ Added task: ${t.title}${t.due_date ? ` (${recurrenceLabel ? `🔁 ${recurrenceLabel}, starting ` : 'due '}${new Date(t.due_date).toLocaleString()})` : ''}${assigneeName ? ` — for ${assigneeName}` : ''}`,
           data: t, undoId, entityId: t.id,
         });
-      } else if (action === 'complete' && data.id) {
-        const { data: before } = await supabase.from('tasks')
-          .select('title, completed, completed_at').eq('id', data.id).eq('user_id', userId).maybeSingle();
-        await supabase.from('tasks').update({ completed: true, completed_at: new Date().toISOString() }).eq('id', data.id).eq('user_id', userId);
-        const undoId = await undoPatch('tasks', data.id,
-          { completed: before?.completed ?? false, completed_at: before?.completed_at ?? null },
-          `marked "${before?.title || 'task'}" complete`, 'task');
-        out.push({ tool: 'manage_task', ok: true, message: `✅ Marked task complete`, undoId, entityId: data.id });
-      } else if (action === 'delete' && data.id) {
-        const { data: before } = await supabase.from('tasks')
-          .select('*').eq('id', data.id).eq('user_id', userId).maybeSingle();
-        if (!before) { out.push({ tool: 'manage_task', ok: false, message: `Task not found.` }); continue; }
-        await supabase.from('tasks').delete().eq('id', data.id).eq('user_id', userId);
-        const undoId = await undoDelete('tasks', before, `deleted task "${before.title}"`, 'task');
-        out.push({ tool: 'manage_task', ok: true, message: `🗑️ Deleted task: ${before.title}`, undoId });
-      } else if (action === 'update' && data.id) {
-        const upd: any = {};
-        if (data.title) upd.title = data.title;
-        if (data.category) upd.category = data.category;
-        if (data.priority) upd.priority = data.priority;
-        if (data.dueDate) upd.due_date = isoOrNull(data.dueDate);
-        const { data: before } = await supabase.from('tasks')
-          .select(Object.keys(upd).join(', ') + ', title').eq('id', data.id).eq('user_id', userId).maybeSingle();
-        await supabase.from('tasks').update(upd).eq('id', data.id).eq('user_id', userId);
-        const oldPatch: any = {};
-        for (const k of Object.keys(upd)) oldPatch[k] = before?.[k] ?? null;
-        const undoId = await undoPatch('tasks', data.id, oldPatch, `edited task "${before?.title || data.id}"`, 'task');
-        out.push({ tool: 'manage_task', ok: true, message: `✏️ Updated task`, undoId, entityId: data.id });
+      } else if (action === 'complete' || action === 'delete' || action === 'update') {
+        // Resolve the target row. The model is supposed to send `id`, but the
+        // user's task list isn't always exposed to it with IDs — and even when
+        // it is, the model often hands back the title instead. Mirror the
+        // manage_event pattern: if `id` is missing, fuzzy-match by title
+        // (or an explicit `query` field) inside the caller's task list. If
+        // the match is ambiguous, bail out with a clarifying message instead
+        // of silently picking one and replying "done".
+        let targetId: string | undefined = data.id;
+        if (!targetId) {
+          const needle = (data.query || data.title || '').trim();
+          if (!needle) {
+            out.push({ tool: 'manage_task', ok: false, message: `I need a task title (or id) to ${action} — which one?` });
+            continue;
+          }
+          // Only look at the caller's still-actionable tasks. Completed/
+          // trashed rows would surface stale targets ("delete buy milk" →
+          // matches a milk task from last month) and the morning digest
+          // already excludes them.
+          const { data: matches } = await supabase.from('tasks')
+            .select('id, title, completed, trashed')
+            .eq('user_id', userId)
+            .eq('trashed', false)
+            .ilike('title', `%${needle}%`)
+            .order('created_at', { ascending: false })
+            .limit(5);
+          const candidates = (matches || []).filter((r: any) =>
+            action === 'complete' ? !r.completed : true);
+          if (!candidates.length) {
+            out.push({ tool: 'manage_task', ok: false, message: `No task matches "${needle}".` });
+            continue;
+          }
+          if (candidates.length > 1) {
+            const list = candidates.slice(0, 5).map((r: any, i: number) => `${i + 1}. ${r.title}`).join('\n');
+            out.push({ tool: 'manage_task', ok: false, message: `Multiple tasks match "${needle}":\n${list}\n\nWhich one?` });
+            continue;
+          }
+          targetId = candidates[0].id;
+        }
+
+        if (action === 'complete') {
+          const { data: before } = await supabase.from('tasks')
+            .select('title, completed, completed_at').eq('id', targetId!).eq('user_id', userId).maybeSingle();
+          if (!before) { out.push({ tool: 'manage_task', ok: false, message: `Task not found.` }); continue; }
+          await supabase.from('tasks').update({ completed: true, completed_at: new Date().toISOString() }).eq('id', targetId!).eq('user_id', userId);
+          const undoId = await undoPatch('tasks', targetId!,
+            { completed: before?.completed ?? false, completed_at: before?.completed_at ?? null },
+            `marked "${before?.title || 'task'}" complete`, 'task');
+          out.push({ tool: 'manage_task', ok: true, message: `✅ Marked task complete: ${before?.title || 'task'}`, undoId, entityId: targetId });
+        } else if (action === 'delete') {
+          const { data: before } = await supabase.from('tasks')
+            .select('*').eq('id', targetId!).eq('user_id', userId).maybeSingle();
+          if (!before) { out.push({ tool: 'manage_task', ok: false, message: `Task not found.` }); continue; }
+          await supabase.from('tasks').delete().eq('id', targetId!).eq('user_id', userId);
+          const undoId = await undoDelete('tasks', before, `deleted task "${before.title}"`, 'task');
+          out.push({ tool: 'manage_task', ok: true, message: `🗑️ Deleted task: ${before.title}`, undoId });
+        } else {
+          const upd: any = {};
+          if (data.title) upd.title = data.title;
+          if (data.category) upd.category = data.category;
+          if (data.priority) upd.priority = data.priority;
+          if (data.dueDate) upd.due_date = isoOrNull(data.dueDate);
+          if (!Object.keys(upd).length) {
+            out.push({ tool: 'manage_task', ok: false, message: `Nothing to update — say what should change.` });
+            continue;
+          }
+          const { data: before } = await supabase.from('tasks')
+            .select(Object.keys(upd).join(', ') + ', title').eq('id', targetId!).eq('user_id', userId).maybeSingle();
+          if (!before) { out.push({ tool: 'manage_task', ok: false, message: `Task not found.` }); continue; }
+          await supabase.from('tasks').update(upd).eq('id', targetId!).eq('user_id', userId);
+          const oldPatch: any = {};
+          for (const k of Object.keys(upd)) oldPatch[k] = before?.[k] ?? null;
+          const undoId = await undoPatch('tasks', targetId!, oldPatch, `edited task "${before?.title || targetId}"`, 'task');
+          out.push({ tool: 'manage_task', ok: true, message: `✏️ Updated task: ${upd.title || before?.title || 'task'}`, undoId, entityId: targetId });
+        }
       }
     } catch (e) { out.push({ tool: 'manage_task', ok: false, message: `Failed: ${(e as Error).message}` }); }
   }
@@ -4861,7 +4909,7 @@ serve(async (req) => {
       
       contextMessage += `\n\n## CURRENT WORK ITEMS (Not their identity - these are just things they're working on)`;
       contextMessage += `\n${pendingTasks.length} pending tasks, ${overdueCount} overdue, ${todayCount} due today`;
-      contextMessage += `\nPending tasks:\n${pendingTasks.slice(0, 10).map(t => `- ${t.title} (${t.category}, ${t.priority} priority${t.dueDate ? `, due ${t.dueDate}` : ''})`).join('\n')}`;
+      contextMessage += `\nPending tasks:\n${pendingTasks.slice(0, 10).map(t => `- [id:${t.id}] ${t.title} (${t.category}, ${t.priority} priority${t.dueDate ? `, due ${t.dueDate}` : ''})`).join('\n')}`;
     }
     
     if (events && events.length > 0) {
