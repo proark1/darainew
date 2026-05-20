@@ -263,3 +263,4 @@ Built with Capacitor for native iOS and Android deployment.
 ## License
 
 Private project.
+
