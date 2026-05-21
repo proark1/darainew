@@ -31,6 +31,11 @@ import { useShoppingLists } from '@/hooks/useShoppingLists';
 import { useHabits } from '@/hooks/useHabits';
 import { useEmails } from '@/hooks/useEmails';
 import { buildSmartPayload } from '@/lib/smartPayloadBuilder';
+import { cleanAssistantContent } from '@/lib/assistantContent';
+import { calculateProductivityStreak } from '@/lib/productivity';
+import { classifyThinkingStatus } from '@/lib/thinkingStatus';
+import { buildConversationMessages } from '@/lib/conversationMessages';
+import { formatContractCostSummary } from '@/lib/contractCosts';
 import { useAIMemory } from '@/hooks/useAIMemory';
 import { StandardMode } from '@/components/layout/StandardMode';
 import { GhostMode } from '@/components/ghost/GhostMode';
@@ -42,7 +47,7 @@ import { WeeklyReviewDialog } from '@/components/review/WeeklyReviewDialog';
 import { CallProvider } from '@/components/calling/CallProvider';
 import { CalendarEvent, ChatMessage, AppMode, Task } from '@/types/flux';
 import { useToast } from '@/hooks/use-toast';
-import { differenceInCalendarDays, startOfDay, subDays, isAfter, isBefore, addDays } from 'date-fns';
+import { isAfter, isBefore, addDays } from 'date-fns';
 import { Contract as SmartContract } from '@/hooks/useSmartContext';
 
 const Index = () => {
@@ -262,28 +267,7 @@ const Index = () => {
   } = useGlobalSearch(user?.id);
 
   // Calculate productivity streak
-  const productivityStreak = useMemo(() => {
-    const completedTaskDates = tasks
-      .filter(t => t.completed && t.dueDate)
-      .map(t => startOfDay(t.dueDate!).getTime());
-    
-    const uniqueDates = [...new Set(completedTaskDates)].sort((a, b) => b - a);
-    if (uniqueDates.length === 0) return 0;
-    
-    let streak = 0;
-    const today = startOfDay(new Date()).getTime();
-    
-    for (let i = 0; i <= 30; i++) {
-      const checkDate = subDays(new Date(), i).getTime();
-      if (uniqueDates.includes(startOfDay(new Date(checkDate)).getTime())) {
-        streak++;
-      } else if (i > 0) {
-        break;
-      }
-    }
-    
-    return streak;
-  }, [tasks]);
+  const productivityStreak = useMemo(() => calculateProductivityStreak(tasks), [tasks]);
 
   const [showMorningDigest, setShowMorningDigest] = useState(false);
   const [showWeeklyReview, setShowWeeklyReview] = useState(false);
@@ -378,23 +362,7 @@ const Index = () => {
     setIsProcessing(true);
     setActionCards([]);
 
-    // Set contextual thinking status
-    const lowerText = userText.toLowerCase();
-    if (lowerText.includes('search') || lowerText.includes('news') || lowerText.includes('latest')) {
-      setThinkingStatus('Searching the web...');
-    } else if (lowerText.includes('task') || lowerText.includes('todo') || lowerText.includes('remind')) {
-      setThinkingStatus('Checking your tasks...');
-    } else if (lowerText.includes('calendar') || lowerText.includes('event') || lowerText.includes('schedule')) {
-      setThinkingStatus('Looking at your calendar...');
-    } else if (lowerText.includes('email') || lowerText.includes('mail') || lowerText.includes('inbox')) {
-      setThinkingStatus('Checking your emails...');
-    } else if (lowerText.includes('health') || lowerText.includes('sleep') || lowerText.includes('steps')) {
-      setThinkingStatus('Analyzing health data...');
-    } else if (lowerText.includes('contact') || lowerText.includes('who')) {
-      setThinkingStatus('Searching contacts...');
-    } else {
-      setThinkingStatus('Thinking...');
-    }
+    setThinkingStatus(classifyThinkingStatus(userText));
 
     let assistantContent = '';
     const collectedCards: { type: string; action: string; title: string; details?: string }[] = [];
@@ -408,39 +376,11 @@ const Index = () => {
     const createdTaskTitles = new Set<string>();
     const createdEventTitles = new Set<string>();
 
-    // Keep prompts small and avoid runaway token usage
-    const conversationMessages = (() => {
-      // Prepend previous conversation context for cross-session memory
-      const prevContext: Array<{ role: 'user' | 'assistant'; content: string }> = [];
-      if (previousConversationMessages.length > 0 && messages.length === 0) {
-        // Only inject previous context at the start of a new session
-        prevContext.push({ role: 'user', content: '[Previous conversation context — use for continuity]' });
-        prevContext.push(...previousConversationMessages);
-        prevContext.push({ role: 'assistant', content: '[End of previous context — new conversation starts below]' });
-      }
-
-      let recent = messages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
-      
-      // Truncate older messages if history is very long to save tokens
-      if (recent.length > 12) {
-        // Keep the most recent 10 with a brief note about truncation
-        recent = recent.slice(-10);
-      }
-
-      const deduped: Array<{ role: 'user' | 'assistant'; content: string }> = [];
-      for (const m of [...prevContext, ...recent]) {
-        const last = deduped[deduped.length - 1];
-        if (last && last.role === m.role && last.content === m.content) continue;
-        deduped.push(m);
-      }
-
-      const last = deduped[deduped.length - 1];
-      if (!last || last.role !== 'user' || last.content !== userText) {
-        deduped.push({ role: 'user', content: userText });
-      }
-
-      return deduped;
-    })();
+    const conversationMessages = buildConversationMessages({
+      userText,
+      messages: messages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+      previousConversationMessages,
+    });
 
     try {
       // Build health data for AI context
@@ -942,43 +882,7 @@ const Index = () => {
 
             toast({ title: 'Reminder Set', description: `"${message}" at ${new Date(triggerAt).toLocaleTimeString()}` });
           } else if (toolCall.tool === 'get_summary' && toolCall.summaryType === 'contract_costs') {
-            // Compute financial summary from contracts
-            let monthlyTotal = 0;
-            let yearlyTotal = 0;
-            const activeContracts2 = contracts.filter(c => c.isActive !== false);
-            for (const c of activeContracts2) {
-              if (!c.costAmount) continue;
-              const amount = c.costAmount;
-              const freq = c.costFrequency || 'monthly';
-              if (freq === 'monthly') {
-                monthlyTotal += amount;
-                yearlyTotal += amount * 12;
-              } else if (freq === 'yearly') {
-                monthlyTotal += amount / 12;
-                yearlyTotal += amount;
-              } else if (freq === 'quarterly') {
-                monthlyTotal += amount / 3;
-                yearlyTotal += amount * 4;
-              } else if (freq === 'one_time') {
-                yearlyTotal += amount;
-              } else {
-                // fallback: treat as monthly
-                monthlyTotal += amount;
-                yearlyTotal += amount * 12;
-              }
-            }
-            // Feed back as assistant context
-            const costSummary = `📊 **Financial Summary**\n\n` +
-              `**Monthly costs:** €${monthlyTotal.toFixed(2)}\n` +
-              `**Yearly costs:** €${yearlyTotal.toFixed(2)}\n` +
-              `**Active contracts:** ${activeContracts2.length}\n\n` +
-              activeContracts2
-                .filter(c => c.costAmount)
-                .sort((a, b) => (b.costAmount || 0) - (a.costAmount || 0))
-                .slice(0, 10)
-                .map(c => `- ${c.name}${c.provider ? ` (${c.provider})` : ''}: €${c.costAmount}/${c.costFrequency || 'month'}`)
-                .join('\n');
-            assistantContent += '\n\n' + costSummary;
+            assistantContent += '\n\n' + formatContractCostSummary(contracts);
           }
         },
         onDone: () => {
@@ -989,19 +893,7 @@ const Index = () => {
       });
 
       // Clean up response and add message
-      const cleanContent = assistantContent
-        .replace(/<tool>[\s\S]*?<\/task>/g, '')
-        .replace(/<tool>[\s\S]*?<\/event>/g, '')
-        .replace(/<tool>[\s\S]*?<\/note>/g, '')
-        .replace(/<tool>[\s\S]*?<\/contact>/g, '')
-        .replace(/<tool>[\s\S]*?<\/contract>/g, '')
-        .replace(/<tool>[\s\S]*?<\/project>/g, '')
-        .replace(/<tool>[\s\S]*?<\/habit>/g, '')
-        .replace(/<tool>[\s\S]*?<\/email>/g, '')
-        .replace(/<tool>[\s\S]*?<\/item>/g, '')
-        .replace(/<tool>get_summary<\/tool>\s*<type>\w+<\/type>/g, '')
-        .replace(/<tool>set_reminder<\/tool>\s*<reminder>\{[\s\S]*?\}<\/reminder>/g, '')
-        .trim();
+      const cleanContent = cleanAssistantContent(assistantContent);
 
       if (cleanContent) {
         addMessage({ role: 'assistant', content: cleanContent });
