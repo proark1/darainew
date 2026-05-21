@@ -31,6 +31,8 @@ import { useShoppingLists } from '@/hooks/useShoppingLists';
 import { useHabits } from '@/hooks/useHabits';
 import { useEmails } from '@/hooks/useEmails';
 import { buildSmartPayload } from '@/lib/smartPayloadBuilder';
+import { cleanAssistantContent } from '@/lib/assistantContent';
+import { calculateProductivityStreak } from '@/lib/productivity';
 import { useAIMemory } from '@/hooks/useAIMemory';
 import { StandardMode } from '@/components/layout/StandardMode';
 import { GhostMode } from '@/components/ghost/GhostMode';
@@ -42,7 +44,7 @@ import { WeeklyReviewDialog } from '@/components/review/WeeklyReviewDialog';
 import { CallProvider } from '@/components/calling/CallProvider';
 import { CalendarEvent, ChatMessage, AppMode, Task } from '@/types/flux';
 import { useToast } from '@/hooks/use-toast';
-import { differenceInCalendarDays, startOfDay, subDays, isAfter, isBefore, addDays } from 'date-fns';
+import { isAfter, isBefore, addDays } from 'date-fns';
 import { Contract as SmartContract } from '@/hooks/useSmartContext';
 
 const Index = () => {
@@ -262,28 +264,7 @@ const Index = () => {
   } = useGlobalSearch(user?.id);
 
   // Calculate productivity streak
-  const productivityStreak = useMemo(() => {
-    const completedTaskDates = tasks
-      .filter(t => t.completed && t.dueDate)
-      .map(t => startOfDay(t.dueDate!).getTime());
-    
-    const uniqueDates = [...new Set(completedTaskDates)].sort((a, b) => b - a);
-    if (uniqueDates.length === 0) return 0;
-    
-    let streak = 0;
-    const today = startOfDay(new Date()).getTime();
-    
-    for (let i = 0; i <= 30; i++) {
-      const checkDate = subDays(new Date(), i).getTime();
-      if (uniqueDates.includes(startOfDay(new Date(checkDate)).getTime())) {
-        streak++;
-      } else if (i > 0) {
-        break;
-      }
-    }
-    
-    return streak;
-  }, [tasks]);
+  const productivityStreak = useMemo(() => calculateProductivityStreak(tasks), [tasks]);
 
   const [showMorningDigest, setShowMorningDigest] = useState(false);
   const [showWeeklyReview, setShowWeeklyReview] = useState(false);
@@ -989,19 +970,7 @@ const Index = () => {
       });
 
       // Clean up response and add message
-      const cleanContent = assistantContent
-        .replace(/<tool>[\s\S]*?<\/task>/g, '')
-        .replace(/<tool>[\s\S]*?<\/event>/g, '')
-        .replace(/<tool>[\s\S]*?<\/note>/g, '')
-        .replace(/<tool>[\s\S]*?<\/contact>/g, '')
-        .replace(/<tool>[\s\S]*?<\/contract>/g, '')
-        .replace(/<tool>[\s\S]*?<\/project>/g, '')
-        .replace(/<tool>[\s\S]*?<\/habit>/g, '')
-        .replace(/<tool>[\s\S]*?<\/email>/g, '')
-        .replace(/<tool>[\s\S]*?<\/item>/g, '')
-        .replace(/<tool>get_summary<\/tool>\s*<type>\w+<\/type>/g, '')
-        .replace(/<tool>set_reminder<\/tool>\s*<reminder>\{[\s\S]*?\}<\/reminder>/g, '')
-        .trim();
+      const cleanContent = cleanAssistantContent(assistantContent);
 
       if (cleanContent) {
         addMessage({ role: 'assistant', content: cleanContent });

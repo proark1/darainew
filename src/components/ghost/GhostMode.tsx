@@ -23,6 +23,7 @@ import { useShoppingLists } from '@/hooks/useShoppingLists';
 import { useFamilyContext } from '@/hooks/useFamilyContext';
 import { useMealPlanning } from '@/hooks/useMealPlanning';
 import type { AssistantPersonality } from '@/types/flux';
+import { getRandomGreeting } from './greetings';
 import {
   Mic,
   MicOff,
@@ -82,64 +83,6 @@ function DebugTimingRow({
       </span>
     </div>
   );
-}
-
-// Helper to get varied AI greeting
-function getRandomGreeting(): string {
-  const hour = new Date().getHours();
-  
-  const morningGreetings = [
-    "Good morning! Ready to make today amazing?",
-    "Rise and shine! What's on your mind?",
-    "Morning! Let's tackle the day together.",
-    "Hey there, early bird! How can I help?",
-    "Good morning! What would you like to accomplish today?",
-  ];
-  
-  const afternoonGreetings = [
-    "Good afternoon! What can I do for you?",
-    "Hey! Hope your day is going well. What's up?",
-    "Afternoon! Ready when you are.",
-    "Hi there! What's on your agenda?",
-    "Good to see you! How can I assist?",
-  ];
-  
-  const eveningGreetings = [
-    "Good evening! How can I help you tonight?",
-    "Hey! Winding down or just getting started?",
-    "Evening! What's on your mind?",
-    "Hi there! Ready to help with anything.",
-    "Good evening! Let's make the most of it.",
-  ];
-  
-  const nightGreetings = [
-    "Hey, night owl! What's keeping you up?",
-    "Burning the midnight oil? I'm here to help!",
-    "Late night session? Let's get productive!",
-    "Can't sleep? Let's chat about something.",
-    "Night mode activated! What do you need?",
-  ];
-  
-  const motivationalAddons = [
-    " Remember, you've got this! 💪",
-    " Every step forward counts.",
-    " Let's make magic happen! ✨",
-    " You're capable of amazing things.",
-    "",
-    "",
-    "",
-  ];
-  
-  let greetings: string[];
-  if (hour < 12) greetings = morningGreetings;
-  else if (hour < 17) greetings = afternoonGreetings;
-  else if (hour < 21) greetings = eveningGreetings;
-  else greetings = nightGreetings;
-  
-  const greeting = greetings[Math.floor(Math.random() * greetings.length)];
-  const addon = motivationalAddons[Math.floor(Math.random() * motivationalAddons.length)];
-  
-  return greeting + addon;
 }
 
 export function GhostMode({ onClose, onCommand, personality = 'balanced' }: GhostModeProps) {
