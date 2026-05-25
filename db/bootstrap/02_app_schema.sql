@@ -8083,16 +8083,22 @@ $$;
 
 REVOKE ALL ON FUNCTION public.is_superadmin(uuid) FROM PUBLIC;
 
--- Per-user app settings (theme, color scheme, notification prefs, …) stored as
--- a single JSONB blob so the client's UserSettings shape can evolve freely.
-CREATE TABLE IF NOT EXISTS public.user_settings (
-  user_id UUID PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,
-  settings JSONB NOT NULL DEFAULT '{}'::jsonb,
-  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
-);
-
 -- Refresh PostgREST's schema cache. Also picks up any earlier migration
 -- (dori_active_plans view, schedule_proposals table, …) that the cache
 -- never reloaded for — the dashboard was reporting "Could not find the
 -- table in the schema cache" for both even though the objects exist.
+NOTIFY pgrst, 'reload schema';
+
+-- ──────────────────────────────────────────────────────────────────────
+-- 20260524120000_create_user_settings.sql
+-- ──────────────────────────────────────────────────────────────────────
+
+-- Per-user app settings persisted as a single JSONB blob, so settings sync
+-- across devices instead of living only in each browser's localStorage.
+CREATE TABLE IF NOT EXISTS public.user_settings (
+  user_id UUID NOT NULL PRIMARY KEY,
+  settings JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+
 NOTIFY pgrst, 'reload schema';

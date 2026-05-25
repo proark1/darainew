@@ -35,7 +35,7 @@ fi
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 BOOTSTRAP="$ROOT/bootstrap"
 
-for f in 00_extensions.sql 01_auth_js.sql 02_app_schema.sql; do
+for f in 00_extensions.sql 01_auth_js.sql 02_app_schema.sql 03_rls_policies.sql; do
   path="$BOOTSTRAP/$f"
   if [[ ! -f "$path" ]]; then
     echo "error: missing $path" >&2
