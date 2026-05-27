@@ -1,0 +1,44 @@
+# Single-origin gateway for the self-hosted stack. supabase-js calls
+# <VITE_SUPABASE_URL>/rest/v1/*, /auth/v1/*, /realtime/v1/* — this routes each
+# path prefix to the right Railway service and adds the CORS the browser needs.
+#
+# Required env (set on the Railway service):
+#   PORT          provided by Railway
+#   POSTGREST_URL e.g. http://postgrest.railway.internal:3000
+#   GOTRUE_URL    e.g. http://gotrue.railway.internal:9999
+#   REALTIME_URL  e.g. http://realtime.railway.internal:4000   (optional until Realtime is deployed)
+#   APP_ORIGIN    your app's origin for CORS, or * (default)
+
+{
+	admin off
+	auto_https off
+}
+
+:{$PORT:8080} {
+	# CORS — the SPA talks to this gateway cross-origin. supabase-js uses the
+	# Authorization header (no cookies), so a wildcard origin is fine.
+	header {
+		Access-Control-Allow-Origin "{$APP_ORIGIN:*}"
+		Access-Control-Allow-Methods "GET, POST, PATCH, PUT, DELETE, OPTIONS, HEAD"
+		Access-Control-Allow-Headers "*"
+		Access-Control-Expose-Headers "Content-Range, Content-Profile, Content-Location"
+		Access-Control-Max-Age "86400"
+		Vary "Origin"
+		-Server
+	}
+	@preflight method OPTIONS
+	respond @preflight 204
+
+	handle_path /rest/v1/* {
+		reverse_proxy {$POSTGREST_URL}
+	}
+	handle_path /auth/v1/* {
+		reverse_proxy {$GOTRUE_URL}
+	}
+	handle_path /realtime/v1/* {
+		reverse_proxy {$REALTIME_URL}
+	}
+	handle {
+		respond "darai gateway ok" 200
+	}
+}
