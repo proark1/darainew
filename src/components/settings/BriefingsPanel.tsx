@@ -7,12 +7,13 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { Newspaper, Plus, Trash2, X, Send, Clock } from 'lucide-react';
+import { Newspaper, Plus, Trash2, X, Send, Clock, Sunrise } from 'lucide-react';
 import {
   useBriefings,
   type Briefing,
   type BriefingChannel,
 } from '@/hooks/useBriefings';
+import { BriefingFeedCard } from '@/components/notifications/BriefingFeedCard';
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const CHANNELS: { key: BriefingChannel; label: string }[] = [
@@ -32,6 +33,30 @@ export function BriefingsPanel() {
   const handleCreate = async () => {
     setCreating(true);
     await createBriefing();
+    setCreating(false);
+  };
+
+  // One tap to set up an automatic morning + evening push briefing pair.
+  const handleQuickStart = async () => {
+    setCreating(true);
+    await createBriefing({
+      name: 'Morning Briefing',
+      topics: [],
+      deliver_at: '08:00',
+      days_of_week: [0, 1, 2, 3, 4, 5, 6],
+      channels: ['push'],
+      max_items: 5,
+      enabled: true,
+    });
+    await createBriefing({
+      name: 'Evening Briefing',
+      topics: [],
+      deliver_at: '20:00',
+      days_of_week: [0, 1, 2, 3, 4, 5, 6],
+      channels: ['push'],
+      max_items: 5,
+      enabled: true,
+    });
     setCreating(false);
   };
 
@@ -60,27 +85,36 @@ export function BriefingsPanel() {
         </div>
       ) : briefings.length === 0 ? (
         <Card>
-          <CardContent className="py-10 text-center space-y-3">
+          <CardContent className="py-10 text-center space-y-4">
             <Newspaper className="h-8 w-8 mx-auto text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
-              No briefings yet. Create one to get a morning or evening rundown on your topics.
+              No briefings yet. Get an automatic morning and evening push, or build your own.
             </p>
-            <Button onClick={handleCreate} disabled={creating}>
-              <Plus className="h-4 w-4 mr-1" />
-              Create your first briefing
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2 justify-center">
+              <Button onClick={handleQuickStart} disabled={creating}>
+                <Sunrise className="h-4 w-4 mr-1" />
+                Add morning + evening push
+              </Button>
+              <Button variant="outline" onClick={handleCreate} disabled={creating}>
+                <Plus className="h-4 w-4 mr-1" />
+                Create a custom briefing
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : (
-        briefings.map((b) => (
-          <BriefingCard
-            key={b.id}
-            briefing={b}
-            onUpdate={(updates) => updateBriefing(b.id, updates)}
-            onDelete={() => deleteBriefing(b.id)}
-            onSendNow={() => sendNow(b.id)}
-          />
-        ))
+        <>
+          {briefings.map((b) => (
+            <BriefingCard
+              key={b.id}
+              briefing={b}
+              onUpdate={(updates) => updateBriefing(b.id, updates)}
+              onDelete={() => deleteBriefing(b.id)}
+              onSendNow={() => sendNow(b.id)}
+            />
+          ))}
+          <BriefingFeedCard hideWhenEmpty />
+        </>
       )}
     </div>
   );
