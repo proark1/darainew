@@ -343,6 +343,17 @@ export function StandardMode({
     [setActivePanel, onSendMessage],
   );
 
+  // Let any surface (dashboard hero prompts, cards, etc.) hand a prompt to
+  // Dori via a `dori:ask` window event — reuses the app's event-bus pattern.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const text = (e as CustomEvent<{ text?: string }>).detail?.text;
+      if (text) handleAskDori(text);
+    };
+    window.addEventListener('dori:ask', handler as EventListener);
+    return () => window.removeEventListener('dori:ask', handler as EventListener);
+  }, [handleAskDori]);
+
   // Handle search result selection
   const handleSelectSearchResult = (result: SearchResult) => {
     setShowGlobalSearch(false);
