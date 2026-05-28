@@ -7,7 +7,7 @@
 # Bumping the tag: check https://hub.docker.com/r/supabase/edge-runtime/tags
 # for the current version. Older versions may pin a Deno that doesn't
 # support newer std imports.
-FROM supabase/edge-runtime:v1.67.0
+FROM supabase/edge-runtime:v1.73.5
 
 # All function code lives under /home/deno/functions inside the
 # runtime. The "main" function (servicePath at startup) is the
