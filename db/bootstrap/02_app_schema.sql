@@ -351,8 +351,6 @@ CREATE TABLE public.shared_project_members (
 -- Drop the old simple contacts table and create an enhanced one
 DROP TABLE IF EXISTS public.user_contacts;
 
-DROP TABLE IF EXISTS public.user_contacts CASCADE;
-
 -- Create enhanced contacts table with relationship management
 CREATE TABLE public.user_contacts (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -387,7 +385,27 @@ CREATE TABLE public.user_contacts (
   -- Metadata
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
-);
+);;
+-- Additive merge from duplicate CREATE TABLE:
+ALTER TABLE public.user_contacts ADD COLUMN IF NOT EXISTS id UUID NOT NULL DEFAULT gen_random_uuid();
+ALTER TABLE public.user_contacts ADD COLUMN IF NOT EXISTS user_id UUID NOT NULL;
+ALTER TABLE public.user_contacts ADD COLUMN IF NOT EXISTS contact_user_id UUID;
+ALTER TABLE public.user_contacts ADD COLUMN IF NOT EXISTS -- Basic info
+  name TEXT NOT NULL;
+ALTER TABLE public.user_contacts ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.user_contacts ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.user_contacts ADD COLUMN IF NOT EXISTS company TEXT;
+ALTER TABLE public.user_contacts ADD COLUMN IF NOT EXISTS role TEXT;
+ALTER TABLE public.user_contacts ADD COLUMN IF NOT EXISTS contact_type TEXT NOT NULL DEFAULT 'personal' CHECK (contact_type IN ('personal', 'business'));
+ALTER TABLE public.user_contacts ADD COLUMN IF NOT EXISTS personal_tier TEXT CHECK (personal_tier IN ('family', 'close_friend', 'friend', 'acquaintance'));
+ALTER TABLE public.user_contacts ADD COLUMN IF NOT EXISTS business_level TEXT CHECK (business_level IN ('very_well', 'well', 'barely', 'not_contacted'));
+ALTER TABLE public.user_contacts ADD COLUMN IF NOT EXISTS contact_frequency_days INTEGER DEFAULT 30;
+ALTER TABLE public.user_contacts ADD COLUMN IF NOT EXISTS last_contacted_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.user_contacts ADD COLUMN IF NOT EXISTS next_contact_due TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.user_contacts ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE public.user_contacts ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
+ALTER TABLE public.user_contacts ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now();
+ALTER TABLE public.user_contacts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now();
 
 -- Trigger for updated_at
 CREATE OR REPLACE TRIGGER update_user_contacts_updated_at
@@ -7110,8 +7128,6 @@ ALTER TABLE public.proactive_settings
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS locale TEXT;
 
-DROP TABLE IF EXISTS public.workspaces CASCADE;
-
 -- ============ Workspaces ============
 CREATE TABLE IF NOT EXISTS public.workspaces (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -7123,9 +7139,17 @@ CREATE TABLE IF NOT EXISTS public.workspaces (
   archived BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-DROP TABLE IF EXISTS public.workspace_members CASCADE;
+);;
+-- Additive merge from duplicate CREATE TABLE:
+ALTER TABLE public.workspaces ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
+ALTER TABLE public.workspaces ADD COLUMN IF NOT EXISTS name TEXT NOT NULL;
+ALTER TABLE public.workspaces ADD COLUMN IF NOT EXISTS slug TEXT;
+ALTER TABLE public.workspaces ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE public.workspaces ADD COLUMN IF NOT EXISTS icon TEXT;
+ALTER TABLE public.workspaces ADD COLUMN IF NOT EXISTS owner_id UUID NOT NULL;
+ALTER TABLE public.workspaces ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE public.workspaces ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE public.workspaces ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 CREATE TABLE IF NOT EXISTS public.workspace_members (
   workspace_id UUID NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE,
@@ -7134,9 +7158,13 @@ CREATE TABLE IF NOT EXISTS public.workspace_members (
   display_name TEXT,
   joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (workspace_id, user_id)
-);
-
-DROP TABLE IF EXISTS public.workspace_invite_codes CASCADE;
+);;
+-- Additive merge from duplicate CREATE TABLE:
+ALTER TABLE public.workspace_members ADD COLUMN IF NOT EXISTS workspace_id UUID NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE;
+ALTER TABLE public.workspace_members ADD COLUMN IF NOT EXISTS user_id UUID NOT NULL;
+ALTER TABLE public.workspace_members ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'member';
+ALTER TABLE public.workspace_members ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE public.workspace_members ADD COLUMN IF NOT EXISTS joined_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 CREATE TABLE IF NOT EXISTS public.workspace_invite_codes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -7149,7 +7177,18 @@ CREATE TABLE IF NOT EXISTS public.workspace_invite_codes (
   revoked_at TIMESTAMPTZ,
   created_by UUID NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+);;
+-- Additive merge from duplicate CREATE TABLE:
+ALTER TABLE public.workspace_invite_codes ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
+ALTER TABLE public.workspace_invite_codes ADD COLUMN IF NOT EXISTS workspace_id UUID NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE;
+ALTER TABLE public.workspace_invite_codes ADD COLUMN IF NOT EXISTS code TEXT NOT NULL;
+ALTER TABLE public.workspace_invite_codes ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'member';
+ALTER TABLE public.workspace_invite_codes ADD COLUMN IF NOT EXISTS uses INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE public.workspace_invite_codes ADD COLUMN IF NOT EXISTS max_uses INTEGER;
+ALTER TABLE public.workspace_invite_codes ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+ALTER TABLE public.workspace_invite_codes ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
+ALTER TABLE public.workspace_invite_codes ADD COLUMN IF NOT EXISTS created_by UUID NOT NULL;
+ALTER TABLE public.workspace_invite_codes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 -- Helper: is user a member of a workspace? (security definer, avoids RLS recursion)
 CREATE OR REPLACE FUNCTION public.is_workspace_member(_user_id uuid, _workspace_id uuid)
@@ -7189,8 +7228,6 @@ CREATE OR REPLACE TRIGGER update_workspaces_updated_at
   BEFORE UPDATE ON public.workspaces
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
-DROP TABLE IF EXISTS public.task_comments CASCADE;
-
 -- ============ task_comments ============
 CREATE TABLE IF NOT EXISTS public.task_comments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -7199,11 +7236,16 @@ CREATE TABLE IF NOT EXISTS public.task_comments (
   body TEXT NOT NULL,
   source TEXT NOT NULL DEFAULT 'web',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+);;
+-- Additive merge from duplicate CREATE TABLE:
+ALTER TABLE public.task_comments ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
+ALTER TABLE public.task_comments ADD COLUMN IF NOT EXISTS task_id UUID NOT NULL REFERENCES public.tasks(id) ON DELETE CASCADE;
+ALTER TABLE public.task_comments ADD COLUMN IF NOT EXISTS author_id UUID;
+ALTER TABLE public.task_comments ADD COLUMN IF NOT EXISTS body TEXT NOT NULL;
+ALTER TABLE public.task_comments ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'web';
+ALTER TABLE public.task_comments ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 CREATE INDEX IF NOT EXISTS idx_task_comments_task_id ON public.task_comments(task_id);
-
-DROP TABLE IF EXISTS public.islamic_notification_settings CASCADE;
 
 -- ============ islamic_notification_settings ============
 CREATE TABLE IF NOT EXISTS public.islamic_notification_settings (
@@ -7223,13 +7265,32 @@ CREATE TABLE IF NOT EXISTS public.islamic_notification_settings (
   timezone TEXT NOT NULL DEFAULT 'UTC',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+);;
+-- Additive merge from duplicate CREATE TABLE:
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS user_id UUID NOT NULL;
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS events_enabled BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS events_hours_before INTEGER NOT NULL DEFAULT 24;
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS events_send_time TEXT NOT NULL DEFAULT '08:00';
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS daily_hadith_enabled BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS daily_hadith_time TEXT NOT NULL DEFAULT '07:00';
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS hadith_source_preference TEXT NOT NULL DEFAULT 'mixed';
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS prayer_reminders_enabled BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS prayer_reminder_minutes_before INTEGER NOT NULL DEFAULT 5;
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS prayer_reminders_for_all_five BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS prayer_reminders_selected TEXT[] NOT NULL DEFAULT ARRAY['Fajr';
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS 'Dhuhr';
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS 'Asr';
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS 'Maghrib';
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS 'Isha'];
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS notification_language TEXT NOT NULL DEFAULT 'en';
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'UTC';
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE public.islamic_notification_settings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 CREATE OR REPLACE TRIGGER update_islamic_notif_settings_updated_at
   BEFORE UPDATE ON public.islamic_notification_settings
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
-DROP TABLE IF EXISTS public.user_location_settings CASCADE;
 
 -- ============ user_location_settings ============
 CREATE TABLE IF NOT EXISTS public.user_location_settings (
@@ -7245,13 +7306,24 @@ CREATE TABLE IF NOT EXISTS public.user_location_settings (
   prayer_calculation_method INTEGER NOT NULL DEFAULT 2,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+);;
+-- Additive merge from duplicate CREATE TABLE:
+ALTER TABLE public.user_location_settings ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
+ALTER TABLE public.user_location_settings ADD COLUMN IF NOT EXISTS user_id UUID NOT NULL;
+ALTER TABLE public.user_location_settings ADD COLUMN IF NOT EXISTS city TEXT NOT NULL DEFAULT 'Berlin';
+ALTER TABLE public.user_location_settings ADD COLUMN IF NOT EXISTS country TEXT NOT NULL DEFAULT 'Germany';
+ALTER TABLE public.user_location_settings ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;
+ALTER TABLE public.user_location_settings ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;
+ALTER TABLE public.user_location_settings ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'Europe/Berlin';
+ALTER TABLE public.user_location_settings ADD COLUMN IF NOT EXISTS show_weather BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE public.user_location_settings ADD COLUMN IF NOT EXISTS temperature_unit TEXT NOT NULL DEFAULT 'celsius';
+ALTER TABLE public.user_location_settings ADD COLUMN IF NOT EXISTS prayer_calculation_method INTEGER NOT NULL DEFAULT 2;
+ALTER TABLE public.user_location_settings ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE public.user_location_settings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 CREATE OR REPLACE TRIGGER update_user_location_settings_updated_at
   BEFORE UPDATE ON public.user_location_settings
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
-DROP TABLE IF EXISTS public.dori_undo_log CASCADE;
 
 -- ============ dori_undo_log ============
 CREATE TABLE IF NOT EXISTS public.dori_undo_log (
@@ -7262,7 +7334,15 @@ CREATE TABLE IF NOT EXISTS public.dori_undo_log (
   undone BOOLEAN NOT NULL DEFAULT false,
   undone_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+);;
+-- Additive merge from duplicate CREATE TABLE:
+ALTER TABLE public.dori_undo_log ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
+ALTER TABLE public.dori_undo_log ADD COLUMN IF NOT EXISTS user_id UUID NOT NULL;
+ALTER TABLE public.dori_undo_log ADD COLUMN IF NOT EXISTS action TEXT NOT NULL;
+ALTER TABLE public.dori_undo_log ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE public.dori_undo_log ADD COLUMN IF NOT EXISTS undone BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE public.dori_undo_log ADD COLUMN IF NOT EXISTS undone_at TIMESTAMPTZ;
+ALTER TABLE public.dori_undo_log ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 CREATE INDEX IF NOT EXISTS idx_dori_undo_log_user_created
   ON public.dori_undo_log(user_id, created_at DESC);
@@ -7848,8 +7928,6 @@ CREATE TABLE IF NOT EXISTS public.recurrence_exceptions (
 CREATE INDEX IF NOT EXISTS recurrence_exceptions_user_idx
   ON public.recurrence_exceptions (user_id, parent_kind, parent_id);
 
-DROP TABLE IF EXISTS public.focus_sessions CASCADE;
-
 CREATE TABLE IF NOT EXISTS public.focus_sessions (
   id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id uuid NOT NULL,
@@ -7871,7 +7949,28 @@ CREATE TABLE IF NOT EXISTS public.focus_sessions (
   ) STORED,
   workspace_id uuid,
   created_at timestamptz NOT NULL DEFAULT now()
-);
+);;
+-- Additive merge from duplicate CREATE TABLE:
+ALTER TABLE public.focus_sessions ADD COLUMN IF NOT EXISTS id uuid NOT NULL DEFAULT gen_random_uuid();
+ALTER TABLE public.focus_sessions ADD COLUMN IF NOT EXISTS user_id uuid NOT NULL;
+ALTER TABLE public.focus_sessions ADD COLUMN IF NOT EXISTS task_id uuid REFERENCES public.tasks(id) ON DELETE SET NULL;
+ALTER TABLE public.focus_sessions ADD COLUMN IF NOT EXISTS -- on Q3 plan"). NULL when task_id is set;
+ALTER TABLE public.focus_sessions ADD COLUMN IF NOT EXISTS since the task title covers
+  -- it; either label or task_id must be present (enforced in the tool
+  -- handler so we don't reject historic backfills).
+  label text;
+ALTER TABLE public.focus_sessions ADD COLUMN IF NOT EXISTS category text NOT NULL DEFAULT 'personal'
+    CHECK (category IN ('business', 'personal', 'family', 'shared', 'focus'));
+ALTER TABLE public.focus_sessions ADD COLUMN IF NOT EXISTS started_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE public.focus_sessions ADD COLUMN IF NOT EXISTS ended_at timestamptz;
+ALTER TABLE public.focus_sessions ADD COLUMN IF NOT EXISTS duration_minutes integer GENERATED ALWAYS AS (
+    CASE
+      WHEN ended_at IS NULL THEN NULL
+      ELSE GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (ended_at - started_at)) / 60)::integer)
+    END
+  ) STORED;
+ALTER TABLE public.focus_sessions ADD COLUMN IF NOT EXISTS workspace_id uuid;
+ALTER TABLE public.focus_sessions ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
 
 -- At most one open (ended_at IS NULL) session per user. Partial unique
 -- index is the postgres-idiomatic way to express "only one row matching
