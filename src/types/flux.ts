@@ -4,7 +4,7 @@ export type TimeFilter = 'today' | 'week' | 'month' | 'noDate';
 export type TaskPriority = 'high' | 'medium' | 'low';
 export type TaskStatus = 'backlog' | 'in_progress' | 'done';
 export type ThemeMode = 'dark' | 'light' | 'colorful';
-export type ColorScheme = 'cyan' | 'purple' | 'green' | 'orange' | 'pink';
+export type ColorScheme = 'emerald' | 'cyan' | 'purple' | 'green' | 'orange' | 'pink';
 export type AssistantPersonality = 'balanced' | 'strict' | 'supportive' | 'creative';
 
 export interface PersonalityConfig {
@@ -196,7 +196,7 @@ export const personalityConfigs: PersonalityConfig[] = [
 
 export const defaultSettings: UserSettings = {
   theme: 'dark',
-  colorScheme: 'cyan',
+  colorScheme: 'emerald',
   defaultTaskCategory: 'personal',
   defaultTaskPriority: 'medium',
   assistantPersonality: 'balanced',

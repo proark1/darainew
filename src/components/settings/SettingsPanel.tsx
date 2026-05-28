@@ -29,9 +29,10 @@ interface SettingsPanelProps {
 }
 
 const colorSchemes: { value: ColorScheme; label: string; color: string }[] = [
+  { value: 'emerald', label: 'Emerald', color: 'bg-emerald-500' },
   { value: 'cyan', label: 'Electric Cyan', color: 'bg-cyan-500' },
   { value: 'purple', label: 'Violet', color: 'bg-purple-500' },
-  { value: 'green', label: 'Emerald', color: 'bg-green-500' },
+  { value: 'green', label: 'Green', color: 'bg-green-500' },
   { value: 'orange', label: 'Sunset', color: 'bg-orange-500' },
   { value: 'pink', label: 'Rose', color: 'bg-pink-500' },
 ];
