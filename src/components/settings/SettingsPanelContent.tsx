@@ -36,12 +36,14 @@ import {
   Shield,
   Loader2,
   Keyboard,
-  Fingerprint
+  Fingerprint,
+  Newspaper
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SpaceMembersPanel } from './SpaceMembersPanel';
 import { NotificationSettingsPanel } from './NotificationSettingsPanel';
 import { ProactiveSettingsPanel } from './ProactiveSettingsPanel';
+import { BriefingsPanel } from './BriefingsPanel';
 import { KeyboardShortcutsPanel, useKeyboardShortcutsPanel } from './KeyboardShortcutsPanel';
 import { AutomationRulesPanel } from './AutomationRulesPanel';
 import { CalendarConnectionsPanel } from './CalendarConnectionsPanel';
@@ -337,7 +339,7 @@ export function SettingsPanelContent({
   const biometricAuth = useBiometricAuth();
   const keyboardShortcuts = useKeyboardShortcutsPanel();
   const prayerNotifications = usePrayerNotificationSettings();
-  const [activeTab, setActiveTab] = useState<'general' | 'telegram' | 'proactive' | 'team' | 'memory' | 'ai' | 'info'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'telegram' | 'briefings' | 'proactive' | 'team' | 'memory' | 'ai' | 'info'>('general');
   
   // Sync status bar color with theme
   useStatusBar(settings.theme);
@@ -441,6 +443,7 @@ export function SettingsPanelContent({
   const tabs = [
     { id: 'general' as const, label: 'General', icon: Settings },
     { id: 'telegram' as const, label: 'Telegram', icon: Send },
+    { id: 'briefings' as const, label: 'Briefings', icon: Newspaper },
     { id: 'proactive' as const, label: 'Proactive & Advanced', icon: Brain },
     { id: 'team' as const, label: t('settings.team'), icon: Users },
     { id: 'memory' as const, label: 'Memory', icon: Brain },
@@ -1006,6 +1009,10 @@ export function SettingsPanelContent({
 
         {activeTab === 'telegram' && (
           <TelegramHubPanel />
+        )}
+
+        {activeTab === 'briefings' && (
+          <BriefingsPanel />
         )}
 
         {activeTab === 'proactive' && (
