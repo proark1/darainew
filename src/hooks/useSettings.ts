@@ -90,6 +90,7 @@ function applyColorScheme(scheme: ColorScheme) {
   const root = document.documentElement;
   
   const schemes: Record<ColorScheme, { primary: string; accent: string; ghost: string }> = {
+    emerald: { primary: '160 84% 39%', accent: '173 80% 40%', ghost: '160 84% 45%' },
     cyan: { primary: '187 94% 43%', accent: '270 60% 50%', ghost: '270 80% 60%' },
     purple: { primary: '270 60% 50%', accent: '187 94% 43%', ghost: '270 80% 60%' },
     green: { primary: '142 71% 45%', accent: '187 94% 43%', ghost: '142 80% 50%' },
@@ -103,5 +104,9 @@ function applyColorScheme(scheme: ColorScheme) {
   root.style.setProperty('--ring', colors.primary);
   root.style.setProperty('--sidebar-primary', colors.primary);
   root.style.setProperty('--sidebar-ring', colors.primary);
+  // Keep accent in sync with the chosen scheme (previously defined but never
+  // applied, which left a mismatched accent hue behind).
+  root.style.setProperty('--accent', colors.accent);
+  root.style.setProperty('--glow-accent', colors.accent);
   root.style.setProperty('--ghost-primary', colors.ghost);
 }
