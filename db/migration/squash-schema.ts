@@ -266,6 +266,46 @@ function isRlsStatement(stmt: string): boolean {
   return false;
 }
 
+// Extract column definitions from a CREATE TABLE statement, skipping
+// table-level constraint entries. Returns each as e.g.
+//   `workspace_id uuid REFERENCES public.workspaces(id) ON DELETE SET NULL`
+function extractColumnDefs(stmt: string): string[] {
+  const start = stmt.indexOf('(');
+  if (start < 0) return [];
+  let depth = 0;
+  let end = -1;
+  for (let i = start; i < stmt.length; i++) {
+    if (stmt[i] === '(') depth++;
+    else if (stmt[i] === ')') {
+      depth--;
+      if (depth === 0) { end = i; break; }
+    }
+  }
+  if (end < 0) return [];
+  const body = stmt.slice(start + 1, end);
+  const parts: string[] = [];
+  let buf = '';
+  depth = 0;
+  for (const ch of body) {
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    if (ch === ',' && depth === 0) {
+      parts.push(buf.trim());
+      buf = '';
+    } else {
+      buf += ch;
+    }
+  }
+  if (buf.trim()) parts.push(buf.trim());
+  // Drop table-level constraints and strip inline column-level PRIMARY KEY /
+  // UNIQUE — both would fail on ADD COLUMN if a PK/unique already exists for
+  // the table from the first CREATE TABLE.
+  return parts
+    .map((p) => p.replace(/^\s*(?:--[^\n]*\n)+/, '').trimStart())
+    .filter((p) => !/^(CONSTRAINT|PRIMARY\s+KEY|UNIQUE|CHECK|FOREIGN\s+KEY|EXCLUDE|LIKE)\b/i.test(p))
+    .map((p) => p.replace(/\s+PRIMARY\s+KEY\b/i, '').replace(/\s+UNIQUE\b/i, '').trim());
+}
+
 function rewriteRls(stmt: string): string {
   let out = stmt
     .replace(/REFERENCES\s+auth\s*\.\s*users\s*\(\s*id\s*\)/gi, 'REFERENCES public.users(id)')
@@ -383,18 +423,27 @@ function main() {
       }
       let after = rewrite(raw);
 
-      // Detect a CREATE TABLE whose target was already created earlier in the
-      // squash, and prepend DROP TABLE IF EXISTS ... CASCADE so the later
-      // schema wins. Without this, a "CREATE TABLE IF NOT EXISTS X" that
-      // redefines an earlier X is silently a no-op, and follow-up statements
-      // that reference its new columns (e.g. focus_sessions.ended_at) fail.
+      // Duplicate CREATE TABLE handling — additive merge. CREATE TABLE IF NOT
+      // EXISTS on the second occurrence is a no-op (table exists from the
+      // first), but follow-ups can reference columns the first didn't have
+      // (focus_sessions.ended_at) OR the second can be a less-complete
+      // "defensive" redeclaration (task_comments without workspace_id). Drop
+      // is wrong because it can wipe columns the first definition had. Emit
+      // ALTER TABLE ADD COLUMN IF NOT EXISTS for every column in the second
+      // definition so we end up with the union and never lose anything.
       const head = statementHead(after);
       const tableMatch = head.match(/^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:"?PUBLIC"?\s*\.\s*)?"?(\w+)"?/);
       if (tableMatch) {
         const tableName = tableMatch[1].toLowerCase();
         if (seenTables.has(tableName)) {
-          after = `DROP TABLE IF EXISTS public.${tableName} CASCADE;\n\n${after}`;
-          droppedDupes++;
+          const colDefs = extractColumnDefs(after);
+          if (colDefs.length > 0) {
+            const alters = colDefs
+              .map((c) => `ALTER TABLE public.${tableName} ADD COLUMN IF NOT EXISTS ${c};`)
+              .join('\n');
+            after = `${after};\n-- Additive merge from duplicate CREATE TABLE:\n${alters}`;
+            droppedDupes++;
+          }
         }
         seenTables.add(tableName);
       }
