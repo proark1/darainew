@@ -51,14 +51,15 @@ BEGIN
 END;
 $$;
 
--- 5. Backfill every existing user.
-DO $$
-DECLARE r record;
-BEGIN
-  FOR r IN SELECT user_id FROM public.profiles LOOP
-    PERFORM public.ensure_default_calendar(r.user_id);
-  END LOOP;
-END $$;
+-- 5. Backfill every existing user (set-based, single statement).
+INSERT INTO public.external_calendar_connections
+  (user_id, provider, auth_type, name, color, sync_enabled, is_default)
+SELECT p.user_id, 'local', 'local', 'DarAI Calendar', '#14b8a6', false, true
+FROM public.profiles p
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.external_calendar_connections ecc
+  WHERE ecc.user_id = p.user_id AND ecc.is_default
+);
 
 -- 6. Create the standard calendar for new users at signup (alongside profile).
 CREATE OR REPLACE FUNCTION public.handle_new_user()
