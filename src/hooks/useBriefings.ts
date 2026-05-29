@@ -42,6 +42,29 @@ const db = supabase as unknown as {
   functions: typeof supabase.functions;
 };
 
+// The dispatcher prefixes each entry in its `errors` array with the briefing
+// id ("<uuid>: no channel delivered"). Drop that prefix for display.
+function stripBriefingId(entry: string | undefined): string | undefined {
+  return entry?.replace(/^[0-9a-f-]{36}:\s*/i, '');
+}
+
+// FunctionsHttpError stores the raw Response on `.context`. Parse its JSON body
+// to recover the `{ error }` message the edge function returned; fall back to
+// the HTTP status, then the generic SDK message.
+async function extractFnError(error: unknown): Promise<string> {
+  const ctx = (error as { context?: unknown })?.context;
+  if (ctx instanceof Response) {
+    try {
+      const body = await ctx.clone().json();
+      if (body?.error) return String(body.error);
+    } catch {
+      /* body absent or not JSON */
+    }
+    return `server returned ${ctx.status}`;
+  }
+  return (error as Error)?.message || 'unknown error';
+}
+
 export function useBriefings() {
   const { user } = useAuth();
   const [briefings, setBriefings] = useState<Briefing[]>([]);
@@ -120,14 +143,35 @@ export function useBriefings() {
 
   const sendNow = useCallback(async (id: string) => {
     try {
-      const { error } = await db.functions.invoke(`briefing-dispatch-cron?briefing_id=${id}`, {
+      const { data, error } = await db.functions.invoke(`briefing-dispatch-cron?briefing_id=${id}`, {
         body: {},
       });
-      if (error) throw error;
-      toast.success('Briefing sent — check your channels');
+
+      if (error) {
+        // The edge function returned a non-2xx status. Pull the real reason
+        // out of the response body (FunctionsHttpError carries the Response on
+        // `.context`) so the toast says *why* instead of a generic failure.
+        throw new Error(await extractFnError(error));
+      }
+
+      // The function answers 200 even when nothing was actually delivered
+      // (e.g. Telegram chosen but not linked, push not registered, or the news
+      // step failed). Read the body so we don't claim success for a no-op.
+      const sent = (data as { sent?: number } | null)?.sent ?? 0;
+      const fnErrors = (data as { errors?: string[] } | null)?.errors ?? [];
+      if (sent > 0) {
+        toast.success('Briefing sent — check your channels');
+        return;
+      }
+      const reason = stripBriefingId(fnErrors[0]);
+      if (reason?.includes('no channel')) {
+        toast.error('No delivery channel ready — link Telegram or enable push first');
+      } else {
+        toast.error(reason ? `Couldn't send briefing: ${reason}` : "Couldn't send briefing");
+      }
     } catch (err) {
       console.error('Failed to send briefing:', err);
-      toast.error('Failed to send briefing');
+      toast.error(`Failed to send briefing: ${(err as Error).message}`);
     }
   }, []);
 
