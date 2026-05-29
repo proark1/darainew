@@ -33,12 +33,40 @@ The hourly/15-min functions are themselves timezone-aware and dedupe per local
 day, so pinging them every hour/15 min is correct — they decide when to actually
 send.
 
-## Deploy to Railway
+## ⚠️ If the cron service keeps failing every run
+
+Symptom (Railway → cron → Cron Runs): every execution is red, lasts ~1s, and the
+**Current Deployment** image is `curlimages/curl:latest`.
+
+That means the service is **not running this scheduler at all**. It's deploying a
+bare `curl` image on Railway's native *Cron Schedule*, which runs a one-shot
+container each tick — and `curl` with no valid command exits non-zero
+immediately, so every run fails. A single hourly tick also can't reproduce the
+`*/15`, `*/30`, and `0 9 * * *` schedules below.
+
+The fix is to point the service at **this repo** so it runs the long-running
+scheduler instead of the curl image:
+
+1. Railway → **cron** service → **Settings**.
+2. **Source**: connect this **GitHub repo** (remove the `curlimages/curl:latest`
+   Docker image source).
+3. **Root Directory** = `/` (repo root — the Dockerfile does `COPY cron/...`, so
+   the build context must be the repo root, not `cron/`).
+4. **Config-as-code → Railway Config File** = `cron/railway.json`. That file pins
+   the Dockerfile build, the `/health` check, and an `ON_FAILURE` restart policy.
+5. **Settings → Cron Schedule → clear it.** This is a long-running worker, *not* a
+   scheduled job — the schedules live inside `scheduler.mjs`. (A `railway.json`
+   can't unset an existing dashboard cron schedule, so you must remove it here.)
+6. Set the [env vars](#env-vars) below, **enable Private Networking**, and redeploy.
+
+## Deploy to Railway (fresh service)
 
 1. Add a new service in your Railway project (this is the service that should
    replace the failed **cron** one).
 2. Source: this repo. **Root Directory / build context = repo root (`/`)**,
-   **Dockerfile path = `cron/Dockerfile`** (matches how `edge-runtime` is set up).
+   **Config file = `cron/railway.json`** (builds `cron/Dockerfile`, matching how
+   `edge-runtime` is set up). Leave the **Cron Schedule blank** — it's a
+   long-running worker.
 3. Networking → enable **Private Networking** so it can reach the edge-runtime
    at `edge-runtime.railway.internal:9000`.
 4. Set the env vars below.
@@ -68,14 +96,16 @@ check at `/health` so the service isn't marked unhealthy.
 Tail the service logs — every fired job logs a line:
 
 ```
-[cron] scheduler started — 9 jobs, base=http://edge-runtime.railway.internal:9000
-[cron] telegram-poll -> 200 (812ms)
+[cron] health server on :8080
+[cron] scheduler started — 8 jobs, base=http://edge-runtime.railway.internal:9000
 [cron] briefing-dispatch-cron -> 200 (143ms)
 ```
 
-Then message your Telegram bot — within a minute you should get a reply. A
-`401`/`404` line means `SUPABASE_SERVICE_ROLE_KEY` or `EDGE_FUNCTIONS_URL` is
-wrong.
+The deployment should stay **green/Active** (it's a long-running service, not a
+one-shot run). A `401`/`404` line means `SUPABASE_SERVICE_ROLE_KEY` or
+`EDGE_FUNCTIONS_URL` is wrong; a `failed:` line (e.g. `fetch failed`) means it
+can't reach the edge-runtime — check that **Private Networking** is enabled and
+`EDGE_FUNCTIONS_URL` matches the edge service's internal name.
 
 ## Local smoke test
 

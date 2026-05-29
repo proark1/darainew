@@ -23,6 +23,9 @@ const BASE = (process.env.EDGE_FUNCTIONS_URL || 'http://edge-runtime.railway.int
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const PORT = Number(process.env.PORT) || 8080;
 const DISABLED = process.env.CRON_DISABLED === '1';
+// Cap each edge-function POST so a hung runtime can't pin a job in-flight
+// forever; the request is aborted and logged as a failure instead.
+const REQUEST_TIMEOUT_MS = Number(process.env.CRON_REQUEST_TIMEOUT_MS) || 60_000;
 
 // Each job mirrors a former pg_cron entry: { name → function path, schedule }.
 //
@@ -90,6 +93,7 @@ async function fire(job) {
         ...(SERVICE_KEY ? { Authorization: `Bearer ${SERVICE_KEY}` } : {}),
       },
       body: '{}',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     const ms = Date.now() - t0;
     if (res.ok) {
@@ -128,12 +132,18 @@ function startScheduler() {
   // Check every 15s; the minute-key guard ensures each minute fires exactly once
   // even if timers drift slightly.
   setInterval(run, 15_000);
-  run(); // evaluate immediately on boot (so telegram-poll starts right away)
+  run(); // evaluate immediately on boot so a fresh deploy fires due jobs at once
   console.log(`[cron] scheduler started — ${JOBS.length} jobs, base=${BASE}`);
   if (!SERVICE_KEY) {
     console.warn('[cron] SUPABASE_SERVICE_ROLE_KEY is unset — dispatcher jobs that require it will 401.');
   }
 }
+
+// ── Crash safety ─────────────────────────────────────────────────────────────
+// A long-running worker must never die on a stray rejection — otherwise Railway
+// restarts it and the deployment flaps red. Log and keep scheduling.
+process.on('unhandledRejection', (e) => console.error('[cron] unhandledRejection:', e?.stack || e?.message || e));
+process.on('uncaughtException', (e) => console.error('[cron] uncaughtException:', e?.stack || e?.message || e));
 
 // ── Health server (Railway expects a listening port) ───────────────────────
 import { createServer } from 'node:http';
