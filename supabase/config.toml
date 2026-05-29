@@ -246,6 +246,16 @@ verify_jwt = false
 [functions.telegram-weekly-briefing]
 verify_jwt = false
 
+# Cron-invoked dispatchers. Like the other *-cron functions they gate
+# internally on a service-role bearer, so the gateway JWT check is disabled
+# to match the sibling crons (plaid-sync-cron, workspace-recap-cron, ...) and
+# avoid a second 401 layer that depends on the Vault secret being in sync.
+[functions.briefing-dispatch-cron]
+verify_jwt = false
+
+[functions.workspace-recap-cron]
+verify_jwt = false
+
 [functions.admin-data-export]
 verify_jwt = true
 
