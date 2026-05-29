@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback } from 'react';
-import { cn } from '@/lib/utils';
 import { useNextUp } from '@/hooks/useNextUp';
 import { Mic, Send, Sparkles, Loader2, Calendar, CheckSquare, ArrowRight } from 'lucide-react';
 import doriFish from '@/assets/dori-fish.png';
