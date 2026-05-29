@@ -1279,7 +1279,6 @@ Deno.serve(async (req) => {
               chatId,
               prompt,
               buildConfirmKeyboard(q.actionId!),
-              GEMINI_API_KEY,
               TELEGRAM_API_KEY,
             );
             try {
@@ -1676,7 +1675,6 @@ Deno.serve(async (req) => {
               chatId,
               '↩️ Tap to undo the last action.',
               buildUndoKeyboard(latestUndoId),
-              GEMINI_API_KEY,
               TELEGRAM_API_KEY,
             );
           }
@@ -1689,7 +1687,6 @@ Deno.serve(async (req) => {
           chatId,
           prompt,
           buildConfirmKeyboard(q.actionId!),
-          GEMINI_API_KEY,
           TELEGRAM_API_KEY,
         );
       }
