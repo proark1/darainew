@@ -1,13 +1,13 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { cn } from '@/lib/utils';
 import { useNextUp } from '@/hooks/useNextUp';
-import { Mic, Send, Sparkles, Loader2, Calendar, CheckSquare, ArrowRight } from 'lucide-react';
+import { useDoriConversation } from '@/contexts/DoriConversationContext';
+import { MarkdownRenderer } from '@/components/chat/MarkdownRenderer';
+import { ActionCard } from './ActionCard';
+import { Mic, Send, Sparkles, Loader2, Calendar, CheckSquare, ArrowRight, X, Maximize2 } from 'lucide-react';
 import doriFish from '@/assets/dori-fish.png';
 
 interface DoriBarProps {
-  /** Reflects whether Dori is currently processing a request. */
-  isProcessing?: boolean;
-  /** Short status string shown while Dori works (e.g. "Creating task…"). */
-  thinkingStatus?: string;
   /** Opens full voice mode. */
   onVoiceMode: () => void;
   /** Hide the bar (e.g. when the user is already in the full assistant panel). */
@@ -16,25 +16,26 @@ interface DoriBarProps {
 
 /**
  * The persistent "Dori spine" — an always-present bar at the bottom of every
- * screen. You can ask Dori anything from anywhere (it routes to the assistant
- * and runs the full 71-tool brain via the existing `dori:ask` event), reach
- * voice in one tap, and see your next proactive item inline. This is what makes
- * Dori the app's nervous system rather than one panel among many.
+ * screen. Ask Dori anything from anywhere; the reply (and any action cards)
+ * stream into an inline popover so you never leave your current panel. Voice is
+ * one tap away and your next proactive item shows inline. Backed by
+ * DoriConversationContext, so it drives the same 71-tool brain Index owns.
  */
-export function DoriBar({ isProcessing, thinkingStatus, onVoiceMode, hidden }: DoriBarProps) {
+export function DoriBar({ onVoiceMode, hidden }: DoriBarProps) {
   const [text, setText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const { items } = useNextUp(1);
   const next = items[0];
+  const dori = useDoriConversation();
+  const { messages, isProcessing, thinkingStatus, actionCards, isOpen, open, close, send } = dori;
 
   const ask = useCallback((prompt: string) => {
     const trimmed = prompt.trim();
     if (!trimmed) return;
-    // Reuse the universal Dori input contract: StandardMode listens for this,
-    // routes to the assistant panel, and streams the full brain + tool calls.
-    window.dispatchEvent(new CustomEvent('dori:ask', { detail: { text: trimmed } }));
+    send(trimmed);
     setText('');
-  }, []);
+  }, [send]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -45,52 +46,114 @@ export function DoriBar({ isProcessing, thinkingStatus, onVoiceMode, hidden }: D
 
   const openNext = () => {
     if (!next) return;
-    window.dispatchEvent(
-      new CustomEvent('dori:open-entity', { detail: { type: next.type, id: next.id } }),
-    );
+    window.dispatchEvent(new CustomEvent('dori:open-entity', { detail: { type: next.type, id: next.id } }));
   };
+
+  // Expand the inline conversation into the full assistant panel.
+  const expand = () => {
+    window.dispatchEvent(new CustomEvent('dori:open-assistant'));
+    close();
+  };
+
+  // Keep the popover pinned to the latest message / thinking state.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (isOpen && el) el.scrollTop = el.scrollHeight;
+  }, [isOpen, messages, isProcessing]);
 
   if (hidden) return null;
 
+  const recent = messages.slice(-6);
+  const showPopover = isOpen && (recent.length > 0 || isProcessing);
+
   return (
     <div className="shrink-0 px-3 md:px-5 pb-3">
+      {/* Inline conversation popover */}
+      {showPopover && (
+        <div className="mb-2 rounded-2xl border border-border bg-card/95 backdrop-blur-lg shadow-lg overflow-hidden animate-in slide-in-from-bottom-2 duration-200">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+            <div className="flex items-center gap-2">
+              <img src={doriFish} alt="" aria-hidden="true" className="w-5 h-5 object-contain" />
+              <span className="text-sm font-semibold">Dori</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={expand} aria-label="Open full assistant"
+                className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                <Maximize2 className="w-3.5 h-3.5" />
+              </button>
+              <button type="button" onClick={close} aria-label="Close Dori conversation"
+                className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div ref={scrollRef} className="max-h-[40vh] overflow-y-auto px-3 py-3 space-y-3">
+            {recent.map((m, i) => (
+              <div key={m.id ?? i} className={cn('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}>
+                <div className={cn(
+                  'max-w-[85%] rounded-2xl px-3 py-2 text-sm',
+                  m.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground',
+                )}>
+                  {m.role === 'assistant'
+                    ? <MarkdownRenderer content={m.content} />
+                    : <span className="whitespace-pre-wrap">{m.content}</span>}
+                </div>
+              </div>
+            ))}
+
+            {/* Action results after the last assistant turn. */}
+            {!isProcessing && actionCards.length > 0 && (
+              <div className="space-y-1">
+                {actionCards.map((card, i) => <ActionCard key={i} data={card} />)}
+              </div>
+            )}
+
+            {isProcessing && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {thinkingStatus || 'Dori is thinking…'}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* The bar */}
       <div className="flex items-center gap-2 rounded-2xl border border-border bg-card/80 backdrop-blur-lg shadow-sm px-2.5 py-1.5">
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center shrink-0 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => (isOpen ? close() : open())}
+          aria-label={isOpen ? 'Hide Dori conversation' : 'Show Dori conversation'}
+          className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center shrink-0 overflow-hidden"
+        >
           {isProcessing
             ? <Loader2 className="w-4 h-4 text-primary-foreground animate-spin" />
             : <img src={doriFish} alt="" aria-hidden="true" className="w-6 h-6 object-contain" />}
-        </div>
+        </button>
 
-        {isProcessing ? (
-          <div className="flex-1 min-w-0 text-sm text-muted-foreground truncate">
-            {thinkingStatus || 'Dori is working…'}
-          </div>
-        ) : (
-          <>
-            <input
-              ref={inputRef}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask Dori anything…"
-              aria-label="Ask Dori anything"
-              className="flex-1 min-w-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-            />
+        <input
+          ref={inputRef}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Ask Dori anything…"
+          aria-label="Ask Dori anything"
+          className="flex-1 min-w-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+        />
 
-            {/* Proactive "next up" — only when the user isn't mid-typing. */}
-            {next && !text && (
-              <button
-                type="button"
-                onClick={openNext}
-                className="hidden sm:inline-flex items-center gap-1.5 shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs text-foreground/80 hover:bg-primary/20 transition-colors max-w-[14rem]"
-                aria-label={`Next up: ${next.title}`}
-              >
-                {next.type === 'event' ? <Calendar className="w-3 h-3 text-primary shrink-0" /> : <CheckSquare className="w-3 h-3 text-primary shrink-0" />}
-                <span className="truncate">{next.title}</span>
-                <ArrowRight className="w-3 h-3 shrink-0 opacity-60" />
-              </button>
-            )}
-          </>
+        {/* Proactive "next up" — only when the user isn't mid-typing. */}
+        {next && !text && (
+          <button
+            type="button"
+            onClick={openNext}
+            className="hidden sm:inline-flex items-center gap-1.5 shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs text-foreground/80 hover:bg-primary/20 transition-colors max-w-[14rem]"
+            aria-label={`Next up: ${next.title}`}
+          >
+            {next.type === 'event' ? <Calendar className="w-3 h-3 text-primary shrink-0" /> : <CheckSquare className="w-3 h-3 text-primary shrink-0" />}
+            <span className="truncate">{next.title}</span>
+            <ArrowRight className="w-3 h-3 shrink-0 opacity-60" />
+          </button>
         )}
 
         <button
@@ -102,7 +165,7 @@ export function DoriBar({ isProcessing, thinkingStatus, onVoiceMode, hidden }: D
           <Mic className="w-4 h-4" />
         </button>
 
-        {text.trim() && !isProcessing && (
+        {text.trim() ? (
           <button
             type="button"
             onClick={() => ask(text)}
@@ -111,8 +174,7 @@ export function DoriBar({ isProcessing, thinkingStatus, onVoiceMode, hidden }: D
           >
             <Send className="w-4 h-4" />
           </button>
-        )}
-        {!text.trim() && !isProcessing && (
+        ) : (
           <Sparkles className="w-4 h-4 text-primary/40 shrink-0 mr-1" aria-hidden="true" />
         )}
       </div>

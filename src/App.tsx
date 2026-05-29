@@ -10,6 +10,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { WorkspaceProvider } from "@/contexts/WorkspaceContext";
+import { DoriConversationProvider } from "@/contexts/DoriConversationContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NetworkStatusBanner } from "@/components/NetworkStatusBanner";
 import { XPBadgeProvider } from "@/components/ui/xp-badge";
@@ -277,13 +278,15 @@ const App = () => (
           <LanguageProvider>
             <TooltipProvider>
               <XPBadgeProvider>
-                <Toaster />
-                <Sonner position="top-center" />
-                <ErrorBoundary fallbackTitle="DarAI couldn't load">
-                  <BrowserRouter>
-                    <AppContent />
-                  </BrowserRouter>
-                </ErrorBoundary>
+                <DoriConversationProvider>
+                  <Toaster />
+                  <Sonner position="top-center" />
+                  <ErrorBoundary fallbackTitle="DarAI couldn't load">
+                    <BrowserRouter>
+                      <AppContent />
+                    </BrowserRouter>
+                  </ErrorBoundary>
+                </DoriConversationProvider>
               </XPBadgeProvider>
             </TooltipProvider>
           </LanguageProvider>

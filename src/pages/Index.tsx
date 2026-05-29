@@ -35,6 +35,7 @@ import { cleanAssistantContent } from '@/lib/assistantContent';
 import { calculateProductivityStreak } from '@/lib/productivity';
 import { classifyThinkingStatus } from '@/lib/thinkingStatus';
 import { buildConversationMessages } from '@/lib/conversationMessages';
+import { useDoriConversation } from '@/contexts/DoriConversationContext';
 import { formatContractCostSummary } from '@/lib/contractCosts';
 import { useAIMemory } from '@/hooks/useAIMemory';
 import { StandardMode } from '@/components/layout/StandardMode';
@@ -284,6 +285,10 @@ const Index = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [thinkingStatus, setThinkingStatus] = useState<string | undefined>();
   const [actionCards, setActionCards] = useState<ActionCardData[]>([]);
+  // Bridge Dori's conversation to surfaces outside Index (the persistent Dori
+  // bar). Index stays the single owner; we publish a snapshot + register the
+  // send handler. See DoriConversationContext.
+  const doriConversation = useDoriConversation();
   const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [shareDialog, setShareDialog] = useState<{
     type: 'task' | 'event';
@@ -996,6 +1001,17 @@ const Index = () => {
       sendLockRef.current = false;
     }
   }, [addMessage, addTask, addEvent, deleteTask, toggleTaskComplete, updateTask, events, messages, settings, streamChat, tasks, toast, contacts, contracts, allEmails, notes, todayHabits, familyMembers, shoppingLists, userProfile, unreadEmailCount, createNote, deleteNote, searchNotes, addContact, updateContact, deleteContact, markContacted, addContract, updateContract, deleteContract, addProject, updateProject, deleteProject, projects, createHabit, logHabit, deleteHabit, previousConversationMessages, user?.id, startConversation]);
+
+  // Publish live conversation state to the Dori bridge so the persistent Dori
+  // bar can render the conversation inline on any screen.
+  useEffect(() => {
+    doriConversation.publish({ messages, isProcessing: isProcessing || isStreaming, thinkingStatus, actionCards });
+  }, [doriConversation, messages, isProcessing, isStreaming, thinkingStatus, actionCards]);
+
+  // Register the send handler so any surface can drive the full 71-tool brain.
+  useEffect(() => {
+    doriConversation.registerSend(handleSendMessage);
+  }, [doriConversation, handleSendMessage]);
 
   const handleGhostCommand = useCallback((command: string) => {
     handleSendMessage(command);
