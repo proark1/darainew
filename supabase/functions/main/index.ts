@@ -37,16 +37,20 @@ const MEMORY_LIMIT_MB = 256;
 // 500 to the Telegram webhook (and silently dropped replies under polling).
 // Override with EDGE_WORKER_TIMEOUT_MS if needed.
 const TIMEOUT_MS = Number(Deno.env.get("EDGE_WORKER_TIMEOUT_MS")) || 150_000;
+// Max time a first attempt may take and still be eligible for a fresh-isolate
+// retry. Stale/dead-worker failures return near-instantly (tens of ms); a
+// longer failure means the handler actually ran (timeout/OOM) and must NOT be
+// retried, to avoid duplicating side effects.
+const STALE_RETRY_MAX_MS = Number(Deno.env.get("EDGE_STALE_RETRY_MAX_MS")) || 3_000;
 
-// Pre-built worker cache keyed by service path. The runtime itself
-// caches workers but having an explicit map lets us short-circuit
-// pathological re-imports under load.
-const workers = new Map<string, { fetch: (req: Request) => Promise<Response> }>();
-
-async function getWorker(servicePath: string) {
-  let w = workers.get(servicePath);
-  if (w) return w;
-  w = await EdgeRuntime.userWorkers.create({
+// Spawn (or reuse) the worker for a function. We deliberately do NOT cache the
+// worker handle ourselves: the runtime already reuses a live isolate when one
+// exists (forceCreate:false). A handle held past the isolate's wall-clock
+// lifetime goes stale, and reusing it throws "Function unavailable" forever —
+// which is exactly what broke the infrequently-called cron functions. `force`
+// requests a brand-new isolate, used to recover from a stale/dead one.
+function spawnWorker(servicePath: string, force = false) {
+  return EdgeRuntime.userWorkers.create({
     servicePath,
     memoryLimitMb: MEMORY_LIMIT_MB,
     workerTimeoutMs: TIMEOUT_MS,
@@ -58,11 +62,9 @@ async function getWorker(servicePath: string) {
     // service-role JWT, etc.) returns undefined. strictAppOrigin() then throws
     // "CORS misconfigured: set APP_URL" at module load and the worker dies.
     envVars: Object.entries(Deno.env.toObject()),
-    forceCreate: false,
+    forceCreate: force,
     netAccessDisabled: false,
   });
-  workers.set(servicePath, w);
-  return w;
 }
 
 function json(body: unknown, status = 200) {
@@ -95,10 +97,45 @@ Deno.serve(async (req: Request) => {
   }
 
   const servicePath = `${FUNCTIONS_DIR}/${fnName}`;
+  // Keep a clone so we can retry once on a fresh isolate if the first attempt
+  // hits a reclaimed/stale worker. The clone's body is cancelled on every path
+  // where it isn't used, so a large payload (e.g. base64 image) isn't pinned in
+  // memory by the unread tee branch.
+  const retryReq = req.clone();
+  const dropRetryBody = () => { try { retryReq.body?.cancel(); } catch { /* already consumed */ } };
+  const startedAt = Date.now();
   try {
-    const worker = await getWorker(servicePath);
-    return await worker.fetch(req);
+    try {
+      const worker = await spawnWorker(servicePath);
+      const res = await worker.fetch(req);
+      dropRetryBody();
+      return res;
+    } catch (staleErr) {
+      // Only retry when the failure looks like a dead/stale cached isolate that
+      // never ran the handler — those return near-instantly. Do NOT retry if:
+      //  (a) the failure was slow (the handler ran, then hit a wall-clock/OOM
+      //      limit), or
+      //  (b) the error explicitly signals a timeout/OOM (covers a rare fast OOM
+      //      on a huge allocation).
+      // Retrying a request whose handler already ran would redo non-idempotent
+      // work — double briefing sends, double tool actions, double charges.
+      const elapsed = Date.now() - startedAt;
+      const errMsg = staleErr instanceof Error ? staleErr.message : String(staleErr);
+      const ranAndFailed = elapsed > STALE_RETRY_MAX_MS
+        || /timed?\s*out|timeout|wall.?clock|memory|oom/i.test(errMsg);
+      if (ranAndFailed) {
+        dropRetryBody();
+        throw staleErr;
+      }
+      console.warn(
+        `[main] ${fnName} worker failed in ${elapsed}ms, forcing fresh isolate:`,
+        errMsg,
+      );
+      const fresh = await spawnWorker(servicePath, true);
+      return await fresh.fetch(retryReq);
+    }
   } catch (e) {
+    dropRetryBody();
     // Most common reason: the function directory doesn't exist (typo)
     // or the function failed to start (missing env var at module load,
     // syntax error, etc.). Log full detail and return generic message.
