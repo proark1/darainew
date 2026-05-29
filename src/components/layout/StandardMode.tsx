@@ -364,6 +364,13 @@ export function StandardMode({
     return () => window.removeEventListener('dori:ask', handler as EventListener);
   }, [handleAskDori]);
 
+  // The Dori bar's inline popover can "expand" into the full assistant panel.
+  useEffect(() => {
+    const open = () => setActivePanel('assistant');
+    window.addEventListener('dori:open-assistant', open);
+    return () => window.removeEventListener('dori:open-assistant', open);
+  }, [setActivePanel]);
+
   // Handle search result selection
   const handleSelectSearchResult = (result: SearchResult) => {
     setShowGlobalSearch(false);
@@ -919,11 +926,10 @@ export function StandardMode({
           </div>
         </div>
 
-        {/* The persistent Dori spine — ask from any panel, see what's next,
-            jump to voice. Hidden on the assistant panel (you're already there). */}
+        {/* The persistent Dori spine — ask from any panel (reply streams into an
+            inline popover), see what's next, jump to voice. Hidden on the
+            assistant panel (you're already there). */}
         <DoriBar
-          isProcessing={isProcessing}
-          thinkingStatus={thinkingStatus}
           onVoiceMode={onVoiceMode}
           hidden={activePanel === 'assistant'}
         />

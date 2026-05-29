@@ -1,41 +1,51 @@
 import { render, fireEvent } from '@testing-library/react';
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { DoriBar } from './DoriBar';
 
-// useNextUp pulls from supabase/auth; stub it so the bar renders in isolation.
 vi.mock('@/hooks/useNextUp', () => ({
   useNextUp: () => ({ items: [] as never[], loading: false }),
 }));
 
+// Controllable Dori conversation context.
+const send = vi.fn();
+let doriState: Record<string, unknown> = {};
+vi.mock('@/contexts/DoriConversationContext', () => ({
+  useDoriConversation: () => ({
+    messages: [] as never[],
+    isProcessing: false,
+    thinkingStatus: undefined as string | undefined,
+    actionCards: [] as never[],
+    isOpen: false,
+    open: vi.fn(),
+    close: vi.fn(),
+    send,
+    publish: vi.fn(),
+    registerSend: vi.fn(),
+    ...doriState,
+  }),
+}));
+
 describe('DoriBar', () => {
-  let dispatched: CustomEvent[];
-  let listener: (e: Event) => void;
-
   beforeEach(() => {
-    dispatched = [];
-    listener = (e: Event) => dispatched.push(e as CustomEvent);
-    window.addEventListener('dori:ask', listener);
+    send.mockClear();
+    doriState = {};
   });
-  afterEach(() => window.removeEventListener('dori:ask', listener));
 
-  it('dispatches dori:ask with the typed text on Enter and clears the input', () => {
+  it('sends the typed text to Dori on Enter and clears the input', () => {
     const { getByLabelText } = render(<DoriBar onVoiceMode={vi.fn()} />);
     const input = getByLabelText('Ask Dori anything') as HTMLInputElement;
-
     fireEvent.change(input, { target: { value: 'add milk to my shopping list' } });
     fireEvent.keyDown(input, { key: 'Enter' });
-
-    expect(dispatched).toHaveLength(1);
-    expect(dispatched[0].detail).toEqual({ text: 'add milk to my shopping list' });
+    expect(send).toHaveBeenCalledWith('add milk to my shopping list');
     expect(input.value).toBe('');
   });
 
-  it('does not dispatch for empty/whitespace input', () => {
+  it('does not send empty/whitespace input', () => {
     const { getByLabelText } = render(<DoriBar onVoiceMode={vi.fn()} />);
     const input = getByLabelText('Ask Dori anything');
     fireEvent.change(input, { target: { value: '   ' } });
     fireEvent.keyDown(input, { key: 'Enter' });
-    expect(dispatched).toHaveLength(0);
+    expect(send).not.toHaveBeenCalled();
   });
 
   it('invokes voice mode from the mic button', () => {
@@ -45,12 +55,14 @@ describe('DoriBar', () => {
     expect(onVoiceMode).toHaveBeenCalledOnce();
   });
 
-  it('shows a working state and hides the input while processing', () => {
-    const { queryByLabelText, getByText } = render(
-      <DoriBar onVoiceMode={vi.fn()} isProcessing thinkingStatus="Creating task…" />,
-    );
-    expect(getByText('Creating task…')).toBeInTheDocument();
-    expect(queryByLabelText('Ask Dori anything')).toBeNull();
+  it('renders the inline conversation popover when open with messages', () => {
+    doriState = {
+      isOpen: true,
+      messages: [{ id: '1', role: 'user', content: 'hello dori', timestamp: new Date() }],
+    };
+    const { getByText, getByLabelText } = render(<DoriBar onVoiceMode={vi.fn()} />);
+    expect(getByText('hello dori')).toBeInTheDocument();
+    expect(getByLabelText('Close Dori conversation')).toBeInTheDocument();
   });
 
   it('renders nothing when hidden', () => {
