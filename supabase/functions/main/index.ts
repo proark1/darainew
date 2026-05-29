@@ -37,6 +37,11 @@ const MEMORY_LIMIT_MB = 256;
 // 500 to the Telegram webhook (and silently dropped replies under polling).
 // Override with EDGE_WORKER_TIMEOUT_MS if needed.
 const TIMEOUT_MS = Number(Deno.env.get("EDGE_WORKER_TIMEOUT_MS")) || 150_000;
+// Max time a first attempt may take and still be eligible for a fresh-isolate
+// retry. Stale/dead-worker failures return near-instantly (tens of ms); a
+// longer failure means the handler actually ran (timeout/OOM) and must NOT be
+// retried, to avoid duplicating side effects.
+const STALE_RETRY_MAX_MS = Number(Deno.env.get("EDGE_STALE_RETRY_MAX_MS")) || 3_000;
 
 // Spawn (or reuse) the worker for a function. We deliberately do NOT cache the
 // worker handle ourselves: the runtime already reuses a live isolate when one
@@ -93,26 +98,39 @@ Deno.serve(async (req: Request) => {
 
   const servicePath = `${FUNCTIONS_DIR}/${fnName}`;
   // Keep a clone so we can retry once on a fresh isolate if the first attempt
-  // hits a reclaimed/stale worker. clone() is cheap unless the body is actually
-  // re-read (only on the retry path).
+  // hits a reclaimed/stale worker. The clone's body is cancelled on every path
+  // where it isn't used, so a large payload (e.g. base64 image) isn't pinned in
+  // memory by the unread tee branch.
   const retryReq = req.clone();
+  const dropRetryBody = () => { try { retryReq.body?.cancel(); } catch { /* already consumed */ } };
+  const startedAt = Date.now();
   try {
     try {
       const worker = await spawnWorker(servicePath);
-      return await worker.fetch(req);
+      const res = await worker.fetch(req);
+      dropRetryBody();
+      return res;
     } catch (staleErr) {
-      // A reused isolate was likely torn down after its wall-clock lifetime;
-      // the handle is dead. Force a brand-new isolate and retry once. If this
-      // also fails, it's a real startup error and falls through to the outer
-      // catch below.
+      // Only retry when the failure was effectively immediate: that means the
+      // cached isolate was dead and never ran the handler (the observed stale
+      // failures return in tens of ms). A SLOW failure means the worker DID run
+      // and hit a wall-clock/OOM limit — retrying would redo the work and risk
+      // duplicate side effects (double briefing sends, double tool actions), so
+      // we let it surface instead.
+      const elapsed = Date.now() - startedAt;
+      if (elapsed > STALE_RETRY_MAX_MS) {
+        dropRetryBody();
+        throw staleErr;
+      }
       console.warn(
-        `[main] ${fnName} worker failed, forcing fresh isolate:`,
+        `[main] ${fnName} worker failed in ${elapsed}ms, forcing fresh isolate:`,
         staleErr instanceof Error ? staleErr.message : staleErr,
       );
       const fresh = await spawnWorker(servicePath, true);
       return await fresh.fetch(retryReq);
     }
   } catch (e) {
+    dropRetryBody();
     // Most common reason: the function directory doesn't exist (typo)
     // or the function failed to start (missing env var at module load,
     // syntax error, etc.). Log full detail and return generic message.
