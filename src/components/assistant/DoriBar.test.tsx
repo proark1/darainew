@@ -4,7 +4,7 @@ import { DoriBar } from './DoriBar';
 
 // useNextUp pulls from supabase/auth; stub it so the bar renders in isolation.
 vi.mock('@/hooks/useNextUp', () => ({
-  useNextUp: () => ({ items: [], loading: false }),
+  useNextUp: () => ({ items: [] as never[], loading: false }),
 }));
 
 describe('DoriBar', () => {
