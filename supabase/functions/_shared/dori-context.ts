@@ -72,10 +72,18 @@ export function ymdIn(iso: string | Date, tz?: string): string {
 // explicitly — otherwise "today" near midnight resolves to the wrong day.
 export function fmtNowLocal(iso: string | Date, tz?: string): string {
   const d = typeof iso === 'string' ? new Date(iso) : iso;
-  return d.toLocaleString('en-GB', {
-    timeZone: tz, weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+  const opts: Intl.DateTimeFormatOptions = {
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
     hour: '2-digit', minute: '2-digit', hour12: false,
-  });
+  };
+  // An invalid/unrecognised IANA tz makes toLocaleString throw a RangeError;
+  // this runs during prompt construction, so fall back to UTC rather than
+  // crashing the whole chat request.
+  try {
+    return d.toLocaleString('en-GB', { ...opts, timeZone: tz });
+  } catch {
+    return d.toLocaleString('en-GB', { ...opts, timeZone: 'UTC' });
+  }
 }
 // Current UTC offset for `tz` at instant `iso`, formatted like "+02:00".
 // Empty/unknown tz → "+00:00".
@@ -106,11 +114,17 @@ export async function buildDoriContext(
 ): Promise<DoriContext> {
   const tz = opts?.timezone;
   const now = new Date();
-  const startOfToday = new Date(now); startOfToday.setHours(0, 0, 0, 0);
-  const endOfToday = new Date(startOfToday); endOfToday.setHours(23, 59, 59, 999);
-  const startOfTomorrow = new Date(endOfToday.getTime() + 1);
-  const endOfTomorrow = new Date(startOfTomorrow); endOfTomorrow.setHours(23, 59, 59, 999);
-  const endOfWeek = new Date(startOfToday); endOfWeek.setDate(endOfWeek.getDate() + 7);
+  // Anchor day boundaries to the USER's local calendar day, not the UTC edge
+  // runtime — otherwise "today's events" is a day off near midnight. We build
+  // local midnight from the user's YYYY-MM-DD + current UTC offset. (At the two
+  // DST switchovers a year this can be ~1h off; acceptable for event bucketing.)
+  // With no tz, ymdIn/tzOffset fall back to UTC, preserving prior behaviour.
+  const offset = tzOffset(now, tz);
+  const startOfToday = new Date(`${ymdIn(now, tz)}T00:00:00.000${offset}`);
+  const startOfTomorrow = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000);
+  const endOfToday = new Date(startOfTomorrow.getTime() - 1);
+  const endOfTomorrow = new Date(startOfTomorrow.getTime() + 24 * 60 * 60 * 1000 - 1);
+  const endOfWeek = new Date(startOfToday.getTime() + 7 * 24 * 60 * 60 * 1000);
   const lastDay = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
   // Build the scoped query base. Workspace mode pulls across all members;

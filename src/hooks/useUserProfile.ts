@@ -37,7 +37,7 @@ export function useUserProfile() {
         // "tonight" in UTC and schedules on the wrong day near midnight.
         const browserTz =
           typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined;
-        const effectiveTz = data.timezone || browserTz || null;
+        const effectiveTz = data.timezone || browserTz || undefined;
         if (!data.timezone && browserTz) {
           void supabase
             .from('profiles')
