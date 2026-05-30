@@ -91,7 +91,7 @@ function parseItems(text: string): RawNewsItem[] {
   // Direct parse first, then fall back to the first [...] block in the text.
   const direct = tryParse(cleaned);
   if (direct) return direct;
-  const match = cleaned.match(/\[[\s\S]*\]/);
+  const match = cleaned.match(/\[\s*{[\s\S]*}\s*]/);
   if (match) {
     const fromBlock = tryParse(match[0]);
     if (fromBlock) return fromBlock;
@@ -190,7 +190,7 @@ Respond with ONLY a JSON array (no markdown fences, no commentary). Each object 
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       systemInstruction: { parts: [{ text: systemInstruction }] },
-      tools: [{ google_search: {} }],
+      tools: [{ googleSearch: {} }],
       generationConfig: {
         temperature: 0.3,
         maxOutputTokens: 2048,
