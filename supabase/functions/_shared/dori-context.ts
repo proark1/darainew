@@ -67,6 +67,38 @@ export function ymdIn(iso: string | Date, tz?: string): string {
     timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
   }).format(d);
 }
+// Full local "now" for the AI prompt, e.g. "Saturday, 30 May 2026, 00:55".
+// Edge runtimes default to UTC, so the AI must be told the user's local clock
+// explicitly — otherwise "today" near midnight resolves to the wrong day.
+export function fmtNowLocal(iso: string | Date, tz?: string): string {
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  const opts: Intl.DateTimeFormatOptions = {
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  };
+  // An invalid/unrecognised IANA tz makes toLocaleString throw a RangeError;
+  // this runs during prompt construction, so fall back to UTC rather than
+  // crashing the whole chat request.
+  try {
+    return d.toLocaleString('en-GB', { ...opts, timeZone: tz });
+  } catch {
+    return d.toLocaleString('en-GB', { ...opts, timeZone: 'UTC' });
+  }
+}
+// Current UTC offset for `tz` at instant `iso`, formatted like "+02:00".
+// Empty/unknown tz → "+00:00".
+export function tzOffset(iso: string | Date, tz?: string): string {
+  if (!tz) return '+00:00';
+  try {
+    const d = typeof iso === 'string' ? new Date(iso) : iso;
+    const name = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'longOffset' })
+      .formatToParts(d).find((p) => p.type === 'timeZoneName')?.value ?? '';
+    const m = name.match(/([+-])(\d{2}):?(\d{2})/);
+    return m ? `${m[1]}${m[2]}:${m[3]}` : '+00:00';
+  } catch {
+    return '+00:00';
+  }
+}
 // Whole-calendar-days between two YMDs. Positive if `later > earlier`.
 export function daysBetweenYmd(earlier: string, later: string): number {
   const [y1, m1, d1] = earlier.split('-').map(Number);
@@ -82,11 +114,17 @@ export async function buildDoriContext(
 ): Promise<DoriContext> {
   const tz = opts?.timezone;
   const now = new Date();
-  const startOfToday = new Date(now); startOfToday.setHours(0, 0, 0, 0);
-  const endOfToday = new Date(startOfToday); endOfToday.setHours(23, 59, 59, 999);
-  const startOfTomorrow = new Date(endOfToday.getTime() + 1);
-  const endOfTomorrow = new Date(startOfTomorrow); endOfTomorrow.setHours(23, 59, 59, 999);
-  const endOfWeek = new Date(startOfToday); endOfWeek.setDate(endOfWeek.getDate() + 7);
+  // Anchor day boundaries to the USER's local calendar day, not the UTC edge
+  // runtime — otherwise "today's events" is a day off near midnight. We build
+  // local midnight from the user's YYYY-MM-DD + current UTC offset. (At the two
+  // DST switchovers a year this can be ~1h off; acceptable for event bucketing.)
+  // With no tz, ymdIn/tzOffset fall back to UTC, preserving prior behaviour.
+  const offset = tzOffset(now, tz);
+  const startOfToday = new Date(`${ymdIn(now, tz)}T00:00:00.000${offset}`);
+  const startOfTomorrow = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000);
+  const endOfToday = new Date(startOfTomorrow.getTime() - 1);
+  const endOfTomorrow = new Date(startOfTomorrow.getTime() + 24 * 60 * 60 * 1000 - 1);
+  const endOfWeek = new Date(startOfToday.getTime() + 7 * 24 * 60 * 60 * 1000);
   const lastDay = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
   // Build the scoped query base. Workspace mode pulls across all members;
@@ -178,7 +216,11 @@ export function formatContextForAI(ctx: DoriContext, callerName?: string): strin
   const parts: string[] = [];
   parts.push(`## LIVE CONTEXT (auto-refreshed every turn)`);
   parts.push(`Scope: ${ctx.scope === 'workspace' ? `workspace (${ctx.workspaceId})` : 'personal'}.`);
-  parts.push(`Now: ${ctx.now}${tz ? ` (user tz: ${tz})` : ''}.`);
+  if (tz) {
+    parts.push(`Now: ${fmtNowLocal(ctx.now, tz)} — user timezone ${tz} (UTC${tzOffset(ctx.now, tz)}). This is the user's LOCAL clock; resolve every relative date/time they mention ("today", "tonight", "tomorrow", "9:30") against it, and emit timestamps with this UTC offset.`);
+  } else {
+    parts.push(`Now: ${ctx.now} (UTC — the user's timezone is unknown, so treat times as UTC).`);
+  }
 
   if (ctx.overdueCount > 0) {
     parts.push(`⚠️ ${name} has ${ctx.overdueCount} overdue task${ctx.overdueCount === 1 ? '' : 's'}. Surface them early when relevant.`);
