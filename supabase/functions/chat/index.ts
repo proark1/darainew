@@ -1077,7 +1077,40 @@ interface MutatingTool {
   // Given action + data return OpKind (or null to skip confirmation for that action).
   classify: (action: string, data: any) => OpKind | null;
   summarize: (action: string, data: any) => string;
+  // Optional existence check run *before* a confirmation is queued. Lets a
+  // tool that targets an existing record (update/delete by query) resolve the
+  // target up front so the user is never asked to confirm an action that will
+  // fail at execution time with "could not find". Returns:
+  //   { ok: false, message } → target missing; report now, don't queue.
+  //   { ok: true, summary? } → target found; optionally override the summary
+  //                            with the resolved old→new details.
+  //   null                   → no preflight applicable; queue as usual.
+  preflight?: (
+    action: string,
+    data: any,
+    ctx: { supabase: any; userId: string; timezone?: string },
+  ) => Promise<{ ok: false; message: string } | { ok: true; summary?: string } | null>;
 }
+
+// Short, human-readable date for confirmation/summary lines, e.g. "Sat 06 Jun, 18:00".
+// Formats in the user's timezone when known; Edge Functions default to UTC
+// otherwise, and an invalid tz falls back to UTC rather than throwing.
+const fmtEventWhen = (s?: string | null, tz?: string): string | null => {
+  if (!s) return null;
+  const dt = new Date(s);
+  if (isNaN(dt.getTime())) return null;
+  try {
+    return dt.toLocaleString('en-GB', {
+      weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+      timeZone: tz,
+    });
+  } catch {
+    return dt.toLocaleString('en-GB', {
+      weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+      timeZone: 'UTC',
+    });
+  }
+};
 
 const safeParseJson = (s: string): any => { try { return JSON.parse(s); } catch { return null; } };
 
@@ -1121,9 +1154,45 @@ const MUTATING_TOOLS: MutatingTool[] = [
     classify: (action) => action === 'update' ? 'update' : action === 'delete' ? 'delete' : null,
     summarize: (action, d) => {
       const who = d.query || d.title || 'event';
-      if (action === 'update') return `Update event: ${who}`;
+      if (action === 'update') {
+        // Spell out the actual change so the confirmation isn't just the name.
+        // (When preflight resolves the target it replaces this with an
+        // old→new summary; this is the fallback when we only have the request.)
+        const bits: string[] = [];
+        if (d.title) bits.push(`rename to "${d.title}"`);
+        const when = fmtEventWhen(d.startTime);
+        if (when) bits.push(`move to ${when}`);
+        if (d.location) bits.push(`location "${d.location}"`);
+        return `Update event: ${who}${bits.length ? ` — ${bits.join(', ')}` : ''}`;
+      }
       if (action === 'delete') return `Delete event: ${who}`;
       return `Event action: ${who}`;
+    },
+    // Resolve the event before prompting so a missing event is reported up
+    // front, and so the confirmation can show the real old→new change.
+    preflight: async (action, d, { supabase, userId, timezone }) => {
+      if ((action !== 'update' && action !== 'delete') || !d.query) return null;
+      const { data: rows } = await supabase.from('events').select('*')
+        .eq('user_id', userId).ilike('title', `%${d.query}%`)
+        .gte('end_time', new Date(Date.now() - 24 * 3600 * 1000).toISOString())
+        .order('start_time').limit(1);
+      const target = rows?.[0];
+      if (!target) return { ok: false, message: `Could not find event matching "${d.query}"` };
+      if (action === 'delete') {
+        const when = fmtEventWhen(target.start_time, timezone);
+        return { ok: true, summary: `Delete event: ${target.title}${when ? ` (${when})` : ''}` };
+      }
+      const bits: string[] = [];
+      if (d.title && d.title !== target.title) bits.push(`rename to "${d.title}"`);
+      if (d.startTime) {
+        const oldW = fmtEventWhen(target.start_time, timezone);
+        const newW = fmtEventWhen(d.startTime, timezone);
+        if (newW && newW !== oldW) bits.push(`move ${oldW ? `from ${oldW} ` : ''}to ${newW}`);
+      }
+      if (d.location !== undefined && d.location && d.location !== target.location) {
+        bits.push(`set location to "${d.location}"`);
+      }
+      return { ok: true, summary: `Update "${target.title}"${bits.length ? `: ${bits.join(', ')}` : ''}` };
     },
   },
   {
@@ -1492,7 +1561,19 @@ async function executeToolsServerSide(
         if (!op) continue;
         if (!requiresConfirmation(settings, spec.entity, op)) continue;
 
-        const summary = spec.summarize(parsed.action, parsed.data);
+        let summary = spec.summarize(parsed.action, parsed.data);
+        // Resolve the target up front (if the tool supports it). If it can't be
+        // found, tell the user now instead of queueing a confirmation that would
+        // only fail with "could not find" *after* they tap Yes.
+        if (spec.preflight) {
+          const pf = await spec.preflight(parsed.action, parsed.data, { supabase, userId, timezone: opts?.timezone });
+          if (pf && !pf.ok) {
+            out.push({ tool: spec.tool, ok: false, message: pf.message });
+            strippedText = strippedText.replace(parsed.fullMatch, '');
+            continue;
+          }
+          if (pf && pf.ok && pf.summary) summary = pf.summary;
+        }
         const actionType = `${op}_${spec.entity}`;
         try {
           const { data: inserted, error } = await supabase.from('auto_actions_log').insert({
