@@ -35,7 +35,7 @@ if ! command -v psql >/dev/null 2>&1; then
   exit 2
 fi
 
-# Run a query and return the bare scalar result (tuples-only, unaligned).
+# Run a statement and return the bare scalar/rows (tuples-only, unaligned).
 scalar() { psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c "$1"; }
 
 scalar "CREATE TABLE IF NOT EXISTS public.schema_migrations (
@@ -49,29 +49,42 @@ if [[ ${#files[@]} -eq 0 ]]; then
   echo "[migrate] no .sql files in $MIG_DIR"; exit 0
 fi
 
-applied_count="$(scalar "SELECT count(*) FROM public.schema_migrations;")"
+# Cache the set of already-applied versions in ONE query, so the per-file check
+# below is an in-memory lookup rather than a psql round-trip each.
+declare -A APPLIED=()
+while IFS= read -r ver; do
+  [[ -n "$ver" ]] && APPLIED["$ver"]=1
+done < <(scalar "SELECT version FROM public.schema_migrations;")
+
+# Batch-insert a newline-free list of versions as applied (one round-trip) and
+# mark them in the cache. Usage: mark_applied "v1" "v2" ...
+mark_applied() {
+  (( $# )) || return 0
+  local vals="" v
+  for v in "$@"; do vals+="('$v'),"; APPLIED["$v"]=1; done
+  scalar "INSERT INTO public.schema_migrations(version) VALUES ${vals%,} ON CONFLICT DO NOTHING;" >/dev/null
+}
 
 # ---- First-run baseline ----------------------------------------------------
-if [[ "$applied_count" == "0" ]]; then
+if [[ ${#APPLIED[@]} -eq 0 ]]; then
   baseline="${MIGRATE_BASELINE:-}"
   if [[ -n "$baseline" ]]; then
     echo "[migrate] first run — baseline=$baseline (recording files <= baseline as applied)"
+    seed=()
     for f in "${files[@]}"; do
       v="$(basename "$f")"
-      if [[ "$v" < "$baseline" || "$v" == "$baseline" ]]; then
-        scalar "INSERT INTO public.schema_migrations(version) VALUES ('$v') ON CONFLICT DO NOTHING;" >/dev/null
-      fi
+      if [[ "$v" < "$baseline" || "$v" == "$baseline" ]]; then seed+=("$v"); fi
     done
+    mark_applied "${seed[@]}"
     # fall through: anything newer than the baseline runs below
   else
     echo "[migrate] WARNING: schema_migrations is empty and MIGRATE_BASELINE is unset."
     echo "[migrate]          Recording ALL current migrations as applied WITHOUT executing them,"
     echo "[migrate]          assuming this DB already matches the repo. If that is wrong, set"
     echo "[migrate]          MIGRATE_BASELINE=<last-applied-file.sql> and redeploy."
-    for f in "${files[@]}"; do
-      v="$(basename "$f")"
-      scalar "INSERT INTO public.schema_migrations(version) VALUES ('$v') ON CONFLICT DO NOTHING;" >/dev/null
-    done
+    seed=()
+    for f in "${files[@]}"; do seed+=("$(basename "$f")"); done
+    mark_applied "${seed[@]}"
     echo "[migrate] baseline recorded — future deploys apply only newer files"
     exit 0
   fi
@@ -81,14 +94,14 @@ fi
 applied=0
 for f in "${files[@]}"; do
   v="$(basename "$f")"
-  exists="$(scalar "SELECT 1 FROM public.schema_migrations WHERE version = '$v';")"
-  [[ "$exists" == "1" ]] && continue
+  [[ -n "${APPLIED[$v]:-}" ]] && continue
   echo "[migrate] applying $v"
   # Migration body + its bookkeeping row, applied as one transaction (-1).
   {
     cat "$f"
     printf '\nINSERT INTO public.schema_migrations(version) VALUES (%s);\n' "'$v'"
   } | psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 -q -f -
+  APPLIED["$v"]=1
   applied=$((applied + 1))
 done
 
