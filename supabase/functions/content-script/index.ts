@@ -30,6 +30,7 @@ const corsHeaders = {
 };
 
 const MODEL = "gemini-2.5-flash";
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function json(body: unknown, status = 200): Response {
@@ -39,61 +40,51 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-const SHORT_TOOL = {
-  type: "function",
-  function: {
-    name: "write_short_script",
-    description: "Record a short-form vertical video script with per-platform variants.",
-    parameters: {
-      type: "object",
-      properties: {
-        hook: { type: "string", description: "The exact spoken first line (0-2s), under 140 chars." },
-        script: { type: "string", description: "The full spoken script, 20-45s when read aloud." },
-        shot_list: { type: "string", description: "B-roll / shot ideas and on-screen text beats, as short lines." },
-        duration_seconds: { type: "integer", minimum: 10, maximum: 90 },
-        cta: { type: "string", description: "The closing call-to-action." },
-        platform_variants: {
-          type: "array",
-          maxItems: 4,
-          items: {
-            type: "object",
-            properties: {
-              platform: { type: "string", enum: ["tiktok", "instagram", "youtube"] },
-              hook: { type: "string", description: "Platform-tuned hook if it should differ." },
-              caption: { type: "string" },
-              hashtags: { type: "array", items: { type: "string" }, maxItems: 8 },
-              notes: { type: "string", description: "Platform-specific tip (sound, format, etc.)." },
-            },
-            required: ["platform", "caption", "hashtags"],
-          },
+// Native Gemini structured-output schemas (generationConfig.responseSchema). We
+// use the native generateContent endpoint — the same one content-ideas uses
+// successfully — instead of the OpenAI-compatibility endpoint + function calling.
+// minItems/maxItems/minimum/maximum are intentionally omitted (not universally
+// honoured by responseSchema); lengths are clamped in code instead.
+const SHORT_SCHEMA = {
+  type: "object",
+  properties: {
+    hook: { type: "string", description: "The exact spoken first line (0-2s)." },
+    script: { type: "string", description: "The full spoken script, 20-45s when read aloud." },
+    shot_list: { type: "string", description: "B-roll / shot ideas and on-screen text beats, as short lines." },
+    duration_seconds: { type: "integer" },
+    cta: { type: "string", description: "The closing call-to-action." },
+    platform_variants: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          platform: { type: "string", enum: ["tiktok", "instagram", "youtube"] },
+          hook: { type: "string", description: "Platform-tuned hook if it should differ." },
+          caption: { type: "string" },
+          hashtags: { type: "array", items: { type: "string" } },
+          notes: { type: "string", description: "Platform-specific tip (sound, format, etc.)." },
         },
+        required: ["platform", "caption", "hashtags"],
       },
-      required: ["hook", "script", "shot_list", "platform_variants"],
     },
   },
+  required: ["hook", "script", "shot_list", "platform_variants"],
 };
 
-const LONG_TOOL = {
-  type: "function",
-  function: {
-    name: "write_long_script",
-    description: "Write a long-form YouTube video script.",
-    parameters: {
-      type: "object",
-      properties: {
-        title_options: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 5 },
-        thumbnail_concept: { type: "string", description: "Thumbnail idea incl. 3-5 words of on-thumbnail text." },
-        hook: { type: "string", description: "The spoken 0-15s opening hook." },
-        script: { type: "string", description: "The full spoken script with clear chapter markers." },
-        shot_list: { type: "string", description: "Chapter outline / b-roll suggestions." },
-        description: { type: "string", description: "SEO YouTube description, 2-3 sentences + a short outline." },
-        hashtags: { type: "array", items: { type: "string" }, maxItems: 10, description: "Tags/hashtags." },
-        cta: { type: "string" },
-        duration_seconds: { type: "integer", minimum: 120, maximum: 1800 },
-      },
-      required: ["title_options", "thumbnail_concept", "hook", "script", "description"],
-    },
+const LONG_SCHEMA = {
+  type: "object",
+  properties: {
+    title_options: { type: "array", items: { type: "string" } },
+    thumbnail_concept: { type: "string", description: "Thumbnail idea incl. 3-5 words of on-thumbnail text." },
+    hook: { type: "string", description: "The spoken 0-15s opening hook." },
+    script: { type: "string", description: "The full spoken script with clear chapter markers." },
+    shot_list: { type: "string", description: "Chapter outline / b-roll suggestions." },
+    description: { type: "string", description: "SEO YouTube description, 2-3 sentences + a short outline." },
+    hashtags: { type: "array", items: { type: "string" }, description: "Tags/hashtags." },
+    cta: { type: "string" },
+    duration_seconds: { type: "integer" },
   },
+  required: ["title_options", "thumbnail_concept", "hook", "script", "description"],
 };
 
 function voiceBlock(idea: any, profile: any): string {
@@ -113,29 +104,58 @@ function voiceBlock(idea: any, profile: any): string {
   ].filter(Boolean).join("\n");
 }
 
-async function callGemini(geminiKey: string, system: string, user: string, tool: any): Promise<any> {
-  const resp = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
+async function callGemini(geminiKey: string, system: string, user: string, schema: unknown): Promise<any> {
+  const resp = await fetch(GEMINI_URL, {
     method: "POST",
-    headers: { Authorization: `Bearer ${geminiKey}`, "Content-Type": "application/json" },
+    headers: { "x-goog-api-key": geminiKey, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: MODEL,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      tools: [tool],
-      tool_choice: { type: "function", function: { name: tool.function.name } },
-      temperature: 0.7,
+      contents: [{ role: "user", parts: [{ text: user }] }],
+      systemInstruction: { parts: [{ text: system }] },
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 8192,
+        responseMimeType: "application/json",
+        responseSchema: schema,
+        // Straightforward generation task — spend the budget on the answer.
+        thinkingConfig: { thinkingBudget: 0 },
+      },
     }),
-    signal: AbortSignal.timeout(45_000),
+    signal: AbortSignal.timeout(60_000),
   });
-  if (!resp.ok) throw new Error(`AI gateway ${resp.status}`);
+  if (!resp.ok) {
+    // Gemini errors are structured JSON ({ error: { message } }); prefer that
+    // over the raw body for a legible message.
+    let detail = "";
+    try {
+      const errJson = await resp.clone().json();
+      detail = errJson?.error?.message || JSON.stringify(errJson);
+    } catch {
+      detail = await resp.text().catch(() => "");
+    }
+    throw new Error(`AI gateway ${resp.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`);
+  }
   const data = await resp.json();
-  const args = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+  const candidate = data?.candidates?.[0];
+  // A non-STOP finish (SAFETY, RECITATION, MAX_TOKENS, …) usually means empty or
+  // truncated parts — surface why instead of a generic "Empty AI response".
+  if (candidate?.finishReason && candidate.finishReason !== "STOP") {
+    throw new Error(`AI generation stopped: ${candidate.finishReason}`);
+  }
+  const text = (candidate?.content?.parts ?? [])
+    .map((p: any) => (typeof p?.text === "string" ? p.text : ""))
+    .join("")
+    .trim();
+  if (!text) throw new Error("Empty AI response");
   try {
-    return typeof args === "string" ? JSON.parse(args) : args;
+    return JSON.parse(text);
   } catch {
-    throw new Error("AI returned invalid structured data");
+    // Tolerate stray fences/prose around the JSON object.
+    const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    const m = cleaned.match(/\{[\s\S]*\}/);
+    if (m) {
+      try { return JSON.parse(m[0]); } catch { /* fall through */ }
+    }
+    throw new Error("AI returned invalid JSON");
   }
 }
 
@@ -202,9 +222,9 @@ serve(async (req) => {
       let row: Record<string, unknown>;
 
       if (format === "short") {
-        const system = `You are a world-class short-form scriptwriter. Write a vertical short-video script in the creator's authentic voice. Make it genuinely scroll-stopping, specific, and easy to record from a phone. Output via the tool only.\n\n${shortPlaybook(targetPlatforms)}`;
+        const system = `You are a world-class short-form scriptwriter. Write a vertical short-video script in the creator's authentic voice. Make it genuinely scroll-stopping, specific, and easy to record from a phone. Return ONLY a JSON object matching the schema.\n\n${shortPlaybook(targetPlatforms)}`;
         const user = `${vBlock}\n\nTarget platforms: ${targetPlatforms.join(", ")}. Write ONE short-form script (shared spoken text) plus a tailored caption + hashtags (and a tuned hook if it should differ) for each target platform.`;
-        const out = await callGemini(geminiKey, system, user, SHORT_TOOL);
+        const out = await callGemini(geminiKey, system, user, SHORT_SCHEMA);
 
         const variants = Array.isArray(out?.platform_variants)
           ? out.platform_variants.map((v: any) => ({
@@ -236,9 +256,9 @@ serve(async (req) => {
           updated_at: new Date().toISOString(),
         };
       } else {
-        const system = `You are a top YouTube strategist and scriptwriter. Write a long-form video script in the creator's authentic voice, optimised for watch-time and clarity. Output via the tool only.\n\n${longPlaybook()}`;
+        const system = `You are a top YouTube strategist and scriptwriter. Write a long-form video script in the creator's authentic voice, optimised for watch-time and clarity. Return ONLY a JSON object matching the schema.\n\n${longPlaybook()}`;
         const user = `${vBlock}\n\nWrite the full long-form YouTube script now.`;
-        const out = await callGemini(geminiKey, system, user, LONG_TOOL);
+        const out = await callGemini(geminiKey, system, user, LONG_SCHEMA);
 
         row = {
           user_id: userId,
