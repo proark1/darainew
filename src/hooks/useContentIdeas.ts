@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
-import type { ContentIdea, IdeaStatus } from '@/lib/content';
+import { describeFunctionError, type ContentIdea, type IdeaStatus } from '@/lib/content';
 
 const db = supabase as unknown as { from: (table: string) => any };
 
@@ -66,7 +66,7 @@ export function useContentIdeas() {
       return true;
     } catch (err) {
       console.error('Failed to generate ideas:', err);
-      toast.error(err instanceof Error ? err.message : 'Failed to generate ideas');
+      toast.error(await describeFunctionError(err, 'Failed to generate ideas'));
       return false;
     } finally {
       setGenerating(false);

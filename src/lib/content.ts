@@ -172,3 +172,22 @@ export function describeContentError(err: unknown, fallback: string): string {
   }
   return msg ? `${fallback}: ${msg}` : fallback;
 }
+
+/**
+ * supabase.functions.invoke() wraps a non-2xx response as a FunctionsHttpError
+ * whose `.context` is the raw Response — so the thrown error's message is the
+ * opaque "Edge Function returned a non-2xx status code". Pull the `{ error }`
+ * body out of the response so the user sees the real reason instead.
+ */
+export async function describeFunctionError(err: unknown, fallback: string): Promise<string> {
+  const ctx = (err as { context?: unknown } | null)?.context;
+  if (ctx && typeof (ctx as Response).clone === 'function') {
+    try {
+      const body = await (ctx as Response).clone().json();
+      if (body && typeof body.error === 'string' && body.error) return body.error;
+    } catch {
+      /* response body wasn't JSON — fall through to the message/fallback */
+    }
+  }
+  return err instanceof Error && err.message ? err.message : fallback;
+}

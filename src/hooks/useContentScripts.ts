@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import type { ContentScript, ScriptFormat } from '@/lib/content';
+import { describeFunctionError, type ContentScript, type ScriptFormat } from '@/lib/content';
 
 const db = supabase as unknown as { from: (table: string) => any };
 
@@ -49,7 +49,7 @@ export function useContentScripts(ideaId: string | null) {
       return true;
     } catch (err) {
       console.error('Failed to generate scripts:', err);
-      toast.error(err instanceof Error ? err.message : 'Failed to generate scripts');
+      toast.error(await describeFunctionError(err, 'Failed to generate scripts'));
       return false;
     } finally {
       setGenerating(false);
