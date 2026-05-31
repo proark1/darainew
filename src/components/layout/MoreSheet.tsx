@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useHaptics } from '@/hooks/useHaptics';
 import { MoreHorizontal, Search, Clock } from 'lucide-react';
-import { NAV_AREAS, SETTINGS_ITEM, type NavItem } from '@/config/navigation';
+import { NAV_AREAS, SETTINGS_ITEM, resolveNavLabel, type NavItem } from '@/config/navigation';
 
 export type MoreSheetPanel = string;
 
@@ -60,7 +60,7 @@ export function MoreSheet({ open, onOpenChange, onNavigate, activePanel }: MoreS
     if (open) { setRecents(getRecents()); setSearch(''); }
   }, [open]);
 
-  const labelOf = (item: SheetItem) => t(item.labelKey || '') || item.label;
+  const labelOf = (item: SheetItem) => resolveNavLabel(item, t);
 
   const handleSelect = (panel: MoreSheetPanel) => {
     vibrate('light');

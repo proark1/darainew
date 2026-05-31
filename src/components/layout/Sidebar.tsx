@@ -22,7 +22,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useUnreadEmailCount } from '@/hooks/useUnreadEmailCount';
-import { NAV_AREAS, SETTINGS_ITEM, areaForPanel, type NavItem as NavConfigItem } from '@/config/navigation';
+import { NAV_AREAS, SETTINGS_ITEM, areaForPanel, resolveNavLabel, type NavItem as NavConfigItem } from '@/config/navigation';
 
 export type SidebarFilter = TaskCategory | 'all' | 'shared';
 export type ActivePanel = 'tasks' | 'social' | 'calendar' | 'assistant' | 'dashboard' | 'projects' | 'contacts' | 'contracts' | 'activity' | 'settings' | 'notes' | 'habits' | 'admin' | 'family' | 'cooking' | 'islam' | 'properties' | 'startups' | 'news' | 'health' | 'email' | 'finances' | 'travel' | 'assets' | 'personal-health' | 'relationships-plus' | 'learning' | 'journal' | 'challenges' | 'location-reminders' | 'family-members' | 'family-calendar' | 'child-mode' | 'correlations' | 'meetings' | 'content' | 'content-liked' | 'content-calendar' | 'content-profile' | null;
@@ -168,7 +168,7 @@ export function Sidebar({
     }
   };
 
-  const label = (item: NavConfigItem) => t(item.labelKey || '') || item.label;
+  const label = (item: NavConfigItem) => resolveNavLabel(item, t);
   const activeArea = areaForPanel(activePanel ?? '')?.id;
 
   return (
@@ -275,7 +275,7 @@ export function Sidebar({
 
         {/* Footer */}
         <div className="p-2 border-t border-sidebar-border space-y-0.5">
-          <NavItem icon={SETTINGS_ITEM.icon} label={t(SETTINGS_ITEM.labelKey || '') || SETTINGS_ITEM.label} panel="settings" activePanel={activePanel} collapsed={collapsed} onClick={handlePanelClick} />
+          <NavItem icon={SETTINGS_ITEM.icon} label={resolveNavLabel(SETTINGS_ITEM, t)} panel="settings" activePanel={activePanel} collapsed={collapsed} onClick={handlePanelClick} />
 
           {isAdmin && (
             <NavItem icon={BarChart3} label={t('nav.admin')} panel="admin" activePanel={activePanel} collapsed={collapsed} onClick={handlePanelClick} />

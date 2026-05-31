@@ -213,3 +213,19 @@ export function panelLabel(panelId: string): string {
 export function areaForPanel(panelId: string): NavArea | undefined {
   return NAV_AREAS.find((a) => a.items.some((i) => i.id === panelId));
 }
+
+/**
+ * Resolve a nav item's display label. Prefer the translated `labelKey`, but
+ * fall back to the plain (English) `label` when the translation is missing.
+ * translate() echoes the key back for unknown keys, so without this guard a
+ * nav item whose `labelKey` has no translation renders as raw "nav.finances"
+ * text instead of "Finances".
+ */
+export function resolveNavLabel(
+  item: { labelKey?: string; label: string },
+  t: (key: string) => string,
+): string {
+  if (!item.labelKey) return item.label;
+  const translated = t(item.labelKey);
+  return translated && translated !== item.labelKey ? translated : item.label;
+}
