@@ -156,9 +156,17 @@ export function formatDuration(seconds: number | null | undefined): string {
  * message so problems aren't swallowed.
  */
 export function describeContentError(err: unknown, fallback: string): string {
-  const e = err as { message?: string; code?: string } | null;
-  const msg = e?.message ?? '';
-  const code = e?.code ?? '';
+  // Extract message/code without trusting the shape of `err` at runtime: it may
+  // be a PostgREST error object, a plain Error, a string, or something else.
+  let msg = '';
+  let code = '';
+  if (err && typeof err === 'object') {
+    const e = err as { message?: unknown; code?: unknown };
+    if (typeof e.message === 'string') msg = e.message;
+    if (typeof e.code === 'string') code = e.code;
+  } else if (typeof err === 'string') {
+    msg = err;
+  }
   if (code === 'PGRST205' || /schema cache|does not exist/i.test(msg)) {
     return 'Content Studio isn’t set up on the server yet — the database migration needs to be applied.';
   }
