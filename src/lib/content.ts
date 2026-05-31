@@ -146,3 +146,21 @@ export function formatDuration(seconds: number | null | undefined): string {
   const s = seconds % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
 }
+
+/**
+ * Turn a Supabase/PostgREST error into a user-facing message. The common failure
+ * mode right after shipping Content Studio is that the database migration hasn't
+ * been applied yet, so the tables are missing from PostgREST's schema cache
+ * (code PGRST205 / "Could not find the table … in the schema cache"). Call that
+ * out explicitly instead of a generic "failed", and otherwise surface the real
+ * message so problems aren't swallowed.
+ */
+export function describeContentError(err: unknown, fallback: string): string {
+  const e = err as { message?: string; code?: string } | null;
+  const msg = e?.message ?? '';
+  const code = e?.code ?? '';
+  if (code === 'PGRST205' || /schema cache|does not exist/i.test(msg)) {
+    return 'Content Studio isn’t set up on the server yet — the database migration needs to be applied.';
+  }
+  return msg ? `${fallback}: ${msg}` : fallback;
+}
