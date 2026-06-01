@@ -174,7 +174,11 @@ export function DashboardPanel({ userId, onNavigate }: DashboardPanelProps) {
   }, [tasks]);
 
   const handleCompleteTask = async (taskId: string) => {
-    const { error } = await supabase.from('tasks').update({ completed: true }).eq('id', taskId).eq('user_id', userId);
+    // NOTE: do NOT scope this by user_id. In workspace mode the dashboard
+    // shows tasks owned by other members, and RLS authorizes members to
+    // complete them — a user_id predicate would match zero rows and the UI
+    // would desync (marked done locally, unchanged in the DB).
+    const { error } = await supabase.from('tasks').update({ completed: true }).eq('id', taskId);
     if (!error) {
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: true } : t));
       const newStreak = stats.streak + 1;
