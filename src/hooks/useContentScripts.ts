@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from 'sonner';
-import { describeFunctionError, type ContentScript, type ScriptFormat } from '@/lib/content';
+import { describeFunctionError, type ContentScript, type ScriptFormat, type ScriptVariation } from '@/lib/content';
 
 const db = supabase as unknown as { from: (table: string) => any };
 
 export function useContentScripts(ideaId: string | null) {
+  const { language } = useLanguage();
   const [scripts, setScripts] = useState<ContentScript[]>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -33,12 +35,12 @@ export function useContentScripts(ideaId: string | null) {
 
   useEffect(() => { fetchScripts(); }, [fetchScripts]);
 
-  const generate = useCallback(async (formats: ScriptFormat[] = ['short', 'long']) => {
+  const generate = useCallback(async (formats: ScriptFormat[] = ['short', 'long'], variation?: ScriptVariation) => {
     if (!ideaId) return false;
     setGenerating(true);
     try {
       const { data, error } = await supabase.functions.invoke('content-script', {
-        body: { idea_id: ideaId, formats },
+        body: { idea_id: ideaId, formats, language, variation },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
@@ -54,7 +56,7 @@ export function useContentScripts(ideaId: string | null) {
     } finally {
       setGenerating(false);
     }
-  }, [ideaId, fetchScripts]);
+  }, [ideaId, fetchScripts, language]);
 
   // Inline edits to a generated script (the user tweaks the text before
   // recording). Optimistic, with revert on failure.

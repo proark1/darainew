@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from 'sonner';
 import { describeFunctionError, type ContentIdea, type IdeaStatus } from '@/lib/content';
 
@@ -10,6 +11,7 @@ const WINDOW_DAYS = 30;
 
 export function useContentIdeas() {
   const { user } = useAuth();
+  const { language } = useLanguage();
   const [ideas, setIdeas] = useState<ContentIdea[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -52,11 +54,11 @@ export function useContentIdeas() {
   );
   const scheduled = useMemo(() => ideas.filter((i) => i.status === 'scheduled'), [ideas]);
 
-  const generateNow = useCallback(async (overrides?: { count?: number; trending_ratio?: number }) => {
+  const generateNow = useCallback(async (overrides?: { count?: number; trending_ratio?: number; idea_source?: string }) => {
     setGenerating(true);
     try {
       const { data, error } = await supabase.functions.invoke('content-ideas', {
-        body: overrides ?? {},
+        body: { language, ...(overrides ?? {}) },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
@@ -71,7 +73,7 @@ export function useContentIdeas() {
     } finally {
       setGenerating(false);
     }
-  }, [fetchIdeas]);
+  }, [fetchIdeas, language]);
 
   const setStatus = useCallback(async (id: string, status: IdeaStatus) => {
     setIdeas((prev) => prev.map((i) => (i.id === id ? { ...i, status } : i)));

@@ -12,7 +12,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { strictAppOrigin } from "../_shared/cors.ts";
-import { generateContentIdeas, type ContentIdea, type CreatorProfileLike } from "../_shared/contentIdeas.ts";
+import { generateContentIdeas, type ContentIdea, type CreatorProfileLike, type IdeaSource } from "../_shared/contentIdeas.ts";
 import { recentHeadlines, persistDailyBatch } from "../_shared/contentPersist.ts";
 
 const corsHeaders = {
@@ -36,6 +36,7 @@ interface ProfileRow {
   business_context: string;
   platforms: string[];
   primary_language: string;
+  idea_source: string;
   ideas_per_day: number;
   trending_ratio: number;
   enabled: boolean;
@@ -202,9 +203,13 @@ Deno.serve(async (req) => {
         primary_language: p.primary_language,
       };
       const avoid = await recentHeadlines(supabase, p.user_id, 7);
-      const ideas = await generateContentIdeas(
-        profileLike, locMap.get(p.user_id), p.ideas_per_day || 10, p.trending_ratio ?? 0.5, avoid,
-      );
+      const ideas = await generateContentIdeas(profileLike, locMap.get(p.user_id), {
+        count: p.ideas_per_day || 10,
+        trendingRatio: p.trending_ratio ?? 0.5,
+        ideaSource: (["mixed", "trending", "knowledge"].includes(p.idea_source) ? p.idea_source : "mixed") as IdeaSource,
+        language: p.primary_language,
+        avoidHeadlines: avoid,
+      });
       await persistDailyBatch(supabase, p.user_id, ideas, date);
       // Throw on failure: if we can't stamp last_generated_on, this user stays
       // "due" and would be regenerated every tick (wasted quota + notify spam).

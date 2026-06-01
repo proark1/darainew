@@ -174,7 +174,7 @@ export function ContentStudioPanel({ initialTab = 'today' }: { initialTab?: Cont
         </div>
       </Tabs>
 
-      <ContentScriptDialog idea={scriptIdea} open={scriptOpen} onOpenChange={setScriptOpen} />
+      <ContentScriptDialog idea={scriptIdea} open={scriptOpen} onOpenChange={setScriptOpen} defaultFormat={profile?.default_format ?? 'both'} />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
@@ -8,9 +8,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
-import { Clapperboard, Copy, Check, RefreshCw, Sparkles } from 'lucide-react';
+import { Clapperboard, Copy, Check, RefreshCw, Sparkles, MonitorPlay } from 'lucide-react';
 import { useContentScripts } from '@/hooks/useContentScripts';
-import { platformLabel, formatDuration, type ContentIdea, type ContentScript } from '@/lib/content';
+import { Teleprompter } from './Teleprompter';
+import { cn } from '@/lib/utils';
+import {
+  platformLabel, formatDuration, FORMAT_META,
+  type ContentIdea, type ContentScript, type DefaultFormat, type ScriptVariation,
+} from '@/lib/content';
 
 function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -44,13 +49,16 @@ function Section({ title, children, action }: { title: string; children: React.R
   );
 }
 
-function ShortScript({ script, onEdit }: { script: ContentScript; onEdit: (text: string) => void }) {
+function ShortScript({ script, onEdit, onRecord }: { script: ContentScript; onEdit: (text: string) => void; onRecord: () => void }) {
   const [text, setText] = useState(script.script);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <Badge>Short-form</Badge>
         <Badge variant="outline">~{formatDuration(script.duration_seconds)}</Badge>
+        <Button size="sm" variant="outline" className="h-7 gap-1 ml-auto" onClick={onRecord}>
+          <MonitorPlay className="h-3.5 w-3.5" /> Record
+        </Button>
       </div>
       {script.hook && (
         <Section title="Hook (0–2s)" action={<CopyButton text={script.hook} />}>
@@ -100,13 +108,16 @@ function ShortScript({ script, onEdit }: { script: ContentScript; onEdit: (text:
   );
 }
 
-function LongScript({ script, onEdit }: { script: ContentScript; onEdit: (text: string) => void }) {
+function LongScript({ script, onEdit, onRecord }: { script: ContentScript; onEdit: (text: string) => void; onRecord: () => void }) {
   const [text, setText] = useState(script.script);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <Badge>Long-form · YouTube</Badge>
         <Badge variant="outline">~{formatDuration(script.duration_seconds)}</Badge>
+        <Button size="sm" variant="outline" className="h-7 gap-1 ml-auto" onClick={onRecord}>
+          <MonitorPlay className="h-3.5 w-3.5" /> Record
+        </Button>
       </div>
       {script.title_options?.length > 0 && (
         <Section title="Title options">
@@ -153,13 +164,42 @@ interface Props {
   idea: ContentIdea | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  defaultFormat?: DefaultFormat;
 }
 
-export function ContentScriptDialog({ idea, open, onOpenChange }: Props) {
+const FORMAT_OPTIONS: DefaultFormat[] = ['short', 'long', 'both'];
+
+export function ContentScriptDialog({ idea, open, onOpenChange, defaultFormat = 'both' }: Props) {
   const { scripts, loading, generating, generate, updateScript } = useContentScripts(idea?.id ?? null);
+  const [fmt, setFmt] = useState<DefaultFormat>(defaultFormat);
+  const [tele, setTele] = useState<{ title: string; text: string } | null>(null);
+
+  // Seed the format picker from the profile default each time the dialog opens.
+  useEffect(() => { if (open) setFmt(defaultFormat); }, [open, defaultFormat]);
+
   const short = scripts.find((s) => s.format === 'short');
   const long = scripts.find((s) => s.format === 'long');
   const hasScripts = scripts.length > 0;
+
+  const run = (variation?: ScriptVariation) => generate(FORMAT_META[fmt].formats, variation);
+
+  const formatPicker = (
+    <div className="flex justify-center gap-1.5">
+      {FORMAT_OPTIONS.map((f) => (
+        <button
+          key={f}
+          type="button"
+          onClick={() => setFmt(f)}
+          className={cn(
+            'h-8 px-3 rounded-md border text-xs font-medium transition-colors',
+            fmt === f ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted',
+          )}
+        >
+          {FORMAT_META[f].label}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -184,37 +224,57 @@ export function ContentScriptDialog({ idea, open, onOpenChange }: Props) {
             <div className="py-10 text-center space-y-4">
               <Sparkles className="h-8 w-8 mx-auto text-muted-foreground" />
               <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                Generate a punchy short-form script and a full YouTube script for this idea,
-                written in your voice and tuned to each platform.
+                Generate scripts for this idea, written in your voice and tuned to each platform.
               </p>
-              <Button onClick={() => generate(['short', 'long'])} disabled={generating} className="gap-2">
+              {formatPicker}
+              <Button onClick={() => run()} disabled={generating} className="gap-2">
                 {generating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 {generating ? 'Writing…' : 'Generate scripts'}
               </Button>
             </div>
           ) : (
             <div className="space-y-6 py-2">
-              {short && <ShortScript script={short} onEdit={(t) => updateScript(short.id, { script: t })} />}
+              {short && (
+                <ShortScript
+                  script={short}
+                  onEdit={(t) => updateScript(short.id, { script: t })}
+                  onRecord={() => setTele({ title: idea?.headline ?? 'Short script', text: short.script })}
+                />
+              )}
               {short && long && <div className="border-t" />}
-              {long && <LongScript script={long} onEdit={(t) => updateScript(long.id, { script: t })} />}
+              {long && (
+                <LongScript
+                  script={long}
+                  onEdit={(t) => updateScript(long.id, { script: t })}
+                  onRecord={() => setTele({ title: idea?.headline ?? 'Long script', text: long.script })}
+                />
+              )}
             </div>
           )}
         </ScrollArea>
 
         {hasScripts && (
-          <div className="pt-2 border-t">
-            <Button
-              variant="outline"
-              className="w-full gap-2"
-              onClick={() => generate(['short', 'long'])}
-              disabled={generating}
-            >
-              {generating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              {generating ? 'Regenerating…' : 'Regenerate scripts'}
+          <div className="pt-2 border-t space-y-2">
+            {formatPicker}
+            <Button variant="outline" className="w-full gap-2" onClick={() => run()} disabled={generating}>
+              <RefreshCw className={cn('h-4 w-4', generating && 'animate-spin')} />
+              {generating ? 'Writing…' : 'Regenerate'}
             </Button>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" className="flex-1" onClick={() => run('shorter')} disabled={generating}>Shorter</Button>
+              <Button variant="ghost" size="sm" className="flex-1" onClick={() => run('longer')} disabled={generating}>Longer</Button>
+              <Button variant="ghost" size="sm" className="flex-1" onClick={() => run('punchier')} disabled={generating}>Punchier</Button>
+            </div>
           </div>
         )}
       </DialogContent>
+
+      <Teleprompter
+        open={!!tele}
+        onOpenChange={(o) => { if (!o) setTele(null); }}
+        title={tele?.title ?? ''}
+        text={tele?.text ?? ''}
+      />
     </Dialog>
   );
 }
