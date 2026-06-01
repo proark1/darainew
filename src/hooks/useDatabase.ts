@@ -9,6 +9,7 @@ import { moduleBus } from '@/lib/moduleEventBus';
 import { moduleHealth } from '@/lib/moduleHealth';
 import { subscribeToTable } from '@/lib/realtimeCoordinator';
 import { toValidDate } from '@/lib/safeDate';
+import * as offlineQueue from '@/lib/offlineQueue';
 import { Task, CalendarEvent, TaskCategory, TaskPriority, TaskStatus } from '@/types/flux';
 
 interface DbTask {
@@ -64,6 +65,11 @@ interface SharedItem {
 
 const EMPTY_TASKS: Task[] = [];
 const EMPTY_EVENTS: CalendarEvent[] = [];
+
+// True when the browser reports it's offline. Guarded for SSR/test contexts
+// where `navigator` may be undefined.
+const isOffline = (): boolean =>
+  typeof navigator !== 'undefined' && navigator.onLine === false;
 
 export function useDatabase(userId: string | undefined) {
   const queryClient = useQueryClient();
@@ -233,6 +239,85 @@ export function useDatabase(userId: string | undefined) {
     ]);
   }, [queryClient, userId]);
 
+  // --- Offline outbox flush -------------------------------------------------
+  // Replay a single queued write against Supabase. Throws on failure so the
+  // queue keeps the entry (and everything after it) for the next attempt.
+  const flushRunner = useCallback(async (entry: offlineQueue.OfflineQueueEntry) => {
+    const table = entry.table as 'tasks' | 'events';
+    if (entry.op === 'insert') {
+      const { error } = await supabase.from(table).insert([entry.payload] as any);
+      if (error) throw error;
+      return;
+    }
+    if (entry.op === 'update') {
+      let q = supabase.from(table).update(entry.payload as any);
+      const id = entry.match?.id;
+      if (Array.isArray(id)) {
+        q = q.in('id', id as string[]);
+      } else {
+        q = q.eq('id', id as string);
+      }
+      const { error } = await q;
+      if (error) throw error;
+      return;
+    }
+    // delete
+    let dq = supabase.from(table).delete();
+    const did = entry.match?.id;
+    if (Array.isArray(did)) {
+      dq = dq.in('id', did as string[]);
+    } else {
+      dq = dq.eq('id', did as string);
+    }
+    const { error } = await dq;
+    if (error) throw error;
+  }, []);
+
+  // On reconnect, drain the outbox (FIFO, stop-on-failure) for THIS user, then
+  // invalidate the affected queries so server truth — including real row ids
+  // that replace optimistic offline ids — reconciles with the cache.
+  useEffect(() => {
+    if (!userId) return;
+
+    const runFlush = async () => {
+      const pending = await offlineQueue.getAll();
+      const mine = pending.filter((e) => e.userId === userId);
+      if (mine.length === 0) return;
+      const touchedTasks = mine.some((e) => e.table === 'tasks');
+      const touchedEvents = mine.some((e) => e.table === 'events');
+
+      const { flushed } = await offlineQueue.flush(async (entry) => {
+        // Only replay this user's entries; skip others so a different
+        // session's queue isn't disturbed (they'll flush on their own online).
+        if (entry.userId !== userId) {
+          throw new Error('not-this-user'); // stops flush, preserving ordering
+        }
+        await flushRunner(entry);
+      });
+
+      if (flushed > 0) {
+        if (touchedTasks) {
+          queryClient.invalidateQueries({ queryKey: ['tasks', userId] });
+          queryClient.invalidateQueries({ queryKey: ['trashed-tasks', userId] });
+        }
+        if (touchedEvents) {
+          queryClient.invalidateQueries({ queryKey: ['events', userId] });
+        }
+      }
+    };
+
+    const onOnline = () => { void runFlush(); };
+    window.addEventListener('online', onOnline);
+    // Also attempt a flush on mount in case we reconnected before this mounted
+    // (or the queue has leftovers from a previous session).
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      void runFlush();
+    }
+    return () => {
+      window.removeEventListener('online', onOnline);
+    };
+  }, [userId, queryClient, flushRunner]);
+
   // Task operations
   const addTask = useCallback(async (task: Omit<Task, 'id' | 'createdAt'>): Promise<Task> => {
     if (!userId) throw new Error('Not authenticated');
@@ -258,6 +343,32 @@ export function useDatabase(userId: string | undefined) {
       attachments: JSON.parse(JSON.stringify(task.attachments || [])),
       comments: JSON.parse(JSON.stringify(task.comments || [])),
     };
+
+    // OFFLINE: queue the insert with a client-generated id so the optimistic
+    // row has a stable id, keep the optimistic cache update, and return it.
+    // The real server row replaces it when the queue flushes (we refetch then).
+    if (isOffline()) {
+      const optimisticId = crypto.randomUUID();
+      await offlineQueue.enqueue({
+        op: 'insert',
+        table: 'tasks',
+        payload: { ...insertData, id: optimisticId },
+        userId,
+      });
+      const optimisticTask: Task = {
+        ...dbTaskToTask({
+          ...(insertData as unknown as DbTask),
+          id: optimisticId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          trashed: false,
+          trashed_at: null,
+        }),
+      };
+      setTasksCache(prev => [optimisticTask, ...prev]);
+      moduleBus.emit('task:created', { taskId: optimisticTask.id, projectId: optimisticTask.projectId }, 'useDatabase');
+      return optimisticTask;
+    }
 
     const { data, error } = await supabase
       .from('tasks')
@@ -304,6 +415,26 @@ export function useDatabase(userId: string | undefined) {
     if (updates.attachments !== undefined) dbUpdates.attachments = safeJson(updates.attachments);
     if (updates.comments !== undefined) dbUpdates.comments = safeJson(updates.comments);
 
+    // OFFLINE: queue the update and apply the optimistic cache change now.
+    if (isOffline()) {
+      if (userId) {
+        await offlineQueue.enqueue({
+          op: 'update',
+          table: 'tasks',
+          payload: dbUpdates,
+          match: { id },
+          userId,
+        });
+      }
+      setTasksCache(prev => prev.map(t => (t.id === id ? { ...t, ...updates } : t)));
+      if (updates.completed === true) {
+        moduleBus.emit('task:completed', { taskId: id }, 'useDatabase');
+      } else {
+        moduleBus.emit('task:updated', { taskId: id, fields: Object.keys(updates) }, 'useDatabase');
+      }
+      return;
+    }
+
     const runUpdate = async () => {
       const result = await supabase
         .from('tasks')
@@ -332,9 +463,26 @@ export function useDatabase(userId: string | undefined) {
     } else {
       moduleBus.emit('task:updated', { taskId: id, fields: Object.keys(updates) }, 'useDatabase');
     }
-  }, [setTasksCache]);
+  }, [setTasksCache, userId]);
 
   const deleteTask = useCallback(async (id: string) => {
+    // OFFLINE: queue the delete and apply the optimistic cache change now.
+    if (isOffline()) {
+      if (userId) {
+        await offlineQueue.enqueue({
+          op: 'delete',
+          table: 'tasks',
+          payload: {},
+          match: { id },
+          userId,
+        });
+      }
+      setTasksCache(prev => prev.filter(t => t.id !== id));
+      setTrashedCache(prev => prev.filter(t => t.id !== id));
+      moduleBus.emit('task:deleted', { taskId: id }, 'useDatabase');
+      return;
+    }
+
     const { error } = await supabase
       .from('tasks')
       .delete()
@@ -345,7 +493,7 @@ export function useDatabase(userId: string | undefined) {
       setTrashedCache(prev => prev.filter(t => t.id !== id));
       moduleBus.emit('task:deleted', { taskId: id }, 'useDatabase');
     }
-  }, [setTasksCache, setTrashedCache]);
+  }, [setTasksCache, setTrashedCache, userId]);
 
   // Move task to trash (soft delete)
   const trashTask = useCallback(async (id: string) => {
@@ -415,7 +563,23 @@ export function useDatabase(userId: string | undefined) {
 
   const deleteTasks = useCallback(async (ids: string[]): Promise<{ error: string | null }> => {
     if (ids.length === 0) return { error: null };
-    
+
+    // OFFLINE: queue a single bulk delete (the runner replays it as an IN
+    // query) and apply the optimistic cache change now.
+    if (isOffline()) {
+      if (userId) {
+        await offlineQueue.enqueue({
+          op: 'delete',
+          table: 'tasks',
+          payload: {},
+          match: { id: ids },
+          userId,
+        });
+      }
+      setTasksCache(prev => prev.filter(t => !ids.includes(t.id)));
+      return { error: null };
+    }
+
     // Supabase has limits on IN queries, batch delete in chunks of 100
     const BATCH_SIZE = 100;
     const batches: string[][] = [];
@@ -441,7 +605,7 @@ export function useDatabase(userId: string | undefined) {
       return { error: null };
     }
     return { error: 'Failed to delete some tasks' };
-  }, [setTasksCache]);
+  }, [setTasksCache, userId]);
 
   const toggleTaskComplete = useCallback(async (id: string) => {
     const task = tasks.find(t => t.id === id);
@@ -483,19 +647,45 @@ export function useDatabase(userId: string | undefined) {
   const addEvent = useCallback(async (event: Omit<CalendarEvent, 'id'>): Promise<CalendarEvent | null> => {
     if (!userId) return null;
 
+    const insertData = {
+      user_id: userId,
+      title: event.title,
+      description: event.description,
+      start_time: event.startTime.toISOString(),
+      end_time: event.endTime.toISOString(),
+      location: event.location,
+      attendees: event.attendees,
+      recurrence_rule: event.recurrenceRule,
+      recurrence_end: event.recurrenceEnd?.toISOString(),
+    };
+
+    // OFFLINE: queue the insert with a client-generated id, keep the optimistic
+    // cache update, and return the optimistic event. The real row replaces it
+    // when the queue flushes (we refetch then).
+    if (isOffline()) {
+      const optimisticId = crypto.randomUUID();
+      await offlineQueue.enqueue({
+        op: 'insert',
+        table: 'events',
+        payload: { ...insertData, id: optimisticId },
+        userId,
+      });
+      const optimisticEvent = dbEventToEvent({
+        ...(insertData as unknown as DbEvent),
+        id: optimisticId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      setEventsCache(prev => [...prev, optimisticEvent].sort((a, b) =>
+        a.startTime.getTime() - b.startTime.getTime()
+      ));
+      moduleBus.emit('event:created', { eventId: optimisticEvent.id }, 'useDatabase');
+      return optimisticEvent;
+    }
+
     const { data, error } = await supabase
       .from('events')
-      .insert({
-        user_id: userId,
-        title: event.title,
-        description: event.description,
-        start_time: event.startTime.toISOString(),
-        end_time: event.endTime.toISOString(),
-        location: event.location,
-        attendees: event.attendees,
-        recurrence_rule: event.recurrenceRule,
-        recurrence_end: event.recurrenceEnd?.toISOString(),
-      })
+      .insert(insertData)
       .select()
       .single();
 
@@ -521,6 +711,22 @@ export function useDatabase(userId: string | undefined) {
     if (updates.recurrenceRule !== undefined) dbUpdates.recurrence_rule = updates.recurrenceRule;
     if (updates.recurrenceEnd !== undefined) dbUpdates.recurrence_end = updates.recurrenceEnd?.toISOString();
 
+    // OFFLINE: queue the update and apply the optimistic cache change now.
+    if (isOffline()) {
+      if (userId) {
+        await offlineQueue.enqueue({
+          op: 'update',
+          table: 'events',
+          payload: dbUpdates,
+          match: { id },
+          userId,
+        });
+      }
+      setEventsCache(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
+      moduleBus.emit('event:updated', { eventId: id, fields: Object.keys(updates) }, 'useDatabase');
+      return;
+    }
+
     const { error } = await supabase
       .from('events')
       .update(dbUpdates as TablesUpdate<'events'>)
@@ -530,9 +736,25 @@ export function useDatabase(userId: string | undefined) {
       setEventsCache(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
       moduleBus.emit('event:updated', { eventId: id, fields: Object.keys(updates) }, 'useDatabase');
     }
-  }, [setEventsCache]);
+  }, [setEventsCache, userId]);
 
   const deleteEvent = useCallback(async (id: string) => {
+    // OFFLINE: queue the delete and apply the optimistic cache change now.
+    if (isOffline()) {
+      if (userId) {
+        await offlineQueue.enqueue({
+          op: 'delete',
+          table: 'events',
+          payload: {},
+          match: { id },
+          userId,
+        });
+      }
+      setEventsCache(prev => prev.filter(e => e.id !== id));
+      moduleBus.emit('event:deleted', { eventId: id }, 'useDatabase');
+      return;
+    }
+
     const { error } = await supabase
       .from('events')
       .delete()
@@ -542,7 +764,7 @@ export function useDatabase(userId: string | undefined) {
       setEventsCache(prev => prev.filter(e => e.id !== id));
       moduleBus.emit('event:deleted', { eventId: id }, 'useDatabase');
     }
-  }, [setEventsCache]);
+  }, [setEventsCache, userId]);
 
   // Sharing operations
   const shareItem = useCallback(async (
