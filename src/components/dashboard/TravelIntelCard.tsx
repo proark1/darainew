@@ -36,7 +36,8 @@ export function TravelIntelCard() {
   }, [user?.id]);
 
   const dismiss = async (id: string) => {
-    await supabase.from('detected_trips').update({ status: 'dismissed' }).eq('id', id);
+    if (!user?.id) return;
+    await supabase.from('detected_trips').update({ status: 'dismissed' }).eq('id', id).eq('user_id', user.id);
     setTrips(prev => prev.filter(t => t.id !== id));
   };
 

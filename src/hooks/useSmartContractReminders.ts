@@ -177,7 +177,7 @@ export function useSmartContractReminders({
       // Update contract to mark calendar sync
       await supabase.from('contracts').update({
         last_reminded_at: new Date().toISOString()
-      }).eq('id', contract.id);
+      }).eq('id', contract.id).eq('user_id', userId);
 
       return true;
     } catch (error) {

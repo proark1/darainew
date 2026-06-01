@@ -55,7 +55,7 @@ export function useTravel() {
   const addBooking = async (p: Partial<TripBooking>) => { if (!user) return; const { error } = await supabase.from('trip_bookings').insert({ ...p, user_id: user.id, booking_type: p.booking_type! }); if (error) return toast.error(error.message); toast.success('Booking added'); refresh(); };
   const addLoyalty = async (p: Partial<LoyaltyProgram>) => { if (!user) return; const { error } = await supabase.from('loyalty_programs').insert({ ...p, user_id: user.id, program_name: p.program_name! }); if (error) return toast.error(error.message); toast.success('Program added'); refresh(); };
   const addEssential = async (p: Partial<CountryEssential>) => { if (!user) return; const { error } = await supabase.from('country_essentials').upsert({ ...p, user_id: user.id, country: p.country! }, { onConflict: 'user_id,country' }); if (error) return toast.error(error.message); toast.success('Saved'); refresh(); };
-  const remove = async (table: 'trips'|'trip_bookings'|'loyalty_programs'|'country_essentials', id: string) => { const { error } = await supabase.from(table).delete().eq('id', id); if (error) return toast.error(error.message); toast.success('Deleted'); refresh(); };
+  const remove = async (table: 'trips'|'trip_bookings'|'loyalty_programs'|'country_essentials', id: string) => { if (!user) return; const { error } = await supabase.from(table).delete().eq('id', id).eq('user_id', user.id); if (error) return toast.error(error.message); toast.success('Deleted'); refresh(); };
 
   return { trips, bookings, loyalty, essentials, isLoading, addTrip, addBooking, addLoyalty, addEssential, remove, refresh };
 }

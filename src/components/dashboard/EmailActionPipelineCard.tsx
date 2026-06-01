@@ -103,7 +103,8 @@ export function EmailActionPipelineCard({
   };
 
   const dismiss = async (id: string) => {
-    await supabase.from('email_classifications').update({ status: 'dismissed', dismissed_at: new Date().toISOString() }).eq('id', id);
+    if (!user?.id) return;
+    await supabase.from('email_classifications').update({ status: 'dismissed', dismissed_at: new Date().toISOString() }).eq('id', id).eq('user_id', user.id);
     setItems(prev => prev.filter(i => i.id !== id));
   };
 
@@ -179,7 +180,8 @@ export function EmailActionPipelineCard({
 
       await supabase.from('email_classifications')
         .update({ status: 'applied', applied_at: new Date().toISOString() })
-        .eq('id', item.id);
+        .eq('id', item.id)
+        .eq('user_id', user.id);
       setItems(prev => prev.filter(i => i.id !== item.id));
       toast.success(createdLabel);
     } catch (e) {
