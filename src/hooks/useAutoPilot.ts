@@ -110,7 +110,8 @@ export function useAutoPilot() {
         await supabase
           .from('tasks')
           .update({ due_date: suggestedDate })
-          .eq('id', action.entityId);
+          .eq('id', action.entityId)
+          .eq('user_id', user.id);
         toast.success('Task rescheduled');
       } else if (action.actionType === 'create_followup') {
         const taskData = action.actionData;

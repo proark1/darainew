@@ -174,7 +174,7 @@ export function DashboardPanel({ userId, onNavigate }: DashboardPanelProps) {
   }, [tasks]);
 
   const handleCompleteTask = async (taskId: string) => {
-    const { error } = await supabase.from('tasks').update({ completed: true }).eq('id', taskId);
+    const { error } = await supabase.from('tasks').update({ completed: true }).eq('id', taskId).eq('user_id', userId);
     if (!error) {
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: true } : t));
       const newStreak = stats.streak + 1;

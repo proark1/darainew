@@ -40,6 +40,7 @@ export function VoiceQuickAdd({ onVoiceCommand, className }: VoiceQuickAddProps)
     recognition.onresult = (event) => {
       const current = event.resultIndex;
       const result = event.results[current];
+      if (!result || result.length === 0) return;
       const transcriptText = result[0].transcript;
       setTranscript(transcriptText);
 
