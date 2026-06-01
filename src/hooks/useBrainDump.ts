@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { toast } from 'sonner';
 
 export interface BrainDump {
@@ -70,7 +71,7 @@ export function useBrainDump() {
       return data;
     } catch (error) {
       console.error('Failed to add brain dump:', error);
-      toast.error('Failed to capture');
+      toast.error(await describeEdgeError(error, 'Failed to capture'));
       return null;
     }
   }, [user]);
@@ -190,7 +191,7 @@ export function useBrainDump() {
       return true;
     } catch (error) {
       console.error('Failed to convert dump:', error);
-      toast.error('Failed to convert');
+      toast.error(await describeEdgeError(error, 'Failed to convert'));
       return false;
     }
   }, [user]);
