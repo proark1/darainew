@@ -8,10 +8,11 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
-import { Plus, X, Save, Wand2, Clock } from 'lucide-react';
+import { Plus, X, Save, Wand2, Clock, Languages } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 import {
-  ALL_PLATFORMS, DEFAULT_CREATOR_PROFILE, computeIdeaSplit, platformLabel,
-  type CreatorProfile, type Platform,
+  ALL_PLATFORMS, DEFAULT_CREATOR_PROFILE, IDEA_SOURCE_META, FORMAT_META, computeIdeaSplit, platformLabel,
+  type CreatorProfile, type Platform, type IdeaSource, type DefaultFormat,
 } from '@/lib/content';
 import type { CreatorProfileDraft } from '@/hooks/useCreatorProfile';
 
@@ -102,6 +103,10 @@ export function CreatorProfileForm({ profile, saving, onSave, onPrefill }: Props
         primary_language: profile.primary_language ?? 'en',
         ideas_per_day: profile.ideas_per_day ?? 10,
         trending_ratio: profile.trending_ratio ?? 0.5,
+        idea_source: profile.idea_source ?? 'mixed',
+        default_format: profile.default_format ?? 'both',
+        short_seconds: profile.short_seconds ?? 30,
+        long_minutes: profile.long_minutes ?? 6,
         enabled: profile.enabled ?? true,
         deliver_at: profile.deliver_at ?? '08:00',
         channels: profile.channels ?? ['push', 'telegram'],
@@ -130,6 +135,8 @@ export function CreatorProfileForm({ profile, saving, onSave, onPrefill }: Props
   };
 
   const split = computeIdeaSplit(form.ideas_per_day, form.trending_ratio);
+  const { language } = useLanguage();
+  const languageLabel = language === 'de' ? 'Deutsch' : 'English';
 
   return (
     <div className="space-y-5 max-w-2xl">
@@ -171,15 +178,16 @@ export function CreatorProfileForm({ profile, saving, onSave, onPrefill }: Props
             <Textarea value={form.business_context} onChange={(e) => set('business_context', e.target.value)} placeholder="What you sell / build, so ideas can tie back to it." className="min-h-[70px]" />
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-sm">Default call-to-action</Label>
-              <Input value={form.default_cta} onChange={(e) => set('default_cta', e.target.value)} placeholder="e.g. Follow for daily founder lessons" />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm">Primary language</Label>
-              <Input value={form.primary_language} onChange={(e) => set('primary_language', e.target.value)} placeholder="en" />
-            </div>
+          <div className="space-y-2">
+            <Label className="text-sm">Default call-to-action</Label>
+            <Input value={form.default_cta} onChange={(e) => set('default_cta', e.target.value)} placeholder="e.g. Follow for daily founder lessons" />
+          </div>
+
+          <div className="rounded-md border bg-muted/30 p-3">
+            <Label className="text-sm flex items-center gap-1.5"><Languages className="h-3.5 w-3.5" /> Content language</Label>
+            <p className="text-xs text-muted-foreground mt-1">
+              Ideas and scripts are written in <span className="font-medium text-foreground">{languageLabel}</span> — this follows your app language (change it in Settings → Language).
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -218,14 +226,72 @@ export function CreatorProfileForm({ profile, saving, onSave, onPrefill }: Props
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm">Trending vs evergreen</Label>
-              <span className="text-sm font-medium">🔥 {split.current} · ♻️ {split.evergreen}</span>
+            <Label className="text-sm">Where ideas come from</Label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {(['mixed', 'trending', 'knowledge'] as IdeaSource[]).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => set('idea_source', s)}
+                  className={cn(
+                    'rounded-md border px-2 py-2 text-xs font-medium transition-colors text-center',
+                    form.idea_source === s ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted',
+                  )}
+                >
+                  {IDEA_SOURCE_META[s].emoji} {IDEA_SOURCE_META[s].label}
+                </button>
+              ))}
             </div>
-            <Slider value={[Math.round(form.trending_ratio * 100)]} min={0} max={100} step={10} onValueChange={([v]) => set('trending_ratio', v / 100)} />
-            <p className="text-xs text-muted-foreground">
-              {Math.round(form.trending_ratio * 100)}% tied to what's happening now, the rest evergreen.
-            </p>
+            <p className="text-xs text-muted-foreground">{IDEA_SOURCE_META[form.idea_source].description}</p>
+          </div>
+
+          {form.idea_source === 'mixed' && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm">Trending vs evergreen</Label>
+                <span className="text-sm font-medium">🔥 {split.current} · ♻️ {split.evergreen}</span>
+              </div>
+              <Slider value={[Math.round(form.trending_ratio * 100)]} min={0} max={100} step={10} onValueChange={([v]) => set('trending_ratio', v / 100)} />
+              <p className="text-xs text-muted-foreground">
+                {Math.round(form.trending_ratio * 100)}% tied to what's happening now, the rest evergreen.
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label className="text-sm">Default scripts</Label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {(['short', 'long', 'both'] as DefaultFormat[]).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => set('default_format', f)}
+                  className={cn(
+                    'rounded-md border px-2 py-2 text-xs font-medium transition-colors',
+                    form.default_format === f ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted',
+                  )}
+                >
+                  {FORMAT_META[f].label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm">Short length</Label>
+                <span className="text-sm font-medium">{form.short_seconds}s</span>
+              </div>
+              <Slider value={[form.short_seconds]} min={15} max={90} step={5} onValueChange={([v]) => set('short_seconds', v)} />
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm">Long length</Label>
+                <span className="text-sm font-medium">{form.long_minutes} min</span>
+              </div>
+              <Slider value={[form.long_minutes]} min={3} max={20} step={1} onValueChange={([v]) => set('long_minutes', v)} />
+            </div>
           </div>
 
           <div className="flex items-center justify-between rounded-md border p-3">

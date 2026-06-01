@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from 'sonner';
 import { DEFAULT_CREATOR_PROFILE, describeContentError, type CreatorProfile } from '@/lib/content';
 
@@ -16,6 +17,7 @@ export type CreatorProfileDraft = Omit<
 
 export function useCreatorProfile() {
   const { user } = useAuth();
+  const { language } = useLanguage();
   const [profile, setProfile] = useState<CreatorProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -31,14 +33,23 @@ export function useCreatorProfile() {
       if (error) {
         console.error('Error fetching creator profile:', error);
       } else {
-        setProfile((data as CreatorProfile) ?? null);
+        const row = (data as CreatorProfile) ?? null;
+        setProfile(row);
+        // Keep the saved content language in step with the app language, so the
+        // daily cron (which can't read the client) also generates in it.
+        if (row && language && row.primary_language !== language) {
+          void db.from('creator_profiles')
+            .update({ primary_language: language })
+            .eq('user_id', user.id)
+            .then(() => setProfile((p) => (p ? { ...p, primary_language: language } : p)));
+        }
       }
     } catch (err) {
       console.error('Failed to fetch creator profile:', err);
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, language]);
 
   useEffect(() => { fetchProfile(); }, [fetchProfile]);
 
@@ -80,6 +91,8 @@ export function useCreatorProfile() {
         user_id: user.id,
         ...(profile ? {} : DEFAULT_CREATOR_PROFILE),
         ...values,
+        // Content language follows the app language rather than a manual field.
+        primary_language: language,
         updated_at: new Date().toISOString(),
       };
       const { data, error } = await db
@@ -98,7 +111,7 @@ export function useCreatorProfile() {
     } finally {
       setSaving(false);
     }
-  }, [user?.id, profile, fetchProfile]);
+  }, [user?.id, profile, fetchProfile, language]);
 
   return { profile, loading, saving, save, prefillFromProfile, refetch: fetchProfile };
 }

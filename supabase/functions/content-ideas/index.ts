@@ -75,6 +75,14 @@ serve(async (req) => {
     const ratio = Number.isFinite(body?.trending_ratio)
       ? Number(body.trending_ratio)
       : (profile?.trending_ratio ?? 0.5);
+    const ideaSource = ["mixed", "trending", "knowledge"].includes(body?.idea_source)
+      ? body.idea_source
+      : (profile?.idea_source ?? "mixed");
+    // Language: the client passes its current app language; fall back to the
+    // saved content language, then English.
+    const language = typeof body?.language === "string" && body.language
+      ? body.language
+      : (profile?.primary_language ?? "en");
     const location = {
       city: baseProfile?.location_city ?? null,
       country: baseProfile?.location_country ?? null,
@@ -88,7 +96,13 @@ serve(async (req) => {
     }
 
     const avoid = await recentHeadlines(admin, userId, 7);
-    const ideas = await generateContentIdeas(profileLike, location, count, ratio, avoid);
+    const ideas = await generateContentIdeas(profileLike, location, {
+      count,
+      trendingRatio: ratio,
+      ideaSource,
+      language,
+      avoidHeadlines: avoid,
+    });
 
     const today = new Date().toISOString().split("T")[0];
     const inserted = await persistDailyBatch(admin, userId, ideas, today);

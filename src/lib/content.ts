@@ -8,6 +8,9 @@ export type IdeaKind = 'current' | 'evergreen';
 export type IdeaStatus = 'new' | 'liked' | 'dismissed' | 'scheduled';
 export type ScriptFormat = 'short' | 'long';
 export type Platform = 'youtube' | 'instagram' | 'tiktok';
+export type IdeaSource = 'mixed' | 'trending' | 'knowledge';
+export type DefaultFormat = 'short' | 'long' | 'both';
+export type ScriptVariation = 'shorter' | 'longer' | 'punchier';
 
 export interface CreatorProfile {
   id: string;
@@ -22,6 +25,10 @@ export interface CreatorProfile {
   primary_language: string;
   ideas_per_day: number;
   trending_ratio: number;
+  idea_source: IdeaSource;
+  default_format: DefaultFormat;
+  short_seconds: number;
+  long_minutes: number;
   enabled: boolean;
   deliver_at: string; // "HH:MM" / "HH:MM:SS"
   channels: string[]; // 'push' | 'telegram'
@@ -85,6 +92,18 @@ export const KIND_META: Record<IdeaKind, { label: string; emoji: string }> = {
   evergreen: { label: 'Evergreen', emoji: '♻️' },
 };
 
+export const IDEA_SOURCE_META: Record<IdeaSource, { label: string; emoji: string; description: string }> = {
+  mixed: { label: 'Mix', emoji: '🔀', description: 'Trending news + evergreen knowledge' },
+  trending: { label: 'Trending', emoji: '🔥', description: "Only what's happening now (from the web)" },
+  knowledge: { label: 'Knowledge', emoji: '🧠', description: "Evergreen ideas from the AI's own expertise — no news needed" },
+};
+
+export const FORMAT_META: Record<DefaultFormat, { label: string; formats: ScriptFormat[] }> = {
+  short: { label: 'Short only', formats: ['short'] },
+  long: { label: 'Long only', formats: ['long'] },
+  both: { label: 'Short + Long', formats: ['short', 'long'] },
+};
+
 // Defaults used when creating a creator profile row for the first time. Callers
 // (the hook) merge in prefill from the user's general profile.
 export const DEFAULT_CREATOR_PROFILE: Omit<
@@ -101,6 +120,10 @@ export const DEFAULT_CREATOR_PROFILE: Omit<
   primary_language: 'en',
   ideas_per_day: 10,
   trending_ratio: 0.5,
+  idea_source: 'mixed',
+  default_format: 'both',
+  short_seconds: 30,
+  long_minutes: 6,
   enabled: true,
   deliver_at: '08:00',
   channels: ['push', 'telegram'],

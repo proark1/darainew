@@ -22,6 +22,14 @@ import {
   KNOWN_PLATFORMS,
   type ScriptFormat,
 } from "../_shared/platformPlaybooks.ts";
+import { languageName } from "../_shared/contentIdeas.ts";
+
+// Optional "make it different" hint when the user regenerates a script.
+const VARIATIONS: Record<string, string> = {
+  shorter: "Make this noticeably SHORTER and tighter than a normal version — cut every spare word.",
+  longer: "Make this a bit LONGER and more detailed than a normal version, without padding.",
+  punchier: "Make this PUNCHIER and higher-energy — bolder hook, snappier lines, stronger pattern interrupts.",
+};
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": strictAppOrigin(),
@@ -87,7 +95,7 @@ const LONG_SCHEMA = {
   required: ["title_options", "thumbnail_concept", "hook", "script", "description"],
 };
 
-function voiceBlock(idea: any, profile: any): string {
+function voiceBlock(idea: any, profile: any, langName: string): string {
   const tone = Array.isArray(profile?.tone) ? profile.tone.filter(Boolean).join(", ") : "";
   return [
     profile?.persona ? `Creator: ${profile.persona}` : "",
@@ -95,7 +103,7 @@ function voiceBlock(idea: any, profile: any): string {
     profile?.audience ? `Audience: ${profile.audience}` : "",
     profile?.business_context ? `Business: ${profile.business_context}` : "",
     profile?.default_cta ? `Preferred call-to-action: ${profile.default_cta}` : "",
-    `Language: ${profile?.primary_language || "en"}`,
+    `Write the ENTIRE output — hook, script, captions, hashtags, titles, description and CTA — in ${langName}.`,
     "",
     `IDEA TITLE: ${idea.headline}`,
     idea.hook ? `OPENING ANGLE: ${idea.hook}` : "",
@@ -215,7 +223,18 @@ serve(async (req) => {
       return json({ error: (e as Error).message, code }, code === "quota_exceeded" ? 429 : 503);
     }
 
-    const vBlock = voiceBlock(idea, profile);
+    const langName = languageName(
+      (typeof body?.language === "string" && body.language) ? body.language : profile?.primary_language,
+    );
+    const shortSeconds = Number.isInteger(body?.short_seconds)
+      ? body.short_seconds
+      : (Number.isInteger(profile?.short_seconds) ? profile.short_seconds : 30);
+    const longMinutes = Number.isInteger(body?.long_minutes)
+      ? body.long_minutes
+      : (Number.isInteger(profile?.long_minutes) ? profile.long_minutes : 6);
+    const variationHint = VARIATIONS[String(body?.variation || "")] || "";
+
+    const vBlock = voiceBlock(idea, profile, langName);
     const saved: any[] = [];
 
     for (const format of formats) {
@@ -223,7 +242,7 @@ serve(async (req) => {
 
       if (format === "short") {
         const system = `You are a world-class short-form scriptwriter. Write a vertical short-video script in the creator's authentic voice. Make it genuinely scroll-stopping, specific, and easy to record from a phone. Return ONLY a JSON object matching the schema.\n\n${shortPlaybook(targetPlatforms)}`;
-        const user = `${vBlock}\n\nTarget platforms: ${targetPlatforms.join(", ")}. Write ONE short-form script (shared spoken text) plus a tailored caption + hashtags (and a tuned hook if it should differ) for each target platform.`;
+        const user = `${vBlock}\n\nTarget spoken length: about ${shortSeconds} seconds.${variationHint ? ` ${variationHint}` : ""}\nTarget platforms: ${targetPlatforms.join(", ")}. Write ONE short-form script (shared spoken text) plus a tailored caption + hashtags (and a tuned hook if it should differ) for each target platform.`;
         const out = await callGemini(geminiKey, system, user, SHORT_SCHEMA);
 
         const variants = Array.isArray(out?.platform_variants)
@@ -257,7 +276,7 @@ serve(async (req) => {
         };
       } else {
         const system = `You are a top YouTube strategist and scriptwriter. Write a long-form video script in the creator's authentic voice, optimised for watch-time and clarity. Return ONLY a JSON object matching the schema.\n\n${longPlaybook()}`;
-        const user = `${vBlock}\n\nWrite the full long-form YouTube script now.`;
+        const user = `${vBlock}\n\nTarget length: about ${longMinutes} minutes of spoken content.${variationHint ? ` ${variationHint}` : ""}\nWrite the full long-form YouTube script now.`;
         const out = await callGemini(geminiKey, system, user, LONG_SCHEMA);
 
         row = {
