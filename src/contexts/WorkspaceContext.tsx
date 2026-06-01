@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { useAuthContext } from '@/contexts/AuthContext';
 
 // "Personal" is the implicit namespace — no workspace_id on the row. We
@@ -166,7 +167,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     });
     if (error) {
       console.error('joinByCode failed', error);
-      return { ok: false, error: error.message || 'Could not join' };
+      return { ok: false, error: await describeEdgeError(error, 'Could not join') };
     }
     const result = data as { ok?: boolean; workspace_id?: string; workspace?: Workspace; error?: string };
     if (!result?.ok || !result.workspace_id) {
