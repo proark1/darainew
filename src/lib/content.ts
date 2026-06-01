@@ -202,23 +202,8 @@ export function describeContentError(err: unknown, fallback: string, migrationMi
  * opaque "Edge Function returned a non-2xx status code". Pull the `{ error }`
  * body out of the response so the user sees the real reason instead.
  */
-export async function describeFunctionError(err: unknown, fallback: string): Promise<string> {
-  const ctx = (err as { context?: unknown } | null)?.context;
-  if (ctx && typeof (ctx as Response).clone === 'function') {
-    try {
-      const body = await (ctx as Response).clone().json();
-      if (body) {
-        // Edge functions return { error: "..." }; tolerate nested
-        // { error: { message } } and top-level { message } shapes too.
-        if (typeof body.error === 'string' && body.error) return body.error;
-        if (body.error && typeof body.error === 'object' && typeof body.error.message === 'string' && body.error.message) {
-          return body.error.message;
-        }
-        if (typeof body.message === 'string' && body.message) return body.message;
-      }
-    } catch {
-      /* response body wasn't JSON — fall through to the message/fallback */
-    }
-  }
-  return err instanceof Error && err.message ? err.message : fallback;
-}
+/**
+ * Re-exported from edgeError for back-compat. Pulls the real `{ error }` body
+ * out of a FunctionsHttpError so callers show the actual reason, not "non-2xx".
+ */
+export { describeEdgeError as describeFunctionError } from './edgeError';

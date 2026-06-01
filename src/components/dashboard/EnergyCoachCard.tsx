@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Battery, RefreshCw } from 'lucide-react';
@@ -15,8 +16,8 @@ export function EnergyCoachCard() {
       const { data, error } = await supabase.functions.invoke('energy-coach');
       if (error) throw error;
       setSuggestion(data?.suggestion ?? '');
-    } catch {
-      toast.error('Could not load energy suggestion');
+    } catch (err) {
+      toast.error(await describeEdgeError(err, 'Could not load energy suggestion'));
     } finally { setLoading(false); }
   };
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -93,7 +94,7 @@ export function EmailActionPipelineCard({
       toast.success(n > 0 ? `Found ${n} new suggestion${n === 1 ? '' : 's'}` : 'No new actions found');
       await load();
     } catch (e) {
-      toast.error('Scan failed');
+      toast.error(await describeEdgeError(e, 'Scan failed'));
     } finally {
       setScanning(false);
       setLoading(false);
