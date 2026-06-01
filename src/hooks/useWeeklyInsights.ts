@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { toast } from 'sonner';
 
 export interface AIInsight {
@@ -186,7 +187,7 @@ export function useWeeklyInsights() {
       }
     } catch (error) {
       console.error('Failed to generate insights:', error);
-      toast.error('Failed to generate insights');
+      toast.error(await describeEdgeError(error, 'Failed to generate insights'));
     } finally {
       setIsGenerating(false);
     }

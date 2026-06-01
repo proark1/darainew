@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { toast } from 'sonner';
 
 export interface UserPattern {
@@ -113,7 +114,7 @@ export function useUserPatterns() {
       return data;
     } catch (error) {
       console.error('Error analyzing patterns:', error);
-      toast.error('Failed to analyze patterns');
+      toast.error(await describeEdgeError(error, 'Failed to analyze patterns'));
       return null;
     } finally {
       setIsAnalyzing(false);
@@ -136,7 +137,7 @@ export function useUserPatterns() {
       toast.success('Pattern dismissed');
     } catch (error) {
       console.error('Error dismissing pattern:', error);
-      toast.error('Failed to dismiss pattern');
+      toast.error(await describeEdgeError(error, 'Failed to dismiss pattern'));
     }
   }, [user]);
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 
@@ -163,7 +164,7 @@ export function useTripOverview() {
       toast.success('Weather updated');
       return w;
     } catch (e) {
-      toast.error(`Weather failed: ${(e as Error).message}`);
+      toast.error(await describeEdgeError(e, 'Weather failed'));
       return null;
     } finally {
       setBusyTripId(null);
@@ -188,7 +189,7 @@ export function useTripOverview() {
       await refresh();
       return data;
     } catch (e) {
-      toast.error(`Prep failed: ${(e as Error).message}`);
+      toast.error(await describeEdgeError(e, 'Prep failed'));
       return null;
     } finally {
       setBusyTripId(null);
@@ -214,7 +215,7 @@ export function useTripOverview() {
       await refresh();
       return r;
     } catch (e) {
-      toast.error(`Packing failed: ${(e as Error).message}`);
+      toast.error(await describeEdgeError(e, 'Packing failed'));
       return null;
     } finally {
       setBusyTripId(null);

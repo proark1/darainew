@@ -27,8 +27,15 @@ export async function describeEdgeError(err: unknown, fallback: string): Promise
       /* response body wasn't JSON — fall through to the message/fallback */
     }
   }
-  // A FunctionsHttpError's own message is the opaque "Edge Function returned a
-  // non-2xx status code" — prefer the caller's fallback over that.
-  const msg = err instanceof Error ? err.message : '';
+  // Fall back to any message we can find — an Error instance OR a plain object
+  // with a string `message` (e.g. a Supabase/PostgrestError, which is NOT an
+  // Error instance) — but never the opaque "Edge Function returned a non-2xx
+  // status code" message, for which the caller's fallback is more useful.
+  let msg = '';
+  if (err instanceof Error) {
+    msg = err.message;
+  } else if (err && typeof err === 'object' && typeof (err as { message?: unknown }).message === 'string') {
+    msg = (err as { message: string }).message;
+  }
   return msg && !/non-2xx status code/i.test(msg) ? msg : fallback;
 }

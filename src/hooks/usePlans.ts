@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { useAuth } from './useAuth';
 import { useSharedRealtime } from './useSharedRealtime';
 import { toast } from 'sonner';
@@ -146,7 +147,7 @@ export function usePlans() {
       }
       await refresh();
     } catch (e) {
-      toast.error(`Failed: ${(e as Error).message}`);
+      toast.error(await describeEdgeError(e, 'Failed'));
     }
   }, [callExec, refresh]);
 
@@ -156,7 +157,7 @@ export function usePlans() {
       toast.info('Step skipped');
       await refresh();
     } catch (e) {
-      toast.error(`Failed: ${(e as Error).message}`);
+      toast.error(await describeEdgeError(e, 'Failed'));
     }
   }, [callExec, refresh]);
 
@@ -166,7 +167,7 @@ export function usePlans() {
       toast.info('Plan aborted');
       await refresh();
     } catch (e) {
-      toast.error(`Failed: ${(e as Error).message}`);
+      toast.error(await describeEdgeError(e, 'Failed'));
     }
   }, [callExec, refresh]);
 
@@ -175,7 +176,7 @@ export function usePlans() {
       await callExec(planId, 'pause');
       await refresh();
     } catch (e) {
-      toast.error(`Failed: ${(e as Error).message}`);
+      toast.error(await describeEdgeError(e, 'Failed'));
     }
   }, [callExec, refresh]);
 
@@ -184,7 +185,7 @@ export function usePlans() {
       await callExec(planId, 'resume');
       await refresh();
     } catch (e) {
-      toast.error(`Failed: ${(e as Error).message}`);
+      toast.error(await describeEdgeError(e, 'Failed'));
     }
   }, [callExec, refresh]);
 
