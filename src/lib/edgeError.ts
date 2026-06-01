@@ -34,6 +34,8 @@ export async function describeEdgeError(err: unknown, fallback: string): Promise
   let msg = '';
   if (err instanceof Error) {
     msg = err.message;
+  } else if (typeof err === 'string') {
+    msg = err;
   } else if (err && typeof err === 'object' && typeof (err as { message?: unknown }).message === 'string') {
     msg = (err as { message: string }).message;
   }

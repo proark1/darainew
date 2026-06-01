@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { useBrainDump } from '@/hooks/useBrainDump';
 import { BrainDumpInbox } from './BrainDumpInbox';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { toast } from 'sonner';
 
 interface BrainDumpFABProps {
@@ -124,7 +125,7 @@ export function BrainDumpFAB({ className, collapsed = false }: BrainDumpFABProps
       }
     } catch (err) {
       console.error('transcribe error', err);
-      if (isMountedRef.current) toast.error('Could not transcribe audio');
+      if (isMountedRef.current) toast.error(await describeEdgeError(err, 'Could not transcribe audio'));
     } finally {
       if (isMountedRef.current) setIsTranscribing(false);
     }

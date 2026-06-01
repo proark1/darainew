@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useCalendarConnections, CalendarConnection } from '@/hooks/useCalendarConnections';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { formatDistanceToNow } from 'date-fns';
 import { parseICS, validateICSFile } from '@/lib/icsParser';
 
@@ -250,7 +251,7 @@ export function CalendarConnectionsPanel() {
       refetch();
     } catch (error: any) {
       console.error('ICS import error:', error);
-      toast({ title: 'Import failed', description: error.message || 'Failed to import.', variant: 'destructive' });
+      toast({ title: 'Import failed', description: await describeEdgeError(error, 'Failed to import.'), variant: 'destructive' });
     } finally {
       setImporting(false);
     }

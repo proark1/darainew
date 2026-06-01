@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 
@@ -45,7 +46,7 @@ export function useGmailConnection() {
       }
     } catch (e) {
       console.error('Gmail connect error:', e);
-      toast.error('Failed to start Google connection');
+      toast.error(await describeEdgeError(e, 'Failed to start Google connection'));
     }
   }, [user]);
 

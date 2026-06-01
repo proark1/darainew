@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { describeEdgeError } from '@/lib/edgeError';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -312,7 +313,7 @@ export function HadithTab() {
       console.error('TTS error:', error);
       setIsPlayingAudio(false);
       setLoadingAudioId(null);
-      toast.error('Failed to generate audio');
+      toast.error(await describeEdgeError(error, 'Failed to generate audio'));
     }
   };
 

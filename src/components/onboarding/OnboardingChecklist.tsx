@@ -7,6 +7,7 @@ import { Check, ChevronRight, Sparkles, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { toast } from 'sonner';
 
 // Dashboard-level "first 5 minutes" checklist. Appears on first load for
@@ -89,7 +90,7 @@ export function OnboardingChecklist() {
       setTopOfMind(['', '', '']);
     } catch (e) {
       console.error('seedTasks failed', e);
-      toast.error('Could not add tasks');
+      toast.error(await describeEdgeError(e, 'Could not add tasks'));
     } finally {
       setSeeding(false);
     }

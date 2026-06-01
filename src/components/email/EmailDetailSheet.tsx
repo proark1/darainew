@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { format, addHours, addDays, nextMonday, setHours, setMinutes } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { toast } from 'sonner';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { Email, EmailThread } from '@/hooks/useEmails';
@@ -174,7 +175,7 @@ export function EmailDetailSheet({ thread, email, open, onOpenChange, onArchive,
       setReplyText(data?.draft || '');
     } catch (e) {
       console.error('Draft reply error:', e);
-      toast.error('Failed to generate draft reply');
+      toast.error(await describeEdgeError(e, 'Failed to generate draft reply'));
     } finally {
       setDraftLoading(false);
     }

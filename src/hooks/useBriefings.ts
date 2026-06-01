@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 
@@ -127,7 +128,7 @@ export function useBriefings() {
       toast.success('Briefing sent — check your channels');
     } catch (err) {
       console.error('Failed to send briefing:', err);
-      toast.error('Failed to send briefing');
+      toast.error(await describeEdgeError(err, 'Failed to send briefing'));
     }
   }, []);
 

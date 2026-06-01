@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 
@@ -130,7 +131,7 @@ export function useVisionCapture() {
       setResult(r);
       return r;
     } catch (e) {
-      toast.error(`Vision failed: ${(e as Error).message}`);
+      toast.error(await describeEdgeError(e, 'Vision failed'));
       return null;
     } finally {
       setBusy(false);
@@ -158,7 +159,7 @@ export function useVisionCapture() {
       reset();
       return data as any;
     } catch (e) {
-      toast.error(`Commit failed: ${(e as Error).message}`);
+      toast.error(await describeEdgeError(e, 'Commit failed'));
       return null;
     } finally {
       setBusy(false);
