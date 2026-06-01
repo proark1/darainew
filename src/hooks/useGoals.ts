@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export interface Goal {
   id: string;
@@ -22,6 +23,7 @@ export interface Goal {
 
 export function useGoals(userId: string | undefined) {
   const { toast } = useToast();
+  const { t } = useLanguage();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -105,14 +107,14 @@ export function useGoals(userId: string | undefined) {
       };
 
       setGoals(prev => [...prev, newGoal]);
-      toast({ title: 'Goal Created', description: `"${goal.name}" has been added.` });
+      toast({ title: t('goals.created'), description: t('goals.createdDesc').replace('{name}', goal.name) });
       return newGoal;
     } catch (error) {
       console.error('[goals] Create error:', error);
-      toast({ title: 'Error', description: 'Could not create goal.', variant: 'destructive' });
+      toast({ title: t('toast.error'), description: t('goals.errorCreate'), variant: 'destructive' });
       return null;
     }
-  }, [userId, toast]);
+  }, [userId, toast, t]);
 
   const updateGoalProgress = useCallback(async (goalId: string, newValue: number) => {
     try {
@@ -145,16 +147,16 @@ export function useGoals(userId: string | undefined) {
       ));
 
       if (isCompleted) {
-        toast({ 
-          title: '🎉 Goal Achieved!', 
-          description: `Congratulations on completing "${goal.name}"!` 
+        toast({
+          title: t('goals.achieved'),
+          description: t('goals.achievedDesc').replace('{name}', goal.name),
         });
       }
     } catch (error) {
       console.error('[goals] Update error:', error);
-      toast({ title: 'Error', description: 'Could not update goal.', variant: 'destructive' });
+      toast({ title: t('toast.error'), description: t('goals.errorUpdate'), variant: 'destructive' });
     }
-  }, [goals, toast]);
+  }, [goals, toast, t]);
 
   const deleteGoal = useCallback(async (goalId: string) => {
     try {
@@ -166,12 +168,12 @@ export function useGoals(userId: string | undefined) {
       if (error) throw error;
 
       setGoals(prev => prev.filter(g => g.id !== goalId));
-      toast({ title: 'Goal Removed', description: 'The goal has been deleted.' });
+      toast({ title: t('goals.removed'), description: t('goals.removedDesc') });
     } catch (error) {
       console.error('[goals] Delete error:', error);
-      toast({ title: 'Error', description: 'Could not delete goal.', variant: 'destructive' });
+      toast({ title: t('toast.error'), description: t('goals.errorDelete'), variant: 'destructive' });
     }
-  }, [toast]);
+  }, [toast, t]);
 
   useEffect(() => {
     fetchGoals();

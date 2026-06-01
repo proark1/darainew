@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { startOfDay, differenceInDays, subDays, format } from 'date-fns';
 import { useAppNotifications } from './useAppNotifications';
 
@@ -32,6 +33,7 @@ export interface HabitLog {
 
 export function useHabits(userId: string | undefined) {
   const { toast } = useToast();
+  const { t } = useLanguage();
   const [habits, setHabits] = useState<Habit[]>([]);
   const [logs, setLogs] = useState<HabitLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,14 +137,14 @@ export function useHabits(userId: string | undefined) {
       };
 
       setHabits(prev => [...prev, newHabit]);
-      toast({ title: 'Habit Created', description: `"${habit.name}" has been added.` });
+      toast({ title: t('habits.created'), description: t('habits.createdDesc').replace('{name}', habit.name) });
       return newHabit;
     } catch (error) {
       console.error('[habits] Create error:', error);
-      toast({ title: 'Error', description: 'Could not create habit.', variant: 'destructive' });
+      toast({ title: t('toast.error'), description: t('habits.errorCreate'), variant: 'destructive' });
       return null;
     }
-  }, [userId, toast]);
+  }, [userId, toast, t]);
 
   // Calculate streak for a habit - moved before logHabit to avoid circular dependency
   const getStreak = useCallback((habitId: string) => {
@@ -232,12 +234,12 @@ export function useHabits(userId: string | undefined) {
         notifyHabitCompleted(habit.name, habitId, streak + 1);
       }
 
-      toast({ title: 'Habit Logged!', description: 'Keep up the great work!' });
+      toast({ title: t('habits.logged'), description: t('habits.loggedDesc') });
     } catch (error) {
       console.error('[habits] Log error:', error);
-      toast({ title: 'Error', description: 'Could not log habit.', variant: 'destructive' });
+      toast({ title: t('toast.error'), description: t('habits.errorLog'), variant: 'destructive' });
     }
-  }, [userId, logs, habits, toast, getStreak, notifyHabitCompleted]);
+  }, [userId, logs, habits, toast, t, getStreak, notifyHabitCompleted]);
 
   const deleteHabit = useCallback(async (habitId: string) => {
     try {
@@ -249,12 +251,12 @@ export function useHabits(userId: string | undefined) {
       if (error) throw error;
 
       setHabits(prev => prev.filter(h => h.id !== habitId));
-      toast({ title: 'Habit Removed', description: 'The habit has been deactivated.' });
+      toast({ title: t('habits.removed'), description: t('habits.removedDesc') });
     } catch (error) {
       console.error('[habits] Delete error:', error);
-      toast({ title: 'Error', description: 'Could not remove habit.', variant: 'destructive' });
+      toast({ title: t('toast.error'), description: t('habits.errorRemove'), variant: 'destructive' });
     }
-  }, [toast]);
+  }, [toast, t]);
 
   // Get today's habits with completion status
   const todayHabits = useMemo(() => {

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { TablesUpdate } from '@/integrations/supabase/types';
 import { useToast } from '@/hooks/use-toast';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useActiveWorkspaceId } from '@/contexts/WorkspaceContext';
 
 export interface LinkedItem {
@@ -27,6 +28,7 @@ export interface Note {
 export function useNotes(userId: string | undefined) {
   const workspaceId = useActiveWorkspaceId();
   const { toast } = useToast();
+  const { t } = useLanguage();
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -107,13 +109,13 @@ export function useNotes(userId: string | undefined) {
     } catch (error) {
       console.error('[notes] Create error:', error);
       toast({
-        title: 'Error',
-        description: 'Could not create note.',
+        title: t('toast.error'),
+        description: t('notes.errorCreate'),
         variant: 'destructive',
       });
       return null;
     }
-  }, [userId, workspaceId, toast]);
+  }, [userId, workspaceId, toast, t]);
 
   const updateNote = useCallback(async (noteId: string, updates: Partial<Pick<Note, 'title' | 'content' | 'linkedItems' | 'tags' | 'isPinned'>>) => {
     try {
@@ -139,12 +141,12 @@ export function useNotes(userId: string | undefined) {
     } catch (error) {
       console.error('[notes] Update error:', error);
       toast({
-        title: 'Error',
-        description: 'Could not update note.',
+        title: t('toast.error'),
+        description: t('notes.errorUpdate'),
         variant: 'destructive',
       });
     }
-  }, [toast]);
+  }, [toast, t]);
 
   const deleteNote = useCallback(async (noteId: string, permanent: boolean = false) => {
     try {
@@ -165,20 +167,18 @@ export function useNotes(userId: string | undefined) {
       setNotes(prev => prev.filter(n => n.id !== noteId));
 
       toast({
-        title: permanent ? 'Note Deleted' : 'Note Trashed',
-        description: permanent 
-          ? 'The note has been permanently deleted.'
-          : 'The note has been moved to trash.',
+        title: permanent ? t('notes.deleted') : t('notes.trashed'),
+        description: permanent ? t('notes.deletedDesc') : t('notes.trashedDesc'),
       });
     } catch (error) {
       console.error('[notes] Delete error:', error);
       toast({
-        title: 'Error',
-        description: 'Could not delete note.',
+        title: t('toast.error'),
+        description: t('notes.errorDelete'),
         variant: 'destructive',
       });
     }
-  }, [toast]);
+  }, [toast, t]);
 
   const searchNotes = useCallback(async (query: string) => {
     if (!userId || !query.trim()) {
