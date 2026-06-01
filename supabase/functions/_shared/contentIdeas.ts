@@ -289,10 +289,17 @@ export async function generateContentIdeas(
     : "";
 
   const shared = { apiKey, topicsString, personaBlock, locationContext, langName, avoidBlock };
-  // Run the two batches concurrently; each is independent.
+  // Run the two batches concurrently; each is independent. Catch per-batch so a
+  // failure in one (e.g. grounding hiccup, rate limit) still returns the other.
   const [currentIdeas, evergreenIdeas] = await Promise.all([
-    wantCurrent > 0 ? fetchIdeaBatch({ ...shared, grounded: true, kind: "current", n: wantCurrent }) : Promise.resolve([]),
-    wantEvergreen > 0 ? fetchIdeaBatch({ ...shared, grounded: false, kind: "evergreen", n: wantEvergreen }) : Promise.resolve([]),
+    wantCurrent > 0
+      ? fetchIdeaBatch({ ...shared, grounded: true, kind: "current", n: wantCurrent })
+          .catch((err) => { console.error("Failed to fetch current ideas:", err); return []; })
+      : Promise.resolve([]),
+    wantEvergreen > 0
+      ? fetchIdeaBatch({ ...shared, grounded: false, kind: "evergreen", n: wantEvergreen })
+          .catch((err) => { console.error("Failed to fetch evergreen ideas:", err); return []; })
+      : Promise.resolve([]),
   ]);
 
   const ideas = [...currentIdeas, ...evergreenIdeas];

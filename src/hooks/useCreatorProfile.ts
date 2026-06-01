@@ -41,7 +41,8 @@ export function useCreatorProfile() {
           void db.from('creator_profiles')
             .update({ primary_language: language })
             .eq('user_id', user.id)
-            .then(() => setProfile((p) => (p ? { ...p, primary_language: language } : p)));
+            .then(() => setProfile((p) => (p ? { ...p, primary_language: language } : p)))
+            .catch((err: unknown) => console.error('Failed to sync content language:', err));
         }
       }
     } catch (err) {

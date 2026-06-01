@@ -31,12 +31,18 @@ export function Teleprompter({
     if (!open || !playing) return;
     let raf = 0;
     let last = performance.now();
+    const el = scrollRef.current;
+    // scrollTop is integer-rounded in many browsers, so sub-pixel increments at
+    // low speeds get dropped and the scroll sticks. Track a precise position and
+    // resync if the user scrolls manually.
+    let precise = el ? el.scrollTop : 0;
     const tick = (now: number) => {
       const dt = (now - last) / 1000;
       last = now;
-      const el = scrollRef.current;
       if (el) {
-        el.scrollTop += speed * dt;
+        if (Math.abs(el.scrollTop - precise) > 1) precise = el.scrollTop;
+        precise += speed * dt;
+        el.scrollTop = precise;
         if (el.scrollTop + el.clientHeight >= el.scrollHeight - 1) {
           setPlaying(false);
           return;
