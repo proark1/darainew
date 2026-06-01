@@ -100,43 +100,11 @@ export function NotesPanel({ userId }: NotesPanelProps) {
     return lines[0].slice(0, 100) + (lines[0].length > 100 ? '...' : '');
   };
 
-  // Voice recording functions
-  const startRecording = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstop = async () => {
-        stream.getTracks().forEach(track => track.stop());
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        await transcribeAudio(audioBlob);
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-      toast.info('Recording started... Tap again to stop');
-    } catch (error) {
-      console.error('Error starting recording:', error);
-      toast.error('Could not start recording. Please check microphone permissions.');
-    }
-  }, []);
-
-  const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  }, [isRecording]);
-
-  const transcribeAudio = async (audioBlob: Blob) => {
+  // Voice recording functions. transcribeAudio is memoized and declared
+  // before startRecording so the latter can list it as a dependency —
+  // otherwise startRecording would capture a stale transcribeAudio (and
+  // through it stale createNote/updateNote) after a workspace switch.
+  const transcribeAudio = useCallback(async (audioBlob: Blob) => {
     setIsTranscribing(true);
     try {
       // Convert blob to base64
@@ -167,10 +135,10 @@ export function NotesPanel({ userId }: NotesPanelProps) {
             content: data.text 
           });
           setSelectedNote({ ...newNote, title: `Voice Note - ${new Date().toLocaleString()}`, content: data.text });
-          toast.success('Voice note created!');
+          toast.success(t('notes.toast.voiceNoteCreated'));
         }
       } else {
-        toast.error('No speech detected');
+        toast.error(t('notes.toast.noSpeech'));
       }
     } catch (error) {
       console.error('Transcription error:', error);
@@ -178,7 +146,42 @@ export function NotesPanel({ userId }: NotesPanelProps) {
     } finally {
       setIsTranscribing(false);
     }
-  };
+  }, [createNote, updateNote, setSelectedNote, t]);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(track => track.stop());
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        await transcribeAudio(audioBlob);
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      toast.info(t('notes.toast.recordingStarted'));
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      toast.error(t('notes.toast.recordingFailed'));
+    }
+  }, [t, transcribeAudio]);
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  }, [isRecording]);
 
   const toggleRecording = useCallback(() => {
     if (isRecording) {

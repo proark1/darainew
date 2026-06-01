@@ -107,7 +107,7 @@ export function useGoals(userId: string | undefined) {
       };
 
       setGoals(prev => [...prev, newGoal]);
-      toast({ title: t('goals.created'), description: t('goals.createdDesc').replace('{name}', goal.name) });
+      toast({ title: t('goals.created'), description: t('goals.createdDesc').replace('{name}', () => goal.name) });
       return newGoal;
     } catch (error) {
       console.error('[goals] Create error:', error);
@@ -149,7 +149,7 @@ export function useGoals(userId: string | undefined) {
       if (isCompleted) {
         toast({
           title: t('goals.achieved'),
-          description: t('goals.achievedDesc').replace('{name}', goal.name),
+          description: t('goals.achievedDesc').replace('{name}', () => goal.name),
         });
       }
     } catch (error) {

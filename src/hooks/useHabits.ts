@@ -137,7 +137,7 @@ export function useHabits(userId: string | undefined) {
       };
 
       setHabits(prev => [...prev, newHabit]);
-      toast({ title: t('habits.created'), description: t('habits.createdDesc').replace('{name}', habit.name) });
+      toast({ title: t('habits.created'), description: t('habits.createdDesc').replace('{name}', () => habit.name) });
       return newHabit;
     } catch (error) {
       console.error('[habits] Create error:', error);
