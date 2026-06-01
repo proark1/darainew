@@ -60,7 +60,6 @@
     "@radix-ui/react-tooltip": "^1.2.7",
     "@supabase/supabase-js": "^2.87.1",
     "@tanstack/react-query": "^5.83.0",
-    "@tanstack/react-virtual": "^3.13.26",
     "@types/dompurify": "^3.0.5",
     "canvas-confetti": "^1.9.4",
     "capacitor-native-biometric": "^4.2.2",
