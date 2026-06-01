@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Sparkles, X, Bell, Check, Clock, ExternalLink } from 'lucide-react';
@@ -12,6 +12,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { useProactiveReminders, ProactiveReminder } from '@/hooks/useProactiveReminders';
+import { trackProactiveOutcome } from '@/lib/telemetry';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -56,6 +57,23 @@ export function DoriNotificationIcon() {
   const { reminders, unreadCount, loading, markAsRead, dismissReminder, snoozeReminder, completeReminder } = useProactiveReminders();
   const [open, setOpen] = useState(false);
 
+  // Impression: record once per unread reminder the icon signals as pending.
+  // Dedupe by id so the badge re-rendering doesn't re-fire.
+  const shownReminderIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (loading || unreadCount === 0) return;
+    for (const reminder of reminders) {
+      if (reminder.read_at) continue;
+      if (shownReminderIds.current.has(reminder.id)) continue;
+      shownReminderIds.current.add(reminder.id);
+      trackProactiveOutcome('dori_notification', 'shown', {
+        reminderId: reminder.id,
+        reminderType: reminder.reminder_type,
+        priority: reminder.priority,
+      });
+    }
+  }, [reminders, unreadCount, loading]);
+
   const handleOpen = (isOpen: boolean) => {
     setOpen(isOpen);
     if (isOpen && reminders.length > 0) {
@@ -67,6 +85,7 @@ export function DoriNotificationIcon() {
 
   const handleDismiss = (e: React.MouseEvent, reminderId: string) => {
     e.stopPropagation();
+    trackProactiveOutcome('dori_notification', 'dismissed', { reminderId });
     dismissReminder(reminderId);
     toast.success('Reminder dismissed');
   };
@@ -85,6 +104,10 @@ export function DoriNotificationIcon() {
 
   const handleAction = (e: React.MouseEvent, reminder: ProactiveReminder) => {
     e.stopPropagation();
+    trackProactiveOutcome('dori_notification', 'accepted', {
+      reminderId: reminder.id,
+      reminderType: reminder.reminder_type,
+    });
     const route = getEntityRoute(reminder);
     if (route) {
       setOpen(false);

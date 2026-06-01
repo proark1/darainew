@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -6,10 +6,33 @@ import { ShieldCheck, Check, X, Inbox } from 'lucide-react';
 import { useAgentActions } from '@/hooks/useAgentActions';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { trackProactiveOutcome } from '@/lib/telemetry';
 
 export function AgentActionInbox() {
   const [open, setOpen] = useState(false);
   const { actions, count, approve, reject } = useAgentActions();
+
+  // Record a per-action impression once each pending action becomes visible
+  // while the inbox is open (so acceptance rate is per-action). Dedupe by id.
+  const shownRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!open) return;
+    for (const action of actions) {
+      if (shownRef.current.has(action.id)) continue;
+      shownRef.current.add(action.id);
+      trackProactiveOutcome('agent_action_inbox', 'shown', { actionId: action.id, actionType: action.actionType });
+    }
+  }, [open, actions]);
+
+  const handleApprove = (action: typeof actions[number]) => {
+    trackProactiveOutcome('agent_action_inbox', 'accepted', { actionId: action.id, actionType: action.actionType });
+    approve(action.id);
+  };
+
+  const handleReject = (action: typeof actions[number]) => {
+    trackProactiveOutcome('agent_action_inbox', 'dismissed', { actionId: action.id, actionType: action.actionType });
+    reject(action.id);
+  };
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -69,7 +92,7 @@ export function AgentActionInbox() {
                     size="sm"
                     variant="default"
                     className="flex-1 h-8 gap-1.5"
-                    onClick={() => approve(action.id)}
+                    onClick={() => handleApprove(action)}
                   >
                     <Check className="w-3.5 h-3.5" /> Approve
                   </Button>
@@ -77,7 +100,7 @@ export function AgentActionInbox() {
                     size="sm"
                     variant="ghost"
                     className="flex-1 h-8 gap-1.5"
-                    onClick={() => reject(action.id)}
+                    onClick={() => handleReject(action)}
                   >
                     <X className="w-3.5 h-3.5" /> Reject
                   </Button>

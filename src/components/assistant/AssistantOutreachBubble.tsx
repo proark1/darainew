@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useProactiveReminders } from '@/hooks/useProactiveReminders';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { useProactiveSettings } from '@/hooks/useProactiveSettings';
+import { trackProactiveOutcome } from '@/lib/telemetry';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 
@@ -26,6 +27,22 @@ export function AssistantOutreachBubble() {
   // Get unread reminders only. Memoized so the effects below can depend on the
   // array itself (not just its length) without re-running on every render.
   const unreadReminders = useMemo(() => reminders.filter(r => !r.read_at), [reminders]);
+
+  // Impression: record once per reminder that's actually displayed in the
+  // expanded panel (the panel renders reminders.slice(0, 5)). Dedupe by id.
+  const shownReminderIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!isExpanded) return;
+    for (const reminder of reminders.slice(0, 5)) {
+      if (shownReminderIds.current.has(reminder.id)) continue;
+      shownReminderIds.current.add(reminder.id);
+      trackProactiveOutcome('outreach_bubble', 'shown', {
+        reminderId: reminder.id,
+        reminderType: reminder.reminder_type,
+        priority: reminder.priority,
+      });
+    }
+  }, [isExpanded, reminders]);
 
   // Check if we're in quiet hours
   const isInQuietHours = useCallback((): boolean => {
@@ -99,6 +116,7 @@ export function AssistantOutreachBubble() {
 
   const handleDismiss = (e: React.MouseEvent, reminderId: string) => {
     e.stopPropagation();
+    trackProactiveOutcome('outreach_bubble', 'dismissed', { reminderId });
     dismissReminder(reminderId);
   };
 
@@ -181,6 +199,11 @@ export function AssistantOutreachBubble() {
                                 className="h-7 text-xs"
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  trackProactiveOutcome('outreach_bubble', 'accepted', {
+                                    reminderId: reminder.id,
+                                    reminderType: reminder.reminder_type,
+                                    actionType: reminder.action_type,
+                                  });
                                   // Navigate based on action type
                                   const metadata = reminder.metadata || {};
                                   if (reminder.action_type === 'task' && metadata.task_id) {
@@ -215,6 +238,11 @@ export function AssistantOutreachBubble() {
                                 className="h-7 text-xs"
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  trackProactiveOutcome('outreach_bubble', 'accepted', {
+                                    reminderId: reminder.id,
+                                    reminderType: reminder.reminder_type,
+                                    triggerEntityType: reminder.trigger_entity_type,
+                                  });
                                   if (reminder.trigger_entity_type === 'task') {
                                     window.location.href = `/?tab=tasks`;
                                   } else if (reminder.trigger_entity_type === 'contact') {

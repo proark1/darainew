@@ -104,9 +104,19 @@ export async function trackEvent(
 
 /** Categories/types used for the proactivity north-star metric. */
 export const PROACTIVE_CATEGORY = 'proactive';
-export type ProactiveOutcome = 'accepted' | 'dismissed' | 'muted';
+/**
+ * Outcomes for a proactive surface. `'shown'` is an impression (the surface was
+ * displayed to the user); the others are explicit responses. Recording `'shown'`
+ * lets us compute the acceptance RATE: accepted ÷ shown.
+ */
+export type ProactiveOutcome = 'shown' | 'accepted' | 'dismissed' | 'muted';
 
-/** Record how a user responded to a proactive surface (nudge, suggestion, …). */
+/**
+ * Record how a user responded to a proactive surface (nudge, suggestion, …),
+ * or that one was shown. The outcome is interpolated into the event type, so
+ * this emits `proactive_action_shown` for impressions alongside the existing
+ * `proactive_action_accepted` / `_dismissed` / `_muted` events.
+ */
 export function trackProactiveOutcome(
   surface: string,
   outcome: ProactiveOutcome,
