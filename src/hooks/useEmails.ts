@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 import { moduleBus } from '@/lib/moduleEventBus';
@@ -115,7 +116,7 @@ export function useEmails({ enabled = true, autoSync = true }: UseEmailsOptions 
     } catch (e) {
       console.error('Sync error:', e);
       moduleHealth.reportError('gmail-sync', e);
-      toast.error('Failed to sync emails');
+      toast.error(await describeEdgeError(e, 'Failed to sync emails'));
     } finally {
       setSyncing(false);
     }
@@ -278,7 +279,7 @@ export function useEmails({ enabled = true, autoSync = true }: UseEmailsOptions 
       return true;
     } catch (e) {
       console.error('Send reply error:', e);
-      toast.error('Failed to send reply');
+      toast.error(await describeEdgeError(e, 'Failed to send reply'));
       return false;
     }
   }, []);
@@ -294,7 +295,7 @@ export function useEmails({ enabled = true, autoSync = true }: UseEmailsOptions 
       return true;
     } catch (e) {
       console.error('Compose error:', e);
-      toast.error('Failed to send email');
+      toast.error(await describeEdgeError(e, 'Failed to send email'));
       return false;
     }
   }, []);

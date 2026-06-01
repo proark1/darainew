@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -117,7 +118,7 @@ export function TelegramHubPanel() {
         setError(`Telegram connector is currently unreachable. Your code is ready — open @${data.botUsername || botUsername} manually and send: /start ${data.code}`);
       }
     } catch (e) {
-      toast({ title: 'Could not generate code', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+      toast({ title: 'Could not generate code', description: await describeEdgeError(e, 'Could not generate link code'), variant: 'destructive' });
     } finally {
       setGenerating(false);
     }
@@ -132,7 +133,7 @@ export function TelegramHubPanel() {
       setGroupAddUrl(data.addToGroupUrl);
       if (data.botUsername) setBotUsername(data.botUsername);
     } catch (e) {
-      toast({ title: 'Could not generate group code', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+      toast({ title: 'Could not generate group code', description: await describeEdgeError(e, 'Could not generate group link code'), variant: 'destructive' });
     } finally {
       setGeneratingGroup(false);
     }
@@ -162,7 +163,7 @@ export function TelegramHubPanel() {
       if (error) throw error as Error;
       setDbStatus(data as DbStatusResult);
     } catch (e) {
-      toast({ title: 'DB check failed', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+      toast({ title: 'DB check failed', description: await describeEdgeError(e, 'DB check failed'), variant: 'destructive' });
     } finally {
       setDbChecking(false);
     }
@@ -192,7 +193,7 @@ export function TelegramHubPanel() {
       setDiagnostics(data as DiagnosticsResult);
       if (runPoll) await fetchLink();
     } catch (e) {
-      toast({ title: 'Diagnostics failed', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+      toast({ title: 'Diagnostics failed', description: await describeEdgeError(e, 'Diagnostics failed'), variant: 'destructive' });
     } finally {
       setDiagnosing(false);
     }

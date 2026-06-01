@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -92,7 +93,7 @@ export function useCalendarConnections() {
       console.error('Error starting OAuth:', error);
       toast({
         title: 'Connection failed',
-        description: error.message || 'Failed to start Google Calendar connection.',
+        description: await describeEdgeError(error, 'Failed to start Google Calendar connection.'),
         variant: 'destructive',
       });
     }
@@ -120,7 +121,7 @@ export function useCalendarConnections() {
       console.error('Outlook connect error:', error);
       toast({
         title: 'Connection failed',
-        description: error.message || 'Failed to start Outlook connection.',
+        description: await describeEdgeError(error, 'Failed to start Outlook connection.'),
         variant: 'destructive',
       });
     }
@@ -143,7 +144,7 @@ export function useCalendarConnections() {
       console.error('Apple CalDAV connect error:', error);
       toast({
         title: 'Apple connection failed',
-        description: error.message || 'Check your Apple ID and app-specific password.',
+        description: await describeEdgeError(error, 'Check your Apple ID and app-specific password.'),
         variant: 'destructive',
       });
       return { success: false };
@@ -179,7 +180,7 @@ export function useCalendarConnections() {
       console.error('Error syncing calendar:', error);
       toast({
         title: 'Sync failed',
-        description: error.message || 'Failed to sync calendar events.',
+        description: await describeEdgeError(error, 'Failed to sync calendar events.'),
         variant: 'destructive',
       });
     } finally {

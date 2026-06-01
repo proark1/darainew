@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { useAuth } from './useAuth';
 import { useSharedRealtime } from './useSharedRealtime';
 import { toast } from 'sonner';
@@ -126,7 +127,7 @@ export function useMeetingBots() {
       await refresh();
       return data;
     } catch (e) {
-      toast.error(`Failed: ${(e as Error).message}`);
+      toast.error(await describeEdgeError(e, 'Failed to schedule bot'));
       return null;
     }
   }, [refresh]);
@@ -141,7 +142,7 @@ export function useMeetingBots() {
       toast.info('Bot cancelled');
       await refresh();
     } catch (e) {
-      toast.error(`Failed: ${(e as Error).message}`);
+      toast.error(await describeEdgeError(e, 'Failed to cancel bot'));
     } finally {
       setBusyId(null);
     }
@@ -156,7 +157,7 @@ export function useMeetingBots() {
       if (error) throw error;
       await refresh();
     } catch (e) {
-      toast.error(`Failed: ${(e as Error).message}`);
+      toast.error(await describeEdgeError(e, 'Failed to refresh bot'));
     } finally {
       setBusyId(null);
     }

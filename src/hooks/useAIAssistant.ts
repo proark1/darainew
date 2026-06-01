@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { Task, CalendarEvent } from '@/types/flux';
 import { toast } from '@/hooks/use-toast';
 
@@ -72,7 +73,7 @@ export function useAIAssistant() {
       toast({
         variant: 'destructive',
         title: 'AI Error',
-        description: error instanceof Error ? error.message : 'Failed to break down task',
+        description: await describeEdgeError(error, 'Failed to break down task'),
       });
       return [];
     } finally {
@@ -131,7 +132,7 @@ export function useAIAssistant() {
       toast({
         variant: 'destructive',
         title: 'AI Error',
-        description: error instanceof Error ? error.message : 'Failed to suggest reschedule',
+        description: await describeEdgeError(error, 'Failed to suggest reschedule'),
       });
       return [];
     } finally {
@@ -180,7 +181,7 @@ export function useAIAssistant() {
       toast({
         variant: 'destructive',
         title: 'AI Error',
-        description: error instanceof Error ? error.message : 'Failed to plan your day',
+        description: await describeEdgeError(error, 'Failed to plan your day'),
       });
       return null;
     } finally {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 
@@ -74,7 +75,7 @@ export function useAgentActions() {
       return data;
     } catch (e) {
       console.error('approve action failed', e);
-      toast.error('Failed to approve');
+      toast.error(await describeEdgeError(e, 'Failed to approve'));
     }
   }, []);
 
@@ -88,7 +89,7 @@ export function useAgentActions() {
       setActions(prev => prev.filter(a => a.id !== actionId));
     } catch (e) {
       console.error('reject action failed', e);
-      toast.error('Failed to reject');
+      toast.error(await describeEdgeError(e, 'Failed to reject'));
     }
   }, []);
 

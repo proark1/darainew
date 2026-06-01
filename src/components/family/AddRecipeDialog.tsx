@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useMealPlanning } from '@/hooks/useMealPlanning';
 import { Plus, X, Sparkles, Loader2, ChefHat, Search, Lightbulb } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
@@ -123,7 +124,7 @@ export function AddRecipeDialog({ open, onOpenChange }: AddRecipeDialogProps) {
       console.error('AI explore error:', error);
       toast({
         title: "AI Error",
-        description: error instanceof Error ? error.message : "Failed to get suggestions",
+        description: await describeEdgeError(error, "Failed to get suggestions"),
         variant: "destructive"
       });
     } finally {
@@ -147,7 +148,7 @@ export function AddRecipeDialog({ open, onOpenChange }: AddRecipeDialogProps) {
       console.error('AI search error:', error);
       toast({
         title: "AI Error",
-        description: error instanceof Error ? error.message : "Failed to search recipes",
+        description: await describeEdgeError(error, "Failed to search recipes"),
         variant: "destructive"
       });
     } finally {
@@ -192,7 +193,7 @@ export function AddRecipeDialog({ open, onOpenChange }: AddRecipeDialogProps) {
       console.error('AI fill error:', error);
       toast({
         title: "AI Error",
-        description: error instanceof Error ? error.message : "Failed to fill recipe",
+        description: await describeEdgeError(error, "Failed to fill recipe"),
         variant: "destructive"
       });
     } finally {
@@ -239,7 +240,7 @@ export function AddRecipeDialog({ open, onOpenChange }: AddRecipeDialogProps) {
       console.error('AI fill error:', error);
       toast({
         title: "AI Error",
-        description: error instanceof Error ? error.message : "Failed to fill recipe",
+        description: await describeEdgeError(error, "Failed to fill recipe"),
         variant: "destructive"
       });
     } finally {

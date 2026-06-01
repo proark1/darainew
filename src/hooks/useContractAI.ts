@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { ContractCategory, CostFrequency } from './useContracts';
 import { useToast } from './use-toast';
 
@@ -44,7 +45,7 @@ export function useContractAI() {
         toast({
           variant: 'destructive',
           title: 'Scan failed',
-          description: error.message || 'Could not scan document'
+          description: await describeEdgeError(error, 'Could not scan document'),
         });
         return null;
       }
@@ -74,7 +75,7 @@ export function useContractAI() {
       toast({
         variant: 'destructive',
         title: 'Scan failed',
-        description: 'An unexpected error occurred'
+        description: await describeEdgeError(err, 'Could not scan document'),
       });
       return null;
     } finally {
@@ -104,7 +105,7 @@ export function useContractAI() {
         toast({
           variant: 'destructive',
           title: 'Generation failed',
-          description: error.message || 'Could not generate cancellation email'
+          description: await describeEdgeError(error, 'Could not generate cancellation email'),
         });
         return null;
       }
@@ -134,7 +135,7 @@ export function useContractAI() {
       toast({
         variant: 'destructive',
         title: 'Generation failed',
-        description: 'An unexpected error occurred'
+        description: await describeEdgeError(err, 'Could not generate cancellation email'),
       });
       return null;
     } finally {

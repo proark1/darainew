@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -50,7 +51,7 @@ export function TelegramConnectPanel() {
     setMemberBusy(true);
     try {
       const { data, error: e } = await supabase.functions.invoke('telegram-link', { body: { action: 'family_member_add', username: uname } });
-      if (e || data?.error) { toast({ title: 'Could not add member', description: data?.error || e?.message, variant: 'destructive' }); }
+      if (e || data?.error) { toast({ title: 'Could not add member', description: data?.error || await describeEdgeError(e, 'Could not add member'), variant: 'destructive' }); }
       else { setMembers(data.members || []); setNewUsername(''); }
     } finally { setMemberBusy(false); }
   };
@@ -102,7 +103,7 @@ export function TelegramConnectPanel() {
         setError(`Telegram connector is currently unreachable. Your code is ready — open @${data.botUsername ?? 'daraibot_bot'} manually and send: /start ${data.code}`);
       }
     } catch (e) {
-      toast({ title: 'Could not generate code', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+      toast({ title: 'Could not generate code', description: await describeEdgeError(e, 'Could not generate link code'), variant: 'destructive' });
       setCode(null);
       setDeepLink(null);
     } finally {
@@ -121,7 +122,7 @@ export function TelegramConnectPanel() {
       setGroupCode(data.code);
       setGroupAddUrl(data.addToGroupUrl ?? null);
     } catch (e) {
-      toast({ title: 'Could not generate group code', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+      toast({ title: 'Could not generate group code', description: await describeEdgeError(e, 'Could not generate group link code'), variant: 'destructive' });
       setGroupCode(null);
       setGroupAddUrl(null);
     } finally {
