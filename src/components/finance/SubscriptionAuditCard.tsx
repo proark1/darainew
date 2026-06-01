@@ -6,6 +6,7 @@ import { ShieldCheck, AlertTriangle, ChevronRight, Mail, Loader2 } from 'lucide-
 import type { SubscriptionAuditRow } from '@/hooks/useFinanceSummary';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { toast } from 'sonner';
 
 // Closes the loop on detect-recurring-payments: now we cross-reference
@@ -97,7 +98,7 @@ function AuditRow({ row }: { row: SubscriptionAuditRow }) {
       const n = (data as any)?.drafts_count ?? 0;
       toast.success(`Drafted ${n} version${n === 1 ? '' : 's'} · follow-up task added`);
     } catch (e) {
-      toast.error(`Failed: ${(e as Error).message}`);
+      toast.error(await describeEdgeError(e, 'Failed'));
     } finally {
       setBusy(false);
     }

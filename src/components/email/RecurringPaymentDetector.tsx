@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
+import { describeEdgeError } from '@/lib/edgeError';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Receipt, Plus, X, AlertCircle } from 'lucide-react';
@@ -52,7 +53,7 @@ export function RecurringPaymentDetector({
       const { data, error } = await supabase.functions.invoke('detect-recurring-payments', {});
 
       if (error) {
-        toast({ variant: 'destructive', title: 'Detection failed', description: error.message });
+        toast({ variant: 'destructive', title: 'Detection failed', description: await describeEdgeError(error, 'Detection failed') });
         return;
       }
 
