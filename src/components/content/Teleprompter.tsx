@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { Play, Pause, RotateCcw, X, Type } from 'lucide-react';
 
 // Full-screen scrolling teleprompter for recording a script from your phone.
@@ -13,6 +14,7 @@ export function Teleprompter({
   title: string;
   text: string;
 }) {
+  const { t } = useLanguage();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(45); // px per second
@@ -71,7 +73,7 @@ export function Teleprompter({
         style={{ paddingTop: '45vh', paddingBottom: '45vh' }}
       >
         <p className="whitespace-pre-wrap font-semibold max-w-3xl mx-auto" style={{ fontSize, lineHeight: 1.5 }}>
-          {text || 'Nothing to read.'}
+          {text || t('content.nothingToRead')}
         </p>
       </div>
 
@@ -81,17 +83,17 @@ export function Teleprompter({
             variant="secondary"
             size="icon"
             onClick={() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; setPlaying(false); }}
-            title="Restart"
+            title={t('content.restart')}
           >
             <RotateCcw className="h-4 w-4" />
           </Button>
           <Button size="lg" className="gap-2 w-32" onClick={() => setPlaying((p) => !p)}>
             {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
-            {playing ? 'Pause' : 'Play'}
+            {playing ? t('content.pause') : t('content.play')}
           </Button>
         </div>
         <div className="flex items-center gap-3 max-w-md mx-auto">
-          <span className="text-xs text-white/60 w-12 shrink-0">Speed</span>
+          <span className="text-xs text-white/60 w-12 shrink-0">{t('content.speed')}</span>
           <Slider value={[speed]} min={15} max={120} step={5} onValueChange={([v]) => setSpeed(v)} />
         </div>
         <div className="flex items-center gap-3 max-w-md mx-auto">

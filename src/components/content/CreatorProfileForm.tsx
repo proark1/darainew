@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { Plus, X, Save, Wand2, Clock, Languages } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import {
-  ALL_PLATFORMS, DEFAULT_CREATOR_PROFILE, IDEA_SOURCE_META, FORMAT_META, computeIdeaSplit, platformLabel,
+  ALL_PLATFORMS, DEFAULT_CREATOR_PROFILE, IDEA_SOURCE_META, computeIdeaSplit, platformLabel,
   type CreatorProfile, type Platform, type IdeaSource, type DefaultFormat,
 } from '@/lib/content';
 import type { CreatorProfileDraft } from '@/hooks/useCreatorProfile';
@@ -28,26 +28,27 @@ function TagInput({
 }: {
   label: string; placeholder: string; values: string[]; onChange: (next: string[]) => void; suggestions?: string[];
 }) {
+  const { t } = useLanguage();
   const [input, setInput] = useState('');
   const add = (raw: string) => {
-    const t = raw.trim();
-    if (!t || values.includes(t)) { setInput(''); return; }
-    onChange([...values, t]);
+    const v = raw.trim();
+    if (!v || values.includes(v)) { setInput(''); return; }
+    onChange([...values, v]);
     setInput('');
   };
   return (
     <div className="space-y-2">
       <Label className="text-sm">{label}</Label>
       <div className="flex flex-wrap gap-2">
-        {values.map((t) => (
-          <Badge key={t} variant="secondary" className="gap-1 pr-1">
-            {t}
-            <Button variant="ghost" size="icon" className="h-4 w-4 hover:bg-transparent" onClick={() => onChange(values.filter((x) => x !== t))}>
+        {values.map((tag) => (
+          <Badge key={tag} variant="secondary" className="gap-1 pr-1">
+            {tag}
+            <Button variant="ghost" size="icon" className="h-4 w-4 hover:bg-transparent" onClick={() => onChange(values.filter((x) => x !== tag))}>
               <X className="h-3 w-3" />
             </Button>
           </Badge>
         ))}
-        {values.length === 0 && <span className="text-xs text-muted-foreground">None yet</span>}
+        {values.length === 0 && <span className="text-xs text-muted-foreground">{t('content.none')}</span>}
       </div>
       <div className="flex gap-2">
         <Input
@@ -135,7 +136,7 @@ export function CreatorProfileForm({ profile, saving, onSave, onPrefill }: Props
   };
 
   const split = computeIdeaSplit(form.ideas_per_day, form.trending_ratio);
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const languageLabel = language === 'de' ? 'Deutsch' : 'English';
 
   return (
@@ -144,54 +145,52 @@ export function CreatorProfileForm({ profile, saving, onSave, onPrefill }: Props
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <CardTitle>Your creator profile</CardTitle>
-              <CardDescription>
-                This is the brain behind your daily ideas. The more specific, the better the ideas.
-              </CardDescription>
+              <CardTitle>{t('content.profile.title')}</CardTitle>
+              <CardDescription>{t('content.profile.desc')}</CardDescription>
             </div>
             <Button variant="outline" size="sm" className="gap-1 shrink-0" onClick={handlePrefill}>
-              <Wand2 className="h-4 w-4" /> Prefill from my profile
+              <Wand2 className="h-4 w-4" /> {t('content.prefill')}
             </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="space-y-2">
-            <Label className="text-sm">Your personality &amp; story</Label>
+            <Label className="text-sm">{t('content.persona')}</Label>
             <Textarea
               value={form.persona}
               onChange={(e) => set('persona', e.target.value)}
-              placeholder="Who are you, what do you do, what's your angle and tone? e.g. 'I'm a bootstrapped founder who shares blunt, tactical lessons from building a SaaS to $20k MRR.'"
+              placeholder={t('content.personaPlaceholder')}
               className="min-h-[100px]"
             />
           </div>
 
-          <TagInput label="Voice / tone" placeholder="Add a tone word" values={form.tone} onChange={(v) => set('tone', v)} suggestions={TONE_SUGGESTIONS} />
-          <TagInput label="Topics I want to talk about" placeholder="e.g. startups, bootstrapping, marketing" values={form.topics} onChange={(v) => set('topics', v)} />
+          <TagInput label={t('content.tone')} placeholder={t('content.toneAdd')} values={form.tone} onChange={(v) => set('tone', v)} suggestions={TONE_SUGGESTIONS} />
+          <TagInput label={t('content.topics')} placeholder={t('content.topicsPlaceholder')} values={form.topics} onChange={(v) => set('topics', v)} />
 
           <div className="space-y-2">
-            <Label className="text-sm">Target audience</Label>
-            <Input value={form.audience} onChange={(e) => set('audience', e.target.value)} placeholder="e.g. early-stage founders and indie hackers" />
+            <Label className="text-sm">{t('content.audience')}</Label>
+            <Input value={form.audience} onChange={(e) => set('audience', e.target.value)} placeholder={t('content.audiencePlaceholder')} />
           </div>
 
           <div className="space-y-2">
-            <Label className="text-sm">What your business does</Label>
-            <Textarea value={form.business_context} onChange={(e) => set('business_context', e.target.value)} placeholder="What you sell / build, so ideas can tie back to it." className="min-h-[70px]" />
+            <Label className="text-sm">{t('content.business')}</Label>
+            <Textarea value={form.business_context} onChange={(e) => set('business_context', e.target.value)} placeholder={t('content.businessPlaceholder')} className="min-h-[70px]" />
           </div>
 
           <div className="space-y-2">
-            <Label className="text-sm">Default call-to-action</Label>
-            <Input value={form.default_cta} onChange={(e) => set('default_cta', e.target.value)} placeholder="e.g. Follow for daily founder lessons" />
+            <Label className="text-sm">{t('content.cta')}</Label>
+            <Input value={form.default_cta} onChange={(e) => set('default_cta', e.target.value)} placeholder={t('content.ctaPlaceholder')} />
           </div>
 
           <div className="rounded-md border bg-muted/30 p-3">
-            <Label className="text-sm flex items-center gap-1.5"><Languages className="h-3.5 w-3.5" /> Content language</Label>
+            <Label className="text-sm flex items-center gap-1.5"><Languages className="h-3.5 w-3.5" /> {t('content.contentLanguage')}</Label>
             <p className="text-xs text-muted-foreground mt-1">
-              Ideas and scripts are written in <span className="font-medium text-foreground">{languageLabel}</span> — this follows your app language (change it in Settings → Language).
+              {t('content.langNotePre')} <span className="font-medium text-foreground">{languageLabel}</span> {t('content.langNotePost')}
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label className="text-sm">Platforms</Label>
+            <Label className="text-sm">{t('content.platforms')}</Label>
             <div className="flex flex-wrap gap-1.5">
               {ALL_PLATFORMS.map((p) => (
                 <button
@@ -213,20 +212,20 @@ export function CreatorProfileForm({ profile, saving, onSave, onPrefill }: Props
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Daily ideas</CardTitle>
-          <CardDescription>How many ideas, the trending/evergreen mix, and when they arrive.</CardDescription>
+          <CardTitle className="text-base">{t('content.dailyIdeas')}</CardTitle>
+          <CardDescription>{t('content.dailyIdeasDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-sm">Ideas per day</Label>
+              <Label className="text-sm">{t('content.ideasPerDay')}</Label>
               <span className="text-sm font-medium">{form.ideas_per_day}</span>
             </div>
             <Slider value={[form.ideas_per_day]} min={1} max={20} step={1} onValueChange={([v]) => set('ideas_per_day', v)} />
           </div>
 
           <div className="space-y-2">
-            <Label className="text-sm">Where ideas come from</Label>
+            <Label className="text-sm">{t('content.whereIdeas')}</Label>
             <div className="grid grid-cols-3 gap-1.5">
               {(['mixed', 'trending', 'knowledge'] as IdeaSource[]).map((s) => (
                 <button
@@ -238,28 +237,28 @@ export function CreatorProfileForm({ profile, saving, onSave, onPrefill }: Props
                     form.idea_source === s ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted',
                   )}
                 >
-                  {IDEA_SOURCE_META[s].emoji} {IDEA_SOURCE_META[s].label}
+                  {IDEA_SOURCE_META[s].emoji} {t(`content.source.${s}`)}
                 </button>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">{IDEA_SOURCE_META[form.idea_source].description}</p>
+            <p className="text-xs text-muted-foreground">{t(`content.source.${form.idea_source}Desc`)}</p>
           </div>
 
           {form.idea_source === 'mixed' && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-sm">Trending vs evergreen</Label>
+                <Label className="text-sm">{t('content.trendingVsEvergreen')}</Label>
                 <span className="text-sm font-medium">🔥 {split.current} · ♻️ {split.evergreen}</span>
               </div>
               <Slider value={[Math.round(form.trending_ratio * 100)]} min={0} max={100} step={10} onValueChange={([v]) => set('trending_ratio', v / 100)} />
               <p className="text-xs text-muted-foreground">
-                {Math.round(form.trending_ratio * 100)}% tied to what's happening now, the rest evergreen.
+                {Math.round(form.trending_ratio * 100)}% {t('content.trendingNoteText')}
               </p>
             </div>
           )}
 
           <div className="space-y-2">
-            <Label className="text-sm">Default scripts</Label>
+            <Label className="text-sm">{t('content.defaultScripts')}</Label>
             <div className="grid grid-cols-3 gap-1.5">
               {(['short', 'long', 'both'] as DefaultFormat[]).map((f) => (
                 <button
@@ -271,7 +270,7 @@ export function CreatorProfileForm({ profile, saving, onSave, onPrefill }: Props
                     form.default_format === f ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted',
                   )}
                 >
-                  {FORMAT_META[f].label}
+                  {t(`content.format.${f}`)}
                 </button>
               ))}
             </div>
@@ -280,15 +279,15 @@ export function CreatorProfileForm({ profile, saving, onSave, onPrefill }: Props
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-sm">Short length</Label>
+                <Label className="text-sm">{t('content.shortLength')}</Label>
                 <span className="text-sm font-medium">{form.short_seconds}s</span>
               </div>
               <Slider value={[form.short_seconds]} min={15} max={90} step={5} onValueChange={([v]) => set('short_seconds', v)} />
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-sm">Long length</Label>
-                <span className="text-sm font-medium">{form.long_minutes} min</span>
+                <Label className="text-sm">{t('content.longLength')}</Label>
+                <span className="text-sm font-medium">{form.long_minutes} {t('content.min')}</span>
               </div>
               <Slider value={[form.long_minutes]} min={3} max={20} step={1} onValueChange={([v]) => set('long_minutes', v)} />
             </div>
@@ -296,8 +295,8 @@ export function CreatorProfileForm({ profile, saving, onSave, onPrefill }: Props
 
           <div className="flex items-center justify-between rounded-md border p-3">
             <div>
-              <Label className="text-sm">Auto-generate every morning</Label>
-              <p className="text-xs text-muted-foreground">We'll create your ideas and notify you.</p>
+              <Label className="text-sm">{t('content.autoGenerate')}</Label>
+              <p className="text-xs text-muted-foreground">{t('content.autoGenerateDesc')}</p>
             </div>
             <Switch checked={form.enabled} onCheckedChange={(v) => set('enabled', v)} />
           </div>
@@ -305,11 +304,11 @@ export function CreatorProfileForm({ profile, saving, onSave, onPrefill }: Props
           {form.enabled && (
             <>
               <div className="space-y-2">
-                <Label className="text-sm flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Delivery time (your local time)</Label>
+                <Label className="text-sm flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> {t('content.deliveryTime')}</Label>
                 <Input type="time" step={900} value={toTimeInput(form.deliver_at)} onChange={(e) => set('deliver_at', e.target.value)} className="w-36" />
               </div>
               <div className="space-y-2">
-                <Label className="text-sm">Notify me via</Label>
+                <Label className="text-sm">{t('content.notifyVia')}</Label>
                 <div className="flex flex-wrap gap-1.5">
                   {CHANNELS.map(({ key, label }) => (
                     <button
@@ -326,7 +325,7 @@ export function CreatorProfileForm({ profile, saving, onSave, onPrefill }: Props
                   ))}
                 </div>
                 {form.channels.includes('telegram') && (
-                  <p className="text-xs text-muted-foreground">Telegram delivery requires your account to be linked in Settings → Telegram.</p>
+                  <p className="text-xs text-muted-foreground">{t('content.telegramNote')}</p>
                 )}
               </div>
             </>
@@ -337,7 +336,7 @@ export function CreatorProfileForm({ profile, saving, onSave, onPrefill }: Props
       <div className="sticky bottom-0 bg-gradient-to-t from-background via-background to-transparent pt-3 pb-1">
         <Button className="w-full gap-2" onClick={() => onSave(form)} disabled={saving}>
           <Save className="h-4 w-4" />
-          {saving ? 'Saving…' : 'Save profile'}
+          {saving ? t('content.saving') : t('content.saveProfile')}
         </Button>
       </div>
     </div>

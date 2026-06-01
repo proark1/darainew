@@ -12,27 +12,29 @@ import { Clapperboard, Copy, Check, RefreshCw, Sparkles, MonitorPlay } from 'luc
 import { useContentScripts } from '@/hooks/useContentScripts';
 import { Teleprompter } from './Teleprompter';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/contexts/LanguageContext';
 import {
   platformLabel, formatDuration, FORMAT_META,
   type ContentIdea, type ContentScript, type DefaultFormat, type ScriptVariation,
 } from '@/lib/content';
 
-function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
+function CopyButton({ text, label }: { text: string; label?: string }) {
+  const { t } = useLanguage();
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      toast.success('Copied');
+      toast.success(t('content.copied'));
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      toast.error('Could not copy');
+      toast.error(t('content.couldNotCopy'));
     }
   };
   return (
     <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={copy}>
       {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-      {label}
+      {label ?? t('content.copy')}
     </Button>
   );
 }
@@ -50,22 +52,23 @@ function Section({ title, children, action }: { title: string; children: React.R
 }
 
 function ShortScript({ script, onEdit, onRecord }: { script: ContentScript; onEdit: (text: string) => void; onRecord: () => void }) {
+  const { t } = useLanguage();
   const [text, setText] = useState(script.script);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge>Short-form</Badge>
+        <Badge>{t('content.shortForm')}</Badge>
         <Badge variant="outline">~{formatDuration(script.duration_seconds)}</Badge>
         <Button size="sm" variant="outline" className="h-7 gap-1 ml-auto" onClick={onRecord}>
-          <MonitorPlay className="h-3.5 w-3.5" /> Record
+          <MonitorPlay className="h-3.5 w-3.5" /> {t('content.record')}
         </Button>
       </div>
       {script.hook && (
-        <Section title="Hook (0–2s)" action={<CopyButton text={script.hook} />}>
+        <Section title={t('content.sec.hook')} action={<CopyButton text={script.hook} />}>
           <p className="text-sm italic rounded-md bg-muted/50 p-2">“{script.hook}”</p>
         </Section>
       )}
-      <Section title="Spoken script" action={<CopyButton text={text} />}>
+      <Section title={t('content.sec.script')} action={<CopyButton text={text} />}>
         <Textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -74,12 +77,12 @@ function ShortScript({ script, onEdit, onRecord }: { script: ContentScript; onEd
         />
       </Section>
       {script.shot_list && (
-        <Section title="Shots / B-roll" action={<CopyButton text={script.shot_list} />}>
+        <Section title={t('content.sec.shots')} action={<CopyButton text={script.shot_list} />}>
           <p className="text-sm whitespace-pre-wrap rounded-md bg-muted/50 p-2">{script.shot_list}</p>
         </Section>
       )}
       {script.platform_variants?.length > 0 && (
-        <Section title="Per-platform captions">
+        <Section title={t('content.sec.captions')}>
           <div className="space-y-2">
             {script.platform_variants.map((v, i) => (
               <div key={i} className="rounded-md border p-2.5 space-y-1.5">
@@ -87,7 +90,7 @@ function ShortScript({ script, onEdit, onRecord }: { script: ContentScript; onEd
                   <Badge variant="secondary">{platformLabel(v.platform)}</Badge>
                   <CopyButton
                     text={`${v.caption}\n\n${(v.hashtags || []).map((h) => `#${h}`).join(' ')}`}
-                    label="Copy caption"
+                    label={t('content.copyCaption')}
                   />
                 </div>
                 {v.hook && <p className="text-sm italic">“{v.hook}”</p>}
@@ -102,44 +105,45 @@ function ShortScript({ script, onEdit, onRecord }: { script: ContentScript; onEd
         </Section>
       )}
       {script.cta && (
-        <Section title="Call to action"><p className="text-sm">{script.cta}</p></Section>
+        <Section title={t('content.sec.cta')}><p className="text-sm">{script.cta}</p></Section>
       )}
     </div>
   );
 }
 
 function LongScript({ script, onEdit, onRecord }: { script: ContentScript; onEdit: (text: string) => void; onRecord: () => void }) {
+  const { t } = useLanguage();
   const [text, setText] = useState(script.script);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge>Long-form · YouTube</Badge>
+        <Badge>{t('content.longForm')}</Badge>
         <Badge variant="outline">~{formatDuration(script.duration_seconds)}</Badge>
         <Button size="sm" variant="outline" className="h-7 gap-1 ml-auto" onClick={onRecord}>
-          <MonitorPlay className="h-3.5 w-3.5" /> Record
+          <MonitorPlay className="h-3.5 w-3.5" /> {t('content.record')}
         </Button>
       </div>
       {script.title_options?.length > 0 && (
-        <Section title="Title options">
+        <Section title={t('content.sec.titles')}>
           <ul className="space-y-1">
-            {script.title_options.map((t, i) => (
+            {script.title_options.map((opt, i) => (
               <li key={i} className="flex items-center justify-between gap-2 text-sm rounded-md bg-muted/50 px-2 py-1">
-                <span>{t}</span>
-                <CopyButton text={t} label="" />
+                <span>{opt}</span>
+                <CopyButton text={opt} label="" />
               </li>
             ))}
           </ul>
         </Section>
       )}
       {script.thumbnail_concept && (
-        <Section title="Thumbnail concept"><p className="text-sm">{script.thumbnail_concept}</p></Section>
+        <Section title={t('content.sec.thumbnail')}><p className="text-sm">{script.thumbnail_concept}</p></Section>
       )}
       {script.hook && (
-        <Section title="Hook (0–15s)" action={<CopyButton text={script.hook} />}>
+        <Section title={t('content.sec.hookLong')} action={<CopyButton text={script.hook} />}>
           <p className="text-sm italic rounded-md bg-muted/50 p-2">“{script.hook}”</p>
         </Section>
       )}
-      <Section title="Full script" action={<CopyButton text={text} />}>
+      <Section title={t('content.sec.fullScript')} action={<CopyButton text={text} />}>
         <Textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -148,14 +152,14 @@ function LongScript({ script, onEdit, onRecord }: { script: ContentScript; onEdi
         />
       </Section>
       {script.description && (
-        <Section title="Description (SEO)" action={<CopyButton text={script.description} />}>
+        <Section title={t('content.sec.description')} action={<CopyButton text={script.description} />}>
           <p className="text-sm whitespace-pre-wrap rounded-md bg-muted/50 p-2">{script.description}</p>
         </Section>
       )}
       {script.hashtags?.length > 0 && (
-        <Section title="Tags"><p className="text-xs text-primary">{script.hashtags.map((h) => `#${h}`).join(' ')}</p></Section>
+        <Section title={t('content.sec.tags')}><p className="text-xs text-primary">{script.hashtags.map((h) => `#${h}`).join(' ')}</p></Section>
       )}
-      {script.cta && <Section title="Call to action"><p className="text-sm">{script.cta}</p></Section>}
+      {script.cta && <Section title={t('content.sec.cta')}><p className="text-sm">{script.cta}</p></Section>}
     </div>
   );
 }
@@ -170,6 +174,7 @@ interface Props {
 const FORMAT_OPTIONS: DefaultFormat[] = ['short', 'long', 'both'];
 
 export function ContentScriptDialog({ idea, open, onOpenChange, defaultFormat = 'both' }: Props) {
+  const { t } = useLanguage();
   const { scripts, loading, generating, generate, updateScript } = useContentScripts(idea?.id ?? null);
   const [fmt, setFmt] = useState<DefaultFormat>(defaultFormat);
   const [tele, setTele] = useState<{ title: string; text: string } | null>(null);
@@ -195,7 +200,7 @@ export function ContentScriptDialog({ idea, open, onOpenChange, defaultFormat = 
             fmt === f ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted',
           )}
         >
-          {FORMAT_META[f].label}
+          {t(`content.format.${f}`)}
         </button>
       ))}
     </div>
@@ -207,11 +212,9 @@ export function ContentScriptDialog({ idea, open, onOpenChange, defaultFormat = 
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 pr-6">
             <Clapperboard className="h-5 w-5 text-primary shrink-0" />
-            <span className="leading-snug">{idea?.headline ?? 'Scripts'}</span>
+            <span className="leading-snug">{idea?.headline ?? t('content.scripts')}</span>
           </DialogTitle>
-          <DialogDescription>
-            Short-form (TikTok / Reels / Shorts) and long-form (YouTube) scripts in your voice.
-          </DialogDescription>
+          <DialogDescription>{t('content.scriptsDesc')}</DialogDescription>
         </DialogHeader>
 
         <ScrollArea className="flex-1 -mx-2 px-2">
@@ -223,13 +226,11 @@ export function ContentScriptDialog({ idea, open, onOpenChange, defaultFormat = 
           ) : !hasScripts ? (
             <div className="py-10 text-center space-y-4">
               <Sparkles className="h-8 w-8 mx-auto text-muted-foreground" />
-              <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                Generate scripts for this idea, written in your voice and tuned to each platform.
-              </p>
+              <p className="text-sm text-muted-foreground max-w-sm mx-auto">{t('content.scriptsEmpty')}</p>
               {formatPicker}
               <Button onClick={() => run()} disabled={generating} className="gap-2">
                 {generating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {generating ? 'Writing…' : 'Generate scripts'}
+                {generating ? t('content.writing') : t('content.generateScripts')}
               </Button>
             </div>
           ) : (
@@ -258,12 +259,12 @@ export function ContentScriptDialog({ idea, open, onOpenChange, defaultFormat = 
             {formatPicker}
             <Button variant="outline" className="w-full gap-2" onClick={() => run()} disabled={generating}>
               <RefreshCw className={cn('h-4 w-4', generating && 'animate-spin')} />
-              {generating ? 'Writing…' : 'Regenerate'}
+              {generating ? t('content.writing') : t('content.regenerate')}
             </Button>
             <div className="flex gap-2">
-              <Button variant="ghost" size="sm" className="flex-1" onClick={() => run('shorter')} disabled={generating}>Shorter</Button>
-              <Button variant="ghost" size="sm" className="flex-1" onClick={() => run('longer')} disabled={generating}>Longer</Button>
-              <Button variant="ghost" size="sm" className="flex-1" onClick={() => run('punchier')} disabled={generating}>Punchier</Button>
+              <Button variant="ghost" size="sm" className="flex-1" onClick={() => run('shorter')} disabled={generating}>{t('content.shorter')}</Button>
+              <Button variant="ghost" size="sm" className="flex-1" onClick={() => run('longer')} disabled={generating}>{t('content.longer')}</Button>
+              <Button variant="ghost" size="sm" className="flex-1" onClick={() => run('punchier')} disabled={generating}>{t('content.punchier')}</Button>
             </div>
           </div>
         )}

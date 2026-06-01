@@ -11,7 +11,7 @@ const WINDOW_DAYS = 30;
 
 export function useContentIdeas() {
   const { user } = useAuth();
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const [ideas, setIdeas] = useState<ContentIdea[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -64,16 +64,16 @@ export function useContentIdeas() {
       if ((data as any)?.error) throw new Error((data as any).error);
       await fetchIdeas();
       const count = (data as any)?.count ?? 0;
-      toast.success(`Generated ${count} fresh ${count === 1 ? 'idea' : 'ideas'}`);
+      toast.success(`${count} ${t('content.toast.generatedSuffix')}`);
       return true;
     } catch (err) {
       console.error('Failed to generate ideas:', err);
-      toast.error(await describeFunctionError(err, 'Failed to generate ideas'));
+      toast.error(await describeFunctionError(err, t('content.toast.generateFailed')));
       return false;
     } finally {
       setGenerating(false);
     }
-  }, [fetchIdeas, language]);
+  }, [fetchIdeas, language, t]);
 
   const setStatus = useCallback(async (id: string, status: IdeaStatus) => {
     setIdeas((prev) => prev.map((i) => (i.id === id ? { ...i, status } : i)));
@@ -85,10 +85,10 @@ export function useContentIdeas() {
       if (error) throw error;
     } catch (err) {
       console.error('Failed to update idea:', err);
-      toast.error('Failed to update idea');
+      toast.error(t('content.toast.updateFailed'));
       fetchIdeas();
     }
-  }, [fetchIdeas]);
+  }, [fetchIdeas, t]);
 
   // Drop a real calendar event so the idea shows up in the main Calendar (and
   // syncs to Google/Apple like any other event), then mark the idea scheduled.
@@ -131,14 +131,14 @@ export function useContentIdeas() {
       if (upErr) throw upErr;
 
       await fetchIdeas();
-      toast.success('Added to your calendar');
+      toast.success(t('content.toast.addedCalendar'));
       return true;
     } catch (err) {
       console.error('Failed to schedule idea:', err);
-      toast.error('Failed to add to calendar');
+      toast.error(t('content.toast.addCalendarFailed'));
       return false;
     }
-  }, [user?.id, fetchIdeas]);
+  }, [user?.id, fetchIdeas, t]);
 
   const unschedule = useCallback(async (idea: ContentIdea) => {
     try {
@@ -156,14 +156,14 @@ export function useContentIdeas() {
         .eq('id', idea.id);
       if (error) throw error;
       await fetchIdeas();
-      toast.success('Removed from calendar');
+      toast.success(t('content.toast.removedCalendar'));
       return true;
     } catch (err) {
       console.error('Failed to unschedule idea:', err);
-      toast.error('Failed to update calendar');
+      toast.error(t('content.toast.addCalendarFailed'));
       return false;
     }
-  }, [fetchIdeas]);
+  }, [fetchIdeas, t]);
 
   return {
     ideas,
