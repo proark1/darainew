@@ -24,6 +24,13 @@ export default defineConfig(({ mode }) => ({
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     css: false,
+    // Placeholder Supabase config so modules that eagerly construct the
+    // client at import time (e.g. lib/telemetry.ts) don't throw
+    // "supabaseUrl is required" under vitest. Mirrors the CI build env.
+    env: {
+      VITE_SUPABASE_URL: "https://placeholder.supabase.co",
+      VITE_SUPABASE_PUBLISHABLE_KEY: "placeholder-anon-key",
+    },
   },
   server: {
     host: "::",

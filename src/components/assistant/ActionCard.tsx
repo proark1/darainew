@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CheckSquare, Calendar, FileText, User, ShoppingCart, Briefcase, Target, Mail, Bell, AlertTriangle, Undo2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { trackProactiveOutcome } from '@/lib/telemetry';
 
 export interface ActionCardData {
   type: 'task' | 'event' | 'note' | 'contact' | 'contract' | 'project' | 'habit' | 'email' | 'reminder' | 'shopping';
@@ -31,10 +32,17 @@ export function ActionCard({ data }: { data: ActionCardData }) {
   const failed = data.status === 'failed';
   const [undone, setUndone] = useState(false);
 
+  // Impression: an action result was surfaced to the user. Fire once on mount.
+  useEffect(() => {
+    trackProactiveOutcome('dori_action_card', 'shown', { actionType: data.type, status: data.status ?? 'success' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleUndo = () => {
     if (!data.undo) return;
     window.dispatchEvent(new CustomEvent('dori:undo-action', { detail: data.undo }));
     setUndone(true);
+    trackProactiveOutcome('dori_action_card', 'dismissed', { actionType: data.type, undoType: data.undo.type });
   };
 
   return (

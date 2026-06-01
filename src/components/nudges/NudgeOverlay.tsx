@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { X, Clock, Coffee, Droplets, AlertTriangle, Brain, Play, HelpCircle, BellOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Nudge } from '@/hooks/useSmartNudges';
-import type { ProactiveOutcome } from '@/lib/telemetry';
+import { trackProactiveOutcome, type ProactiveOutcome } from '@/lib/telemetry';
 
 interface NudgeOverlayProps {
   nudge: Nudge | null;
@@ -38,11 +38,21 @@ export function NudgeOverlay({ nudge, onDismiss, onMute, onFeedback }: NudgeOver
   const [isExiting, setIsExiting] = useState(false);
   const [showWhy, setShowWhy] = useState(false);
 
+  // Impression: record once per nudge id when it's actually shown. useSmartNudges
+  // already records accepted/dismissed/muted (surface 'smart_nudge') but never the
+  // impression — this fills that gap so acceptance rate = accepted ÷ shown. Match
+  // the same surface; dedupe by id to avoid the show/exit effect re-firing.
+  const shownNudgeIds = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     if (nudge) {
       setIsVisible(true);
       setIsExiting(false);
       setShowWhy(false);
+      if (!shownNudgeIds.current.has(nudge.id)) {
+        shownNudgeIds.current.add(nudge.id);
+        trackProactiveOutcome('smart_nudge', 'shown', { nudgeType: nudge.type, nudgeId: nudge.id });
+      }
     } else {
       setIsExiting(true);
       const timer = setTimeout(() => {

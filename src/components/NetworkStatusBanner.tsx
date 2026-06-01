@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
+import * as offlineQueue from "@/lib/offlineQueue";
 
 async function resetWebCaches() {
   // Unregister service workers
@@ -22,19 +23,68 @@ export function NetworkStatusBanner() {
   const { toast } = useToast();
   const [resetting, setResetting] = useState(false);
 
+  // Live count of writes waiting in the offline outbox.
+  const [pending, setPending] = useState(0);
+  useEffect(() => {
+    // subscribe() pushes the current count immediately, then on every change.
+    return offlineQueue.subscribe(setPending);
+  }, []);
+
+  // Briefly show a "Syncing…" state right after we come back online while the
+  // outbox still has entries to drain. Cleared once the queue empties.
+  const [syncing, setSyncing] = useState(false);
+  const wasOnline = useRef(online);
+  useEffect(() => {
+    if (online && !wasOnline.current && pending > 0) {
+      setSyncing(true);
+    }
+    if (!online) {
+      setSyncing(false);
+    }
+    wasOnline.current = online;
+  }, [online, pending]);
+  useEffect(() => {
+    if (pending === 0) setSyncing(false);
+  }, [pending]);
+
   const hint = useMemo(() => {
     if (online) return null;
     if (effectiveType) return `Connection looks offline (${effectiveType}).`;
     return "Connection looks offline.";
   }, [online, effectiveType]);
 
-  if (online) return null;
+  const plural = pending === 1 ? "change" : "changes";
+
+  // While online, only surface the transient sync indicator (if any). The
+  // existing behaviour of hiding the banner entirely when online is preserved.
+  if (online) {
+    if (syncing && pending > 0) {
+      return (
+        <aside className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-2">
+            <p className="text-sm text-foreground">
+              <span className="font-medium">Syncing</span> {pending} {plural}…
+            </p>
+          </div>
+        </aside>
+      );
+    }
+    return null;
+  }
 
   return (
     <aside className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-2">
         <p className="text-sm text-foreground">
           <span className="font-medium">Offline:</span> data can’t load right now. {hint}
+          {pending > 0 && (
+            <>
+              {" "}
+              <span className="font-medium">
+                {pending} {plural} will sync when you’re back online.
+              </span>
+            </>
+          )}
         </p>
         <div className="flex items-center gap-2">
           <Button

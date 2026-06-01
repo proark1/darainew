@@ -1,6 +1,8 @@
+import { useEffect, useRef } from 'react';
 import { useNextUp } from '@/hooks/useNextUp';
 import { Calendar, CheckSquare, Clock, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { trackProactiveOutcome } from '@/lib/telemetry';
 
 function formatCountdown(minutes: number): string {
   if (minutes < 1) return 'now';
@@ -12,6 +14,23 @@ function formatCountdown(minutes: number): string {
 
 export function NextUpStrip() {
   const { items, loading } = useNextUp(2);
+
+  // Impression: record once per item that the strip surfaces. Dedupe by key so
+  // the 30s refresh doesn't re-fire for items still on screen.
+  const shownKeys = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const item of items) {
+      const key = `${item.type}-${item.id}`;
+      if (shownKeys.current.has(key)) continue;
+      shownKeys.current.add(key);
+      trackProactiveOutcome('next_up_strip', 'shown', { itemId: item.id, itemType: item.type });
+    }
+  }, [items]);
+
+  const handleSelect = (item: (typeof items)[number]) => {
+    trackProactiveOutcome('next_up_strip', 'accepted', { itemId: item.id, itemType: item.type });
+    window.location.href = item.type === 'event' ? '/?tab=calendar' : '/?tab=tasks';
+  };
 
   if (loading || items.length === 0) return null;
 
@@ -26,10 +45,12 @@ export function NextUpStrip() {
           const Icon = item.type === 'event' ? Calendar : CheckSquare;
           const isImminent = item.minutesUntil <= 15;
           return (
-            <div
+            <button
+              type="button"
               key={`${item.type}-${item.id}`}
+              onClick={() => handleSelect(item)}
               className={cn(
-                'flex items-center gap-2 text-xs rounded-md px-2 py-1.5 transition-colors',
+                'w-full text-left flex items-center gap-2 text-xs rounded-md px-2 py-1.5 transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 isImminent ? 'bg-primary/10 text-foreground' : 'bg-background/60 text-foreground/90'
               )}
             >
@@ -44,7 +65,7 @@ export function NextUpStrip() {
               <span className={cn('text-[10px] font-semibold shrink-0', isImminent ? 'text-primary' : 'text-muted-foreground')}>
                 {formatCountdown(item.minutesUntil)}
               </span>
-            </div>
+            </button>
           );
         })}
       </div>
