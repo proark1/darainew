@@ -117,7 +117,7 @@ export function ContentStudioPanel({ initialTab = 'today' }: { initialTab?: Cont
             ) : (
               <>
                 <p className="text-xs text-muted-foreground">
-                  {isToday(latestDay) ? t('content.todayBatch') : `${t('content.latestBatch')} · ${latestDay}`} · {visibleBatch.length} {t('content.ideasWord')}
+                  {isToday(latestDay) ? t('content.todayBatch') : `${t('content.latestBatch')} · ${latestDay}`} · {visibleBatch.length} {visibleBatch.length === 1 ? t('content.ideaWord') : t('content.ideasWord')}
                 </p>
                 {grouped.current.length > 0 && (
                   <section className="space-y-3">

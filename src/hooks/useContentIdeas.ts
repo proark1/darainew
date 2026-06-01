@@ -64,7 +64,7 @@ export function useContentIdeas() {
       if ((data as any)?.error) throw new Error((data as any).error);
       await fetchIdeas();
       const count = (data as any)?.count ?? 0;
-      toast.success(`${count} ${t('content.toast.generatedSuffix')}`);
+      toast.success(`${count} ${count === 1 ? t('content.toast.generatedSuffix.one') : t('content.toast.generatedSuffix.other')}`);
       return true;
     } catch (err) {
       console.error('Failed to generate ideas:', err);
@@ -160,7 +160,7 @@ export function useContentIdeas() {
       return true;
     } catch (err) {
       console.error('Failed to unschedule idea:', err);
-      toast.error(t('content.toast.addCalendarFailed'));
+      toast.error(t('content.toast.removeCalendarFailed'));
       return false;
     }
   }, [fetchIdeas, t]);

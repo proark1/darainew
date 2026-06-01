@@ -36,7 +36,9 @@ export function ContentCalendarStrip({ scheduled, onOpenScripts, onUnschedule }:
       <Card>
         <CardContent className="py-12 text-center space-y-3">
           <CalendarDays className="h-8 w-8 mx-auto text-muted-foreground" />
-          <p className="text-sm text-muted-foreground max-w-sm mx-auto">{t('content.calendarEmpty')}</p>
+          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+            {t('content.calendarEmptyPre')}<span className="font-medium">{t('content.schedule')}</span>{t('content.calendarEmptyPost')}
+          </p>
         </CardContent>
       </Card>
     );
