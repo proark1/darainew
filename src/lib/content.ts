@@ -178,7 +178,7 @@ export function formatDuration(seconds: number | null | undefined): string {
  * out explicitly instead of a generic "failed", and otherwise surface the real
  * message so problems aren't swallowed.
  */
-export function describeContentError(err: unknown, fallback: string): string {
+export function describeContentError(err: unknown, fallback: string, migrationMissing?: string): string {
   // Extract message/code without trusting the shape of `err` at runtime: it may
   // be a PostgREST error object, a plain Error, a string, or something else.
   let msg = '';
@@ -191,7 +191,7 @@ export function describeContentError(err: unknown, fallback: string): string {
     msg = err;
   }
   if (code === 'PGRST205' || /schema cache|does not exist/i.test(msg)) {
-    return 'Content Studio isn’t set up on the server yet — the database migration needs to be applied.';
+    return migrationMissing ?? 'Content Studio isn’t set up on the server yet — the database migration needs to be applied.';
   }
   return msg ? `${fallback}: ${msg}` : fallback;
 }

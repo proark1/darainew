@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import {
   Sparkles, RefreshCw, Lightbulb, ThumbsUp, CalendarDays, UserRound, Clapperboard, ArrowRight,
 } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useCreatorProfile } from '@/hooks/useCreatorProfile';
 import { useContentIdeas } from '@/hooks/useContentIdeas';
 import { groupIdeasByKind, KIND_META, type ContentIdea } from '@/lib/content';
@@ -22,6 +23,7 @@ function isToday(dateStr: string | null): boolean {
 }
 
 export function ContentStudioPanel({ initialTab = 'today' }: { initialTab?: ContentTab }) {
+  const { t } = useLanguage();
   const [tab, setTab] = useState<ContentTab>(initialTab);
   const [scriptIdea, setScriptIdea] = useState<ContentIdea | null>(null);
   const [scriptOpen, setScriptOpen] = useState(false);
@@ -65,22 +67,20 @@ export function ContentStudioPanel({ initialTab = 'today' }: { initialTab?: Cont
             <div>
               <h2 className="text-lg font-semibold flex items-center gap-2">
                 <Clapperboard className="h-5 w-5 text-primary" />
-                Content
+                {t('content.title')}
               </h2>
-              <p className="text-sm text-muted-foreground">
-                Daily video ideas for your business — half trending now, half evergreen.
-              </p>
+              <p className="text-sm text-muted-foreground">{t('content.subtitle')}</p>
             </div>
             <Button onClick={() => generateNow()} disabled={generating} className="gap-2">
               {generating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              {generating ? 'Generating…' : "Generate today's ideas"}
+              {generating ? t('content.generating') : t('content.generateToday')}
             </Button>
           </div>
           <TabsList className="w-full justify-start overflow-x-auto">
-            <TabsTrigger value="today" className="gap-1"><Lightbulb className="h-4 w-4" /> Today's Ideas</TabsTrigger>
-            <TabsTrigger value="liked" className="gap-1"><ThumbsUp className="h-4 w-4" /> Liked &amp; Scripts</TabsTrigger>
-            <TabsTrigger value="calendar" className="gap-1"><CalendarDays className="h-4 w-4" /> Calendar</TabsTrigger>
-            <TabsTrigger value="profile" className="gap-1"><UserRound className="h-4 w-4" /> Profile</TabsTrigger>
+            <TabsTrigger value="today" className="gap-1"><Lightbulb className="h-4 w-4" /> {t('content.tab.today')}</TabsTrigger>
+            <TabsTrigger value="liked" className="gap-1"><ThumbsUp className="h-4 w-4" /> {t('content.tab.liked')}</TabsTrigger>
+            <TabsTrigger value="calendar" className="gap-1"><CalendarDays className="h-4 w-4" /> {t('content.tab.calendar')}</TabsTrigger>
+            <TabsTrigger value="profile" className="gap-1"><UserRound className="h-4 w-4" /> {t('content.tab.profile')}</TabsTrigger>
           </TabsList>
         </div>
 
@@ -90,9 +90,9 @@ export function ContentStudioPanel({ initialTab = 'today' }: { initialTab?: Cont
             {needsProfile && (
               <Card className="border-primary/30 bg-primary/5">
                 <CardContent className="p-4 flex items-center justify-between gap-3">
-                  <p className="text-sm">Set up your creator profile so ideas match your voice and niche.</p>
+                  <p className="text-sm">{t('content.needsProfile')}</p>
                   <Button size="sm" variant="outline" className="gap-1 shrink-0" onClick={() => setTab('profile')}>
-                    Set up <ArrowRight className="h-4 w-4" />
+                    {t('content.setUp')} <ArrowRight className="h-4 w-4" />
                   </Button>
                 </CardContent>
               </Card>
@@ -107,30 +107,27 @@ export function ContentStudioPanel({ initialTab = 'today' }: { initialTab?: Cont
               <Card>
                 <CardContent className="py-12 text-center space-y-4">
                   <Sparkles className="h-8 w-8 mx-auto text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                    No ideas yet. Generate your first batch — we'll search the web for what's
-                    happening now plus evergreen angles in your niche.
-                  </p>
+                  <p className="text-sm text-muted-foreground max-w-sm mx-auto">{t('content.emptyBody')}</p>
                   <Button onClick={() => generateNow()} disabled={generating} className="gap-2">
                     {generating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                    {generating ? 'Generating…' : 'Generate ideas'}
+                    {generating ? t('content.generating') : t('content.generateIdeas')}
                   </Button>
                 </CardContent>
               </Card>
             ) : (
               <>
                 <p className="text-xs text-muted-foreground">
-                  {isToday(latestDay) ? "Today's batch" : `Latest batch · ${latestDay}`} · {visibleBatch.length} ideas
+                  {isToday(latestDay) ? t('content.todayBatch') : `${t('content.latestBatch')} · ${latestDay}`} · {visibleBatch.length} {visibleBatch.length === 1 ? t('content.ideaWord') : t('content.ideasWord')}
                 </p>
                 {grouped.current.length > 0 && (
                   <section className="space-y-3">
-                    <h3 className="text-sm font-semibold">{KIND_META.current.emoji} {KIND_META.current.label}</h3>
+                    <h3 className="text-sm font-semibold">{KIND_META.current.emoji} {t('content.kind.current')}</h3>
                     {grouped.current.map(renderIdeaCard)}
                   </section>
                 )}
                 {grouped.evergreen.length > 0 && (
                   <section className="space-y-3 pt-2">
-                    <h3 className="text-sm font-semibold">{KIND_META.evergreen.emoji} {KIND_META.evergreen.label}</h3>
+                    <h3 className="text-sm font-semibold">{KIND_META.evergreen.emoji} {t('content.kind.evergreen')}</h3>
                     {grouped.evergreen.map(renderIdeaCard)}
                   </section>
                 )}
@@ -144,10 +141,7 @@ export function ContentStudioPanel({ initialTab = 'today' }: { initialTab?: Cont
               <Card>
                 <CardContent className="py-12 text-center space-y-3">
                   <ThumbsUp className="h-8 w-8 mx-auto text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                    Like an idea or hit <span className="font-medium">Write scripts</span> and it'll
-                    land here, ready to turn into short- and long-form scripts.
-                  </p>
+                  <p className="text-sm text-muted-foreground max-w-sm mx-auto">{t('content.likedEmpty')}</p>
                 </CardContent>
               </Card>
             ) : (

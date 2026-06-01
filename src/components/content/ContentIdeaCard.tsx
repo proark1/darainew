@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useLanguage } from '@/contexts/LanguageContext';
 import {
   ThumbsUp, X, CalendarPlus, Clapperboard, ExternalLink, CalendarClock, Trash2, Check,
 } from 'lucide-react';
@@ -32,6 +33,7 @@ interface Props {
 }
 
 export function ContentIdeaCard({ idea, onLike, onDismiss, onWriteScripts, onSchedule, onUnschedule }: Props) {
+  const { t } = useLanguage();
   const [when, setWhen] = useState(defaultWhen);
   const [duration, setDuration] = useState(30);
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -45,7 +47,7 @@ export function ContentIdeaCard({ idea, onLike, onDismiss, onWriteScripts, onSch
     // new Date('').toISOString() throws RangeError and crashes the handler.
     const parsed = new Date(when);
     if (Number.isNaN(parsed.getTime())) {
-      toast.error('Pick a valid date and time');
+      toast.error(t('content.pickValidDate'));
       return;
     }
     onSchedule(parsed.toISOString(), duration);
@@ -57,7 +59,7 @@ export function ContentIdeaCard({ idea, onLike, onDismiss, onWriteScripts, onSch
       <CardContent className="p-4 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={idea.kind === 'current' ? 'default' : 'secondary'} className="gap-1">
-            <span aria-hidden>{meta.emoji}</span> {meta.label}
+            <span aria-hidden>{meta.emoji}</span> {t(`content.kind.${idea.kind}`)}
           </Badge>
           {idea.topic && <Badge variant="outline">{idea.topic}</Badge>}
           {scheduled && idea.scheduled_for && (
@@ -72,7 +74,7 @@ export function ContentIdeaCard({ idea, onLike, onDismiss, onWriteScripts, onSch
 
         {idea.hook && (
           <p className="text-sm">
-            <span className="text-muted-foreground">Hook: </span>
+            <span className="text-muted-foreground">{t('content.hook')}: </span>
             <span className="italic">“{idea.hook}”</span>
           </p>
         )}
@@ -86,7 +88,7 @@ export function ContentIdeaCard({ idea, onLike, onDismiss, onWriteScripts, onSch
             className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
           >
             <ExternalLink className="h-3 w-3" />
-            {idea.source_title ? idea.source_title.slice(0, 70) : 'Read the source'}
+            {idea.source_title ? idea.source_title.slice(0, 70) : t('content.readSource')}
           </a>
         )}
 
@@ -98,31 +100,31 @@ export function ContentIdeaCard({ idea, onLike, onDismiss, onWriteScripts, onSch
             className="gap-1"
           >
             {liked ? <Check className="h-4 w-4" /> : <ThumbsUp className="h-4 w-4" />}
-            {liked ? 'Liked' : 'Like'}
+            {liked ? t('content.liked') : t('content.like')}
           </Button>
 
           <Button size="sm" variant="outline" onClick={onWriteScripts} className="gap-1">
-            <Clapperboard className="h-4 w-4" /> Write scripts
+            <Clapperboard className="h-4 w-4" /> {t('content.writeScripts')}
           </Button>
 
           {scheduled ? (
             <Button size="sm" variant="ghost" onClick={onUnschedule} className="gap-1 text-muted-foreground">
-              <Trash2 className="h-4 w-4" /> Unschedule
+              <Trash2 className="h-4 w-4" /> {t('content.unschedule')}
             </Button>
           ) : (
             <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
               <PopoverTrigger asChild>
                 <Button size="sm" variant="outline" className="gap-1">
-                  <CalendarPlus className="h-4 w-4" /> Schedule
+                  <CalendarPlus className="h-4 w-4" /> {t('content.schedule')}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-72 space-y-3" align="start">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">When (your local time)</Label>
+                  <Label className="text-xs">{t('content.when')}</Label>
                   <Input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Block length</Label>
+                  <Label className="text-xs">{t('content.blockLength')}</Label>
                   <div className="flex gap-1.5">
                     {[15, 30, 60].map((m) => (
                       <button
@@ -142,11 +144,9 @@ export function ContentIdeaCard({ idea, onLike, onDismiss, onWriteScripts, onSch
                   </div>
                 </div>
                 <Button size="sm" className="w-full" onClick={confirmSchedule}>
-                  Add to calendar
+                  {t('content.addToCalendar')}
                 </Button>
-                <p className="text-[11px] text-muted-foreground">
-                  Creates a real event in your Calendar (and syncs to connected calendars).
-                </p>
+                <p className="text-[11px] text-muted-foreground">{t('content.scheduleNote')}</p>
               </PopoverContent>
             </Popover>
           )}
@@ -158,7 +158,7 @@ export function ContentIdeaCard({ idea, onLike, onDismiss, onWriteScripts, onSch
               onClick={onDismiss}
               className="gap-1 text-muted-foreground ml-auto"
             >
-              <X className="h-4 w-4" /> Dismiss
+              <X className="h-4 w-4" /> {t('content.dismiss')}
             </Button>
           )}
         </div>

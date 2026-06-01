@@ -7,7 +7,7 @@ import { describeFunctionError, type ContentScript, type ScriptFormat, type Scri
 const db = supabase as unknown as { from: (table: string) => any };
 
 export function useContentScripts(ideaId: string | null) {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const [scripts, setScripts] = useState<ContentScript[]>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -47,16 +47,16 @@ export function useContentScripts(ideaId: string | null) {
       const next = ((data as any)?.scripts || []) as ContentScript[];
       if (next.length) setScripts(next);
       else await fetchScripts();
-      toast.success('Scripts ready');
+      toast.success(t('content.toast.scriptsReady'));
       return true;
     } catch (err) {
       console.error('Failed to generate scripts:', err);
-      toast.error(await describeFunctionError(err, 'Failed to generate scripts'));
+      toast.error(await describeFunctionError(err, t('content.toast.scriptsFailed')));
       return false;
     } finally {
       setGenerating(false);
     }
-  }, [ideaId, fetchScripts, language]);
+  }, [ideaId, fetchScripts, language, t]);
 
   // Inline edits to a generated script (the user tweaks the text before
   // recording). Optimistic, with revert on failure.
@@ -70,10 +70,10 @@ export function useContentScripts(ideaId: string | null) {
       if (error) throw error;
     } catch (err) {
       console.error('Failed to save script edit:', err);
-      toast.error('Failed to save edit');
+      toast.error(t('content.toast.editSaveFailed'));
       fetchScripts();
     }
-  }, [fetchScripts]);
+  }, [fetchScripts, t]);
 
   return { scripts, loading, generating, generate, updateScript, refetch: fetchScripts };
 }

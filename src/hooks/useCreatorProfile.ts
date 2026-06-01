@@ -17,7 +17,7 @@ export type CreatorProfileDraft = Omit<
 
 export function useCreatorProfile() {
   const { user } = useAuth();
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const [profile, setProfile] = useState<CreatorProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -106,13 +106,13 @@ export function useCreatorProfile() {
       return data as CreatorProfile;
     } catch (err) {
       console.error('Failed to save creator profile:', err);
-      toast.error(describeContentError(err, 'Failed to save profile'));
+      toast.error(describeContentError(err, t('content.toast.saveFailed'), t('content.toast.migrationMissing')));
       fetchProfile(); // revert to server state
       return null;
     } finally {
       setSaving(false);
     }
-  }, [user?.id, profile, fetchProfile, language]);
+  }, [user?.id, profile, fetchProfile, language, t]);
 
   return { profile, loading, saving, save, prefillFromProfile, refetch: fetchProfile };
 }
