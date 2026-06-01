@@ -95,7 +95,7 @@ export function TaskTemplates({ onCreateFromTemplate }: TaskTemplatesProps) {
   const handleUsePreset = async (preset: Omit<TaskTemplate, 'id' | 'createdAt'>) => {
     const result = await createTemplate(preset);
     if (result) {
-      toast.success(t('templates.toast.added').replace('{name}', preset.name));
+      toast.success(t('templates.toast.added').replace('{name}', () => preset.name));
     }
   };
 
