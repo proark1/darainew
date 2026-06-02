@@ -9,7 +9,7 @@ export interface ActivityItem {
   itemType: 'task' | 'event';
   itemId: string;
   itemTitle?: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
   createdAt: Date;
   actorName?: string;
   actorAvatar?: string;
@@ -23,7 +23,7 @@ interface DbActivityItem {
   item_type: string;
   item_id: string;
   item_title: string | null;
-  details: Record<string, any> | null;
+  details: Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -99,7 +99,7 @@ export function useActivityFeed(userId: string | undefined) {
     itemId: string,
     itemTitle?: string,
     targetUserId?: string,
-    details?: Record<string, any>
+    details?: Record<string, unknown>
   ) => {
     if (!userId) return;
 
@@ -137,7 +137,7 @@ export function useActivityFeed(userId: string | undefined) {
           schema: 'public',
           table: 'activity_feed',
         },
-        (payload) => {
+        (_payload) => {
           // Refresh activities when new one is added
           fetchActivities();
         }

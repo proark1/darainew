@@ -28,7 +28,7 @@ export function useSmartContactReminders({
       type: string;
       title: string;
       message: string;
-      data: any;
+      data: Record<string, unknown>;
     }> = [];
 
     // Get existing notifications to avoid duplicates
@@ -41,7 +41,7 @@ export function useSmartContactReminders({
 
     const existingContactIds = new Set(
       (existingNotifications || [])
-        .map((n: any) => n.data?.contact_id)
+        .map((n: { data?: { contact_id?: string } }) => n.data?.contact_id)
         .filter(Boolean)
     );
 

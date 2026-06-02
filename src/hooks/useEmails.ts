@@ -90,7 +90,7 @@ export function useEmails({ enabled = true, autoSync = true }: UseEmailsOptions 
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, enabled]);
 
   useEffect(() => { fetchEmails(); }, [fetchEmails]);
 
@@ -136,12 +136,13 @@ export function useEmails({ enabled = true, autoSync = true }: UseEmailsOptions 
     if (diff < 60_000) return 'just now';
     if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`;
     return `${Math.floor(diff / 3600_000)}h ago`;
-  }, [syncing]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncing]); // syncing used as cache-busting signal to re-read localStorage after a sync completes
 
   const updateEmail = useCallback(async (emailId: string, updates: Partial<Email>) => {
     if (!user) return;
     try {
-      const { error } = await supabase.from('user_emails').update(updates as any).eq('id', emailId).eq('user_id', user.id);
+      const { error } = await supabase.from('user_emails').update(updates as Partial<Record<string, unknown>>).eq('id', emailId).eq('user_id', user.id);
       if (error) throw error;
       setEmails(prev => prev.map(e => e.id === emailId ? { ...e, ...updates } : e));
     } catch (e) {
@@ -153,7 +154,7 @@ export function useEmails({ enabled = true, autoSync = true }: UseEmailsOptions 
   const batchUpdateEmails = useCallback(async (ids: string[], updates: Partial<Email>) => {
     if (!user || ids.length === 0) return;
     try {
-      const { error } = await supabase.from('user_emails').update(updates as any).in('id', ids).eq('user_id', user.id);
+      const { error } = await supabase.from('user_emails').update(updates as Partial<Record<string, unknown>>).in('id', ids).eq('user_id', user.id);
       if (error) throw error;
       const idSet = new Set(ids);
       setEmails(prev => prev.map(e => idSet.has(e.id) ? { ...e, ...updates } : e));
@@ -177,7 +178,8 @@ export function useEmails({ enabled = true, autoSync = true }: UseEmailsOptions 
       },
       duration: 5000,
     });
-  }, [updateEmail, emails]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [updateEmail, emails]); // intentionally excludes undoArchive — defined after this callback to avoid circular deps
 
   const undoArchive = useCallback(async () => {
     if (!lastArchived.current) return;
@@ -235,7 +237,7 @@ export function useEmails({ enabled = true, autoSync = true }: UseEmailsOptions 
     if (domain) {
       try {
         await supabase.from('email_sender_rules').upsert(
-          { user_id: user.id, sender_pattern: `*@${domain}`, default_category: updates.category, default_priority: updates.priority_score } as any,
+          { user_id: user.id, sender_pattern: `*@${domain}`, default_category: updates.category, default_priority: updates.priority_score } as Record<string, unknown>,
           { onConflict: 'user_id,sender_pattern' }
         );
       } catch (e) {
@@ -248,7 +250,7 @@ export function useEmails({ enabled = true, autoSync = true }: UseEmailsOptions 
   const createSenderRule = useCallback(async (senderPattern: string, rule: { default_category?: string; default_priority?: number; auto_archive?: boolean }) => {
     if (!user) return;
     try {
-      const { error } = await supabase.from('email_sender_rules').upsert({ user_id: user.id, sender_pattern: senderPattern, ...rule } as any, { onConflict: 'user_id,sender_pattern' });
+      const { error } = await supabase.from('email_sender_rules').upsert({ user_id: user.id, sender_pattern: senderPattern, ...rule } as Record<string, unknown>, { onConflict: 'user_id,sender_pattern' });
       if (error) throw error;
       toast.success(`Rule created for ${senderPattern}`);
     } catch (e) {

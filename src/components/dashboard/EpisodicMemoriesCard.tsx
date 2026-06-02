@@ -11,7 +11,7 @@ interface Memory {
   summary: string | null;
   occurred_on: string;
   location: string | null;
-  people: any;
+  people: string[] | null;
   tags: string[];
 }
 

@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 
-export interface Trip { id: string; user_id: string; title: string; destination: string; destination_country: string | null; start_date: string; end_date: string; purpose: string | null; status: string | null; notes: string | null; companions: any; }
+export interface Trip { id: string; user_id: string; title: string; destination: string; destination_country: string | null; start_date: string; end_date: string; purpose: string | null; status: string | null; notes: string | null; companions: unknown; }
 export interface TripBooking { id: string; user_id: string; trip_id: string | null; booking_type: string; provider: string | null; confirmation_number: string | null; start_time: string | null; end_time: string | null; origin: string | null; destination: string | null; cost: number | null; currency: string | null; notes: string | null; }
 export interface LoyaltyProgram { id: string; user_id: string; program_name: string; program_type: string | null; membership_number: string | null; tier: string | null; points_balance: number | null; expires_at: string | null; notes: string | null; }
 export interface CountryEssential { id: string; user_id: string; country: string; plug_type: string | null; currency: string | null; emergency_number: string | null; embassy_phone: string | null; embassy_address: string | null; language: string | null; notes: string | null; }
@@ -39,17 +39,17 @@ export function useTravel() {
         console.warn('[useTravel] refresh error', firstErr.message);
         toast.error(firstErr.message);
       }
-      setTrips((t.data as any) || []);
-      setBookings((b.data as any) || []);
-      setLoyalty((l.data as any) || []);
-      setEssentials((e.data as any) || []);
+      setTrips((t.data as Trip[]) || []);
+      setBookings((b.data as TripBooking[]) || []);
+      setLoyalty((l.data as LoyaltyProgram[]) || []);
+      setEssentials((e.data as CountryEssential[]) || []);
     } finally {
       setIsLoading(false);
     }
   };
   // Depend on the stable user id, not the user object — Supabase refresh
   // tokens reissue `user` periodically without the id changing.
-  useEffect(() => { if (userId) refresh(); }, [userId]);
+  useEffect(() => { if (userId) refresh(); }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addTrip = async (p: Partial<Trip>) => { if (!user) return; const { error } = await supabase.from('trips').insert({ ...p, user_id: user.id, title: p.title!, destination: p.destination!, start_date: p.start_date!, end_date: p.end_date! }); if (error) return toast.error(error.message); toast.success('Trip added'); refresh(); };
   const addBooking = async (p: Partial<TripBooking>) => { if (!user) return; const { error } = await supabase.from('trip_bookings').insert({ ...p, user_id: user.id, booking_type: p.booking_type! }); if (error) return toast.error(error.message); toast.success('Booking added'); refresh(); };

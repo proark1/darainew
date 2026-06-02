@@ -83,8 +83,7 @@ export function useMeetingBots() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const { data, error } = await (supabase as any)
-        .from('meeting_bots')
+      const { data, error } = await (supabase as unknown as { from: (t: string) => { select: (c: string) => { eq: (a: string, b: string) => { order: (c: string, o: Record<string, unknown>) => { limit: (n: number) => Promise<{ data: Record<string, unknown>[] | null; error: unknown }> } } } } }).from('meeting_bots')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
@@ -177,7 +176,7 @@ export function useMeetingBots() {
   };
 }
 
-function rowFromDb(r: any): MeetingBotRow {
+function rowFromDb(r: Record<string, unknown>): MeetingBotRow {
   return {
     id: r.id,
     externalBotId: r.external_bot_id ?? null,

@@ -57,8 +57,22 @@ export function useSchedule() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const { data, error } = await (supabase as any)
-        .from('schedule_proposals')
+      type ProposalRow = Record<string, unknown>;
+      const { data, error } = await (supabase as unknown as {
+        from(t: string): {
+          select(c: string): {
+            eq(a: string, b: string): {
+              in(col: string, vals: string[]): {
+                order(c: string, o: Record<string, boolean>): {
+                  limit(n: number): {
+                    maybeSingle(): Promise<{ data: ProposalRow | null; error: unknown }>;
+                  };
+                };
+              };
+            };
+          };
+        };
+      }).from('schedule_proposals')
         .select('*')
         .eq('user_id', user.id)
         .in('status', ['draft', 'reviewed', 'accepted'])
@@ -97,8 +111,9 @@ export function useSchedule() {
         },
       });
       if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
-      const count = (data as any)?.block_count ?? 0;
+      const dataRecord = data as Record<string, unknown>;
+      if (dataRecord?.error) throw new Error(dataRecord.error as string);
+      const count = (dataRecord?.block_count as number) ?? 0;
       toast.success(`Drafted ${count} block${count === 1 ? '' : 's'}`);
       await refresh();
       return data;
@@ -117,7 +132,7 @@ export function useSchedule() {
         body: { proposal_id: proposalId, action: 'accept_blocks', block_ids: blockIds },
       });
       if (error) throw error;
-      const applied = (data as any)?.applied ?? 0;
+      const applied = ((data as Record<string, unknown>)?.applied as number) ?? 0;
       toast.success(`${applied} block${applied === 1 ? '' : 's'} added to calendar`);
       await refresh();
       return data;
@@ -136,7 +151,7 @@ export function useSchedule() {
         body: { proposal_id: proposalId, action: 'accept_all' },
       });
       if (error) throw error;
-      const applied = (data as any)?.applied ?? 0;
+      const applied = ((data as Record<string, unknown>)?.applied as number) ?? 0;
       toast.success(`Accepted all (${applied} blocks)`);
       await refresh();
       return data;
@@ -186,7 +201,7 @@ export function useSchedule() {
   };
 }
 
-function normalise(r: any): ScheduleProposal {
+function normalise(r: Record<string, unknown>): ScheduleProposal {
   return {
     id: r.id,
     range_start: r.range_start,

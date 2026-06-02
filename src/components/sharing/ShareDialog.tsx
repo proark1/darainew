@@ -17,15 +17,15 @@ interface ShareDialogProps {
   itemId: string;
   itemTitle: string;
   onShare: (email: string, permission: 'view' | 'edit') => Promise<{ error: string | null }>;
-  onGetSharedWith: () => Promise<any[]>;
-  onRemoveShare: (shareId: string) => Promise<{ error: any }>;
+  onGetSharedWith: () => Promise<Record<string, unknown>[]>;
+  onRemoveShare: (shareId: string) => Promise<{ error: string | null }>;
   onGetRecentContacts?: () => Promise<Contact[]>;
   onClose: () => void;
 }
 
 export function ShareDialog({
   itemType,
-  itemId,
+  itemId: _itemId,
   itemTitle,
   onShare,
   onGetSharedWith,
@@ -36,7 +36,7 @@ export function ShareDialog({
   const { toast } = useToast();
   const [email, setEmail] = useState('');
   const [permission, setPermission] = useState<'view' | 'edit'>('view');
-  const [sharedWith, setSharedWith] = useState<any[]>([]);
+  const [sharedWith, setSharedWith] = useState<Record<string, unknown>[]>([]);
   const [recentContacts, setRecentContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -45,6 +45,7 @@ export function ShareDialog({
   useEffect(() => {
     loadSharedWith();
     loadRecentContacts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadSharedWith = async () => {

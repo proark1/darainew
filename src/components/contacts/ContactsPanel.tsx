@@ -269,11 +269,10 @@ export function ContactsPanel({ userId }: ContactsPanelProps) {
     deleteContact,
     markContacted,
     getContactsDue,
-    refetch,
   } = useContacts(userId);
 
   const { shareItem, getSharedWith, removeShare, getRecentContacts } = useItemSharing(userId);
-  const { getInteractions } = useContactInteractions(userId);
+  useContactInteractions(userId);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddDialog, setShowAddDialog] = useState(false);

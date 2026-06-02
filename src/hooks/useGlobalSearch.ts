@@ -395,7 +395,7 @@ export function useGlobalSearch(userId: string | undefined) {
       await supabase.from('search_history').insert({
         user_id: userId,
         query: trimmedQuery,
-        filters: filters as any,
+        filters: filters as Record<string, unknown>,
       });
 
       // Update recent searches locally

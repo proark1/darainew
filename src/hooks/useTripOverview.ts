@@ -84,7 +84,7 @@ export interface TripOverviewResponse {
   segments: Record<string, TripSegment[]>;
   bookings: Record<string, TripBookingRow[]>;
   packing_lists: Record<string, PackingList[]>;
-  country_essentials: any[];
+  country_essentials: Record<string, unknown>[];
   generated_at: string;
 }
 
@@ -118,7 +118,7 @@ export function useTripOverview() {
   useEffect(() => {
     if (!user?.id) return;
     const tables = ['trips', 'trip_segments', 'packing_lists', 'trip_bookings'];
-    const channel = (supabase as any).channel(`trip-updates-${user.id}`);
+    const channel = supabase.channel(`trip-updates-${user.id}`);
     for (const table of tables) {
       channel.on('postgres_changes', {
         event: '*',
@@ -128,7 +128,7 @@ export function useTripOverview() {
       }, () => { refresh(); });
     }
     channel.subscribe();
-    return () => { (supabase as any).removeChannel(channel); };
+    return () => { supabase.removeChannel(channel); };
   }, [user?.id, refresh]);
 
   // Fetch the weather forecast for a trip and persist a one-line
@@ -150,9 +150,9 @@ export function useTripOverview() {
         },
       });
       if (error) throw error;
-      const summary = (w as any)?.summary as string | undefined;
+      const summary = (w as Record<string, unknown>)?.summary as string | undefined;
       if (summary) {
-        await (supabase as any)
+        await supabase
           .from('trips')
           .update({
             weather_summary: summary,
@@ -178,12 +178,13 @@ export function useTripOverview() {
         body: { trip_id: tripId, force },
       });
       if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
-      const skipped = (data as any)?.skipped;
+      const dataRecord = data as Record<string, unknown>;
+      if (dataRecord?.error) throw new Error(dataRecord.error as string);
+      const skipped = dataRecord?.skipped;
       if (skipped) {
         toast.info('Already prepped — pass force to re-run');
       } else {
-        const kicked = (data as any)?.packing_kicked_off;
+        const kicked = dataRecord?.packing_kicked_off;
         toast.success(`🎒 Pack task added${kicked ? ' + packing list generating' : ''}`);
       }
       await refresh();
@@ -210,8 +211,9 @@ export function useTripOverview() {
         },
       });
       if (error) throw error;
-      if ((r as any)?.error) throw new Error((r as any).error);
-      toast.success(`Packing list generated (${(r as any)?.items_count} items)`);
+      const rRecord = r as Record<string, unknown>;
+      if (rRecord?.error) throw new Error(rRecord.error as string);
+      toast.success(`Packing list generated (${rRecord?.items_count} items)`);
       await refresh();
       return r;
     } catch (e) {
@@ -229,9 +231,9 @@ export function useTripOverview() {
     const items = [...(list.items ?? [])];
     if (!items[itemIndex]) return;
     items[itemIndex] = { ...items[itemIndex], packed: !items[itemIndex].packed };
-    const { error } = await (supabase as any)
+    const { error } = await supabase
       .from('packing_lists')
-      .update({ items })
+      .update({ items } as Parameters<typeof supabase.from<'packing_lists'>>[0] extends never ? never : Record<string, unknown>)
       .eq('id', list.id);
     if (error) {
       toast.error(`Failed: ${error.message}`);

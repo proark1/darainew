@@ -60,32 +60,32 @@ export default function ActivityPage() {
         ]);
         if (!alive) return;
         const merged: Row[] = [
-          ...(autoRes.data || []).map((r: any) => ({
+          ...(autoRes.data || []).map((r: Record<string, unknown>) => ({
             kind: 'auto' as const,
-            id: r.id,
-            when: r.created_at,
-            title: r.reason,
+            id: r.id as string,
+            when: r.created_at as string,
+            title: r.reason as string,
             subtitle: `${r.action_type}${r.entity_type ? ` · ${r.entity_type}` : ''}`,
-            status: r.status,
-            source: r.source,
+            status: r.status as string | undefined,
+            source: r.source as string | undefined,
             meta: r,
           })),
-          ...(undoRes.data || []).map((r: any) => ({
+          ...(undoRes.data || []).map((r: Record<string, unknown>) => ({
             kind: 'undo' as const,
-            id: r.id,
-            when: r.created_at,
-            title: r.label,
+            id: r.id as string,
+            when: r.created_at as string,
+            title: r.label as string,
             subtitle: `${r.op} · ${r.entity_type}${r.consumed_at ? ' · reverted' : ''}`,
-            source: r.source,
+            source: r.source as string | undefined,
             meta: r,
           })),
-          ...(proactiveRes.data || []).map((r: any) => ({
+          ...(proactiveRes.data || []).map((r: Record<string, unknown>) => ({
             kind: 'proactive' as const,
-            id: r.id,
-            when: r.sent_at,
-            title: r.message || r.trigger_type,
+            id: r.id as string,
+            when: r.sent_at as string,
+            title: (r.message || r.trigger_type) as string,
             subtitle: `${r.trigger_type} → ${r.channel || 'in-app'}`,
-            source: r.channel,
+            source: r.channel as string | undefined,
             meta: r,
           })),
         ].sort((a, b) => new Date(b.when).getTime() - new Date(a.when).getTime());
@@ -114,11 +114,11 @@ export default function ActivityPage() {
   const statusBadge = (row: Row) => {
     if (row.kind !== 'auto') return null;
     const s = row.status || 'pending';
-    const v =
+    const v: 'default' | 'destructive' | 'outline' | 'secondary' =
       s === 'approved' || s === 'auto_applied' ? 'default' :
       s === 'rejected' ? 'destructive' :
       s === 'expired' ? 'outline' : 'secondary';
-    return <Badge variant={v as any} className="text-[10px] px-1.5">{s}</Badge>;
+    return <Badge variant={v} className="text-[10px] px-1.5">{s}</Badge>;
   };
 
   const groupedByDay = useMemo(() => {

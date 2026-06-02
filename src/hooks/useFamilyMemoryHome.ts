@@ -75,10 +75,10 @@ export function useFamilyMemoryHome() {
       supabase.from('household_maintenance').select('*').eq('user_id', user.id).order('next_due_date', { ascending: true, nullsFirst: false }),
       supabase.from('vehicle_records').select('*').eq('user_id', user.id).order('nickname'),
     ]);
-    setTraditions((t.data as any) || []);
-    setPets((p.data as any) || []);
-    setMaintenance((m.data as any) || []);
-    setVehicles((v.data as any) || []);
+    setTraditions((t.data as unknown as FamilyTradition[]) || []);
+    setPets((p.data as unknown as Pet[]) || []);
+    setMaintenance((m.data as unknown as HouseholdMaintenanceItem[]) || []);
+    setVehicles((v.data as unknown as VehicleRecord[]) || []);
     setLoading(false);
   }, [user]);
 
@@ -88,14 +88,14 @@ export function useFamilyMemoryHome() {
     if (!user) return;
     const { error } = await supabase.from('family_traditions').insert({
       ...data, user_id: user.id, title: data.title!, cadence: data.cadence || 'annual', is_active: true,
-    } as any);
+    } as Record<string, unknown>);
     if (error) { toast.error(error.message); return; }
     toast.success('Tradition saved'); fetchAll();
   };
 
   const addPet = async (data: Partial<Pet>) => {
     if (!user) return;
-    const { error } = await supabase.from('pets').insert({ ...data, user_id: user.id, name: data.name! } as any);
+    const { error } = await supabase.from('pets').insert({ ...data, user_id: user.id, name: data.name! } as Record<string, unknown>);
     if (error) { toast.error(error.message); return; }
     toast.success('Pet added'); fetchAll();
   };
@@ -104,14 +104,14 @@ export function useFamilyMemoryHome() {
     if (!user) return;
     const { error } = await supabase.from('household_maintenance').insert({
       ...data, user_id: user.id, task_name: data.task_name!, is_active: true,
-    } as any);
+    } as Record<string, unknown>);
     if (error) { toast.error(error.message); return; }
     toast.success('Maintenance task added'); fetchAll();
   };
 
   const addVehicle = async (data: Partial<VehicleRecord>) => {
     if (!user) return;
-    const { error } = await supabase.from('vehicle_records').insert({ ...data, user_id: user.id, nickname: data.nickname! } as any);
+    const { error } = await supabase.from('vehicle_records').insert({ ...data, user_id: user.id, nickname: data.nickname! } as Record<string, unknown>);
     if (error) { toast.error(error.message); return; }
     toast.success('Vehicle added'); fetchAll();
   };

@@ -12,7 +12,7 @@ import {
   CheckCircle2,
   Focus,
 } from 'lucide-react';
-import { format, isToday, isPast, isBefore, startOfDay, endOfDay, isWeekend } from 'date-fns';
+import { format, isToday, isPast, isBefore, endOfDay, isWeekend } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useDailyCheckins } from '@/hooks/useDailyCheckins';
 
@@ -28,9 +28,8 @@ export function TodayFocusPanel({
   onToggleComplete,
 }: TodayFocusPanelProps) {
   const { todayMorning } = useDailyCheckins();
-  const now = new Date();
-  const todayStart = startOfDay(now);
-  const todayEnd = endOfDay(now);
+  const now = useMemo(() => new Date(), []);
+  const todayEnd = useMemo(() => endOfDay(now), [now]);
   const isWeekendDay = isWeekend(now);
 
   // Get overdue tasks (max 3 to reduce overwhelm)

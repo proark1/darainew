@@ -67,10 +67,10 @@ export function useFamilyDailyLife() {
       supabase.from('family_meal_preferences').select('*').eq('user_id', user.id),
       supabase.from('family_sleep_schedule').select('*').eq('user_id', user.id),
     ]);
-    setChores((c.data as any) || []);
-    setAllowance((a.data as any) || []);
-    setMealPrefs((m.data as any) || []);
-    setSleepSchedules((s.data as any) || []);
+    setChores((c.data as unknown as FamilyChore[]) || []);
+    setAllowance((a.data as unknown as FamilyAllowance[]) || []);
+    setMealPrefs((m.data as unknown as FamilyMealPreference[]) || []);
+    setSleepSchedules((s.data as unknown as FamilySleepSchedule[]) || []);
     setLoading(false);
   }, [user]);
 
@@ -80,7 +80,7 @@ export function useFamilyDailyLife() {
     if (!user) return null;
     const { data: row, error } = await supabase
       .from('family_chores')
-      .insert({ ...data, user_id: user.id, title: data.title!, frequency: data.frequency || 'weekly' } as any)
+      .insert({ ...data, user_id: user.id, title: data.title!, frequency: data.frequency || 'weekly' } as Record<string, unknown>)
       .select()
       .single();
     if (error) { toast.error(error.message); return null; }
@@ -96,9 +96,9 @@ export function useFamilyDailyLife() {
       chore_id: chore.id,
       family_member_id: chore.family_member_id,
       points_awarded: chore.points,
-    } as any);
+    } as Record<string, unknown>);
     if (error) { toast.error(error.message); return; }
-    await supabase.from('family_chores').update({ last_completed_at: new Date().toISOString() } as any).eq('id', chore.id);
+    await supabase.from('family_chores').update({ last_completed_at: new Date().toISOString() } as Record<string, unknown>).eq('id', chore.id);
     toast.success(`+${chore.points} points`);
     fetchAll();
   };
@@ -111,7 +111,7 @@ export function useFamilyDailyLife() {
       family_member_id: data.family_member_id!,
       amount: data.amount!,
       entry_type: data.entry_type || 'allowance',
-    } as any);
+    } as Record<string, unknown>);
     if (error) { toast.error(error.message); return null; }
     toast.success('Logged');
     fetchAll();
@@ -121,10 +121,10 @@ export function useFamilyDailyLife() {
     if (!user || !data.family_member_id) return;
     const existing = mealPrefs.find(m => m.family_member_id === data.family_member_id);
     if (existing) {
-      const { error } = await supabase.from('family_meal_preferences').update(data as any).eq('id', existing.id);
+      const { error } = await supabase.from('family_meal_preferences').update(data as Record<string, unknown>).eq('id', existing.id);
       if (error) { toast.error(error.message); return; }
     } else {
-      const { error } = await supabase.from('family_meal_preferences').insert({ ...data, user_id: user.id } as any);
+      const { error } = await supabase.from('family_meal_preferences').insert({ ...data, user_id: user.id } as Record<string, unknown>);
       if (error) { toast.error(error.message); return; }
     }
     toast.success('Saved');
@@ -135,10 +135,10 @@ export function useFamilyDailyLife() {
     if (!user || !data.family_member_id) return;
     const existing = sleepSchedules.find(s => s.family_member_id === data.family_member_id);
     if (existing) {
-      const { error } = await supabase.from('family_sleep_schedule').update(data as any).eq('id', existing.id);
+      const { error } = await supabase.from('family_sleep_schedule').update(data as Record<string, unknown>).eq('id', existing.id);
       if (error) { toast.error(error.message); return; }
     } else {
-      const { error } = await supabase.from('family_sleep_schedule').insert({ ...data, user_id: user.id } as any);
+      const { error } = await supabase.from('family_sleep_schedule').insert({ ...data, user_id: user.id } as Record<string, unknown>);
       if (error) { toast.error(error.message); return; }
     }
     toast.success('Saved');

@@ -18,7 +18,7 @@ export interface StartupIdea {
   status: 'brainstorming' | 'researching' | 'validating' | 'building' | 'launched' | 'archived';
   notes?: string;
   tags: string[];
-  ai_insights: Record<string, any>;
+  ai_insights: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
@@ -132,7 +132,7 @@ export function useStartupIdeas() {
   }, []);
 
   // Add AI insights to an idea
-  const addAIInsights = useCallback(async (id: string, insights: Record<string, any>): Promise<boolean> => {
+  const addAIInsights = useCallback(async (id: string, insights: Record<string, unknown>): Promise<boolean> => {
     const idea = ideas.find(i => i.id === id);
     if (!idea) return false;
 

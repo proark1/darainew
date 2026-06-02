@@ -13,7 +13,7 @@ interface ContextualHeaderProps {
   title: string;
   onOpenMenu?: () => void;
   onOpenSearch?: () => void;
-  notifications: any[];
+  notifications: { id: string; [key: string]: unknown }[];
   onMarkRead: (id: string) => void;
   onMarkAllRead: () => void;
   onDeleteNotification: (id: string) => void;

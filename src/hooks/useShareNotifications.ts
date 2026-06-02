@@ -7,7 +7,7 @@ export interface Notification {
   type: string;
   title: string;
   message: string | null;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
   isRead: boolean;
   createdAt: Date;
 }
@@ -17,7 +17,7 @@ export function useShareNotifications(userId: string | undefined) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const mapDbToNotification = (row: any): Notification => ({
+  const mapDbToNotification = (row: Record<string, unknown>): Notification => ({
     id: row.id,
     userId: row.user_id,
     type: row.type,

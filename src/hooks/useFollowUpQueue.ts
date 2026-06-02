@@ -11,7 +11,7 @@ export interface FollowUpItem {
   follow_up_type: string;
   check_at: string;
   message_template: string | null;
-  context: Record<string, any>;
+  context: Record<string, unknown>;
   status: 'pending' | 'sent' | 'completed' | 'dismissed';
   created_at: string;
   updated_at: string;
@@ -138,7 +138,7 @@ export function useFollowUpQueue() {
     followUpType: string,
     checkAt: Date,
     messageTemplate?: string,
-    context?: Record<string, any>
+    context?: Record<string, unknown>
   ) => {
     if (!user?.id) return;
 

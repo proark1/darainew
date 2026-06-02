@@ -15,7 +15,7 @@ import {
   X,
   Focus,
 } from 'lucide-react';
-import { format, isToday, isPast, isBefore, startOfDay, endOfDay } from 'date-fns';
+import { format, isToday, isPast, isBefore, endOfDay } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useDailyCheckins } from '@/hooks/useDailyCheckins';
 
@@ -35,9 +35,8 @@ export function TodayFocusView({
   onPlanDay,
 }: TodayFocusViewProps) {
   const { todayMorning } = useDailyCheckins();
-  const now = new Date();
-  const todayStart = startOfDay(now);
-  const todayEnd = endOfDay(now);
+  const now = useMemo(() => new Date(), []);
+  const todayEnd = useMemo(() => endOfDay(now), [now]);
 
   // Get overdue tasks (max 3 to reduce overwhelm)
   const overdueTasks = useMemo(() => {

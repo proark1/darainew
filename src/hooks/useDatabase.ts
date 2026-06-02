@@ -54,15 +54,6 @@ interface DbEvent {
   updated_at: string;
 }
 
-interface SharedItem {
-  id: string;
-  item_type: 'task' | 'event';
-  item_id: string;
-  owner_id: string;
-  shared_with_id: string;
-  permission: 'view' | 'edit';
-}
-
 const EMPTY_TASKS: Task[] = [];
 const EMPTY_EVENTS: CalendarEvent[] = [];
 
@@ -185,7 +176,7 @@ export function useDatabase(userId: string | undefined) {
       moduleHealth.reportSuccess('events');
       // De-dupe (an event I created in the family group matches both clauses).
       const seen = new Set<string>();
-      return (data ?? []).filter((e: any) => {
+      return (data ?? []).filter((e: { id: string }) => {
         if (seen.has(e.id)) return false;
         seen.add(e.id);
         return true;
@@ -245,12 +236,13 @@ export function useDatabase(userId: string | undefined) {
   const flushRunner = useCallback(async (entry: offlineQueue.OfflineQueueEntry) => {
     const table = entry.table as 'tasks' | 'events';
     if (entry.op === 'insert') {
-      const { error } = await supabase.from(table).insert([entry.payload] as any);
+      // payload shape is validated before enqueueing; cast through unknown to satisfy strict TS
+      const { error } = (await supabase.from(table).insert([entry.payload as Record<string, unknown>])) as { error: Error | null };
       if (error) throw error;
       return;
     }
     if (entry.op === 'update') {
-      let q = supabase.from(table).update(entry.payload as any);
+      let q = supabase.from(table).update(entry.payload as Record<string, unknown>);
       const id = entry.match?.id;
       if (Array.isArray(id)) {
         q = q.in('id', id as string[]);
@@ -372,7 +364,7 @@ export function useDatabase(userId: string | undefined) {
 
     const { data, error } = await supabase
       .from('tasks')
-      .insert([insertData] as any)
+      .insert([insertData as Record<string, unknown>])
       .select()
       .maybeSingle();
 

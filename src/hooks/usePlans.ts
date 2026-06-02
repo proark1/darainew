@@ -5,6 +5,17 @@ import { useAuth } from './useAuth';
 import { useSharedRealtime } from './useSharedRealtime';
 import { toast } from 'sonner';
 
+// Custom tables not yet in the generated Supabase types
+type DbRow = Record<string, unknown>;
+type QueryChain = Promise<{ data: DbRow[] | null; error: unknown }> & {
+  eq(col: string, val: unknown): QueryChain;
+  order(col: string, opts?: Record<string, boolean>): QueryChain;
+  limit(n: number): QueryChain;
+};
+function fromUntyped(table: string): { select(cols: string): QueryChain } {
+  return (supabase as unknown as { from: (t: string) => { select: (c: string) => QueryChain } }).from(table);
+}
+
 export type PlanStatus =
   | 'draft'
   | 'awaiting_confirm'
@@ -74,14 +85,13 @@ export function usePlans() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const { data, error } = await (supabase as any)
-        .from('dori_active_plans')
+      const { data, error } = await fromUntyped('dori_active_plans')
         .select('*')
         .eq('user_id', user.id)
         .order('updated_at', { ascending: false })
         .limit(50);
       if (error) throw error;
-      const rows: PlanRow[] = (data ?? []).map((r: any) => ({
+      const rows: PlanRow[] = (data ?? []).map((r) => ({
         id: r.id,
         title: r.title,
         description: r.description,
@@ -191,17 +201,16 @@ export function usePlans() {
 
   const fetchSteps = useCallback(async (planId: string): Promise<PlanStep[]> => {
     if (!user?.id) return [];
-    const { data, error } = await (supabase as any)
-      .from('dori_plan_steps')
+    const { data, error } = await fromUntyped('dori_plan_steps')
       .select('*')
       .eq('user_id', user.id)
       .eq('plan_id', planId)
       .order('idx', { ascending: true });
     if (error) {
-      console.warn('[usePlans] fetchSteps failed', error.message);
+      console.warn('[usePlans] fetchSteps failed', (error as { message: string }).message);
       return [];
     }
-    return (data ?? []).map((r: any) => ({
+    return (data ?? []).map((r) => ({
       id: r.id,
       idx: Number(r.idx ?? 0),
       title: r.title,

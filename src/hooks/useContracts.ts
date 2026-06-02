@@ -65,7 +65,7 @@ export function useContracts(userId: string | undefined) {
   const queryClient = useQueryClient();
   const { notifyContractCreated } = useAppNotifications();
 
-  const mapDbToContract = (row: any): Contract => ({
+  const mapDbToContract = (row: Record<string, unknown>): Contract => ({
     id: row.id,
     userId: row.user_id,
     contactId: row.contact_id || undefined,
@@ -159,7 +159,7 @@ export function useContracts(userId: string | undefined) {
     id: string,
     updates: Partial<ContractInput>
   ): Promise<boolean> => {
-    const dbUpdates: Record<string, any> = {};
+    const dbUpdates: Record<string, unknown> = {};
 
     if (updates.name !== undefined) dbUpdates.name = updates.name;
     if (updates.category !== undefined) dbUpdates.category = updates.category;

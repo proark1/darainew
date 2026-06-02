@@ -24,7 +24,7 @@ interface Suggestion {
   category: string;
   suggested_action: string;
   reasoning: string | null;
-  suggested_payload: any;
+  suggested_payload: Record<string, unknown> | null;
 }
 
 const ACTION_LABEL: Record<string, string> = {
@@ -79,6 +79,7 @@ export function EmailActionPipelineCard({
     setItems((data ?? []) as Suggestion[]);
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [user?.id]);
 
   const runClassifier = async (limit = 25, force = false) => {
@@ -90,7 +91,7 @@ export function EmailActionPipelineCard({
         body: { user_id: user.id, limit, force },
       });
       if (error) throw error;
-      const n = (data as any)?.classified ?? 0;
+      const n = (data as { classified?: number } | null)?.classified ?? 0;
       toast.success(n > 0 ? `Found ${n} new suggestion${n === 1 ? '' : 's'}` : 'No new actions found');
       await load();
     } catch (e) {

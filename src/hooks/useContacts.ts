@@ -81,7 +81,7 @@ const EMPTY_CONTACTS: Contact[] = [];
 export function useContacts(userId: string | undefined) {
   const queryClient = useQueryClient();
 
-  const mapDbToContact = (row: any): Contact => {
+  const mapDbToContact = (row: Record<string, unknown>): Contact => {
     const familyRelationshipRaw =
       typeof row.family_relationship === 'string' ? row.family_relationship.toLowerCase() : undefined;
 
@@ -200,7 +200,7 @@ export function useContacts(userId: string | undefined) {
     updates: Partial<ContactInput>
   ): Promise<boolean> => {
     try {
-      const dbUpdates: Record<string, any> = {};
+      const dbUpdates: Record<string, unknown> = {};
 
       if (updates.name !== undefined) dbUpdates.name = updates.name;
       if (updates.email !== undefined) dbUpdates.email = updates.email || null;
