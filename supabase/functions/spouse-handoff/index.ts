@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { strictAppOrigin } from '../_shared/cors.ts';
+import { resolveUserId } from '../_shared/auth.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": strictAppOrigin(),
@@ -11,6 +12,14 @@ const corsHeaders = {
 // who has the most calendar capacity in the next 24h.
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  // User-facing: authenticate the caller (the gateway does not verify JWTs).
+  const auth = await resolveUserId(req);
+  if (!auth) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -44,6 +53,18 @@ serve(async (req) => {
 
     if (!members || members.length === 0) {
       return new Response(JSON.stringify({ error: "no members" }), { status: 404, headers: corsHeaders });
+    }
+
+    // Authorize: both the caller AND the task's current owner must be accepted
+    // members of the target group. Checking only the caller would still let a
+    // valid login route an arbitrary task from another group into their own
+    // (IDOR). Reuses the members list above — no extra query.
+    const isCallerMember = members.some((m) => m.user_id === auth.userId);
+    const isTaskOwnerMember = members.some((m) => m.user_id === task.user_id);
+    if (!isCallerMember || !isTaskOwnerMember) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const now = new Date();

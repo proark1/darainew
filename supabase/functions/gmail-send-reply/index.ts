@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { strictAppOrigin } from '../_shared/cors.ts';
+import { resolveUserId } from '../_shared/auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': strictAppOrigin(),
@@ -41,32 +42,18 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
+    // Auth: a real user JWT, or the hardened service-role + x-telegram-user-id
+    // path (UUID-validated + HMAC-checked when INTERNAL_AUTH_SECRET is set) —
+    // see _shared/auth.ts. This replaces the previous hand-rolled path that
+    // trusted x-telegram-user-id on the service key alone.
+    const auth = await resolveUserId(req);
+    if (!auth) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
+    const userId = auth.userId;
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
-    // Accept two auth shapes:
-    //   (a) a real user JWT — the normal web-app path
-    //   (b) service-role token + x-telegram-user-id header — used when the
-    //       chat function dispatches on behalf of a Telegram user
-    const token = authHeader.replace('Bearer ', '');
-    const telegramUserIdHeader = req.headers.get('x-telegram-user-id');
-    let userId: string;
-    if (token === serviceRoleKey && telegramUserIdHeader) {
-      userId = telegramUserIdHeader;
-    } else {
-      const supabase = createClient(supabaseUrl, supabaseAnonKey, { global: { headers: { Authorization: authHeader } } });
-      const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-      if (claimsError || !claimsData?.claims) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-      userId = claimsData.claims.sub;
-    }
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     const { to, subject, body, threadId, gmailMessageId } = await req.json();
