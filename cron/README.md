@@ -30,10 +30,23 @@ migration, evaluated in **UTC**:
 | `meeting-bot-reconciler-cron` | `*/30 * * * *` | Meeting bot reconciliation |
 | `trip-prep-cron` | `0 9 * * *` | Trip preparation |
 | `calendar-sync-all` | `*/15 * * * *` | Two-way Google/Apple calendar sync |
+| `dori-proactive` | `*/30 * * * *` | Proactive Telegram nudges (timezone-aware, deduped) |
+| `meeting-preflight` | `*/10 * * * *` | Pre-meeting brief ~15 min before each meeting |
+| `morning-thread` | `0 6 * * *` | Consolidated daily morning thread → Telegram |
+| `gmail-sync-cron` | `0 5 * * *` | Daily background Gmail sync |
+| `conflict-detector` | `*/30 * * * *` | Schedule-conflict detection |
+| `travel-intelligence` | `0 7 * * *` | Detect upcoming trips from calendar |
+| `routine-learner` | `0 3 * * *` | Learn recurring routines |
+| `episodic-memory-builder` | `0 4 * * *` | Build long-term episodic memories |
+| `life-score-commentary` | `0 22 * * *` | Daily life-score commentary (deduped per day) |
 
 The hourly/15-min functions are themselves timezone-aware and dedupe per local
 day, so pinging them every hour/15 min is correct — they decide when to actually
-send.
+send. The fixed-time daily jobs (`0 h * * *`) run once per day in **UTC**.
+
+> `morning-thread` is **not** timezone-aware and its Telegram push isn't deduped
+> per local day, so it's scheduled once daily; don't raise its frequency without
+> first adding a per-day send gate, or it will message users on every tick.
 
 ## ⚠️ If the cron service keeps failing every run
 
@@ -99,7 +112,7 @@ Tail the service logs — every fired job logs a line:
 
 ```
 [cron] health server on :8080
-[cron] scheduler started — 10 jobs, base=http://edge-runtime.railway.internal:9000
+[cron] scheduler started — 19 jobs, base=http://edge-runtime.railway.internal:9000
 [cron] briefing-dispatch-cron -> 200 (143ms)
 ```
 

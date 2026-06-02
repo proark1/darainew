@@ -44,6 +44,18 @@ const JOBS = [
   { name: 'meeting-bot-reconciler-cron',     schedule: '*/30 * * * *' },
   { name: 'trip-prep-cron',                  schedule: '0 9 * * *' },
   { name: 'calendar-sync-all',               schedule: '*/15 * * * *' },
+  // Time-sensitive / Telegram jobs.
+  { name: 'dori-proactive',                  schedule: '*/30 * * * *' },
+  { name: 'meeting-preflight',               schedule: '*/10 * * * *' },
+  { name: 'morning-thread',                  schedule: '0 6 * * *' },
+  // Sync & detection.
+  { name: 'gmail-sync-cron',                 schedule: '0 5 * * *' },
+  { name: 'conflict-detector',               schedule: '*/30 * * * *' },
+  { name: 'travel-intelligence',             schedule: '0 7 * * *' },
+  // Daily AI batch (learning / memory).
+  { name: 'routine-learner',                 schedule: '0 3 * * *' },
+  { name: 'episodic-memory-builder',         schedule: '0 4 * * *' },
+  { name: 'life-score-commentary',           schedule: '0 22 * * *' },
 ];
 
 // ── Minimal 5-field cron matcher (UTC) ─────────────────────────────────────
