@@ -48,6 +48,14 @@ async function getHousehold(supabase: any, ownerId: string, partnerId: string | 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
+  // Internal/cron only: the gateway does not verify JWTs for /functions/v1,
+  // so require the service-role bearer in code (matches the *-cron siblings).
+  if (req.headers.get('Authorization') !== `Bearer ${SERVICE_KEY}`) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
   const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
   const force = new URL(req.url).searchParams.get('force') === '1';
 

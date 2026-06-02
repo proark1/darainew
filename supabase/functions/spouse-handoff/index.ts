@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { strictAppOrigin } from '../_shared/cors.ts';
+import { resolveUserId } from '../_shared/auth.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": strictAppOrigin(),
@@ -11,6 +12,14 @@ const corsHeaders = {
 // who has the most calendar capacity in the next 24h.
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  // User-facing: authenticate the caller (the gateway does not verify JWTs).
+  const auth = await resolveUserId(req);
+  if (!auth) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -23,6 +32,21 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "task_id and group_id required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Authorize: the caller must be an accepted member of the target group, so
+    // a valid login can't route tasks inside an arbitrary group_id (IDOR).
+    const { data: membership } = await supabase
+      .from("family_agent_members")
+      .select("user_id")
+      .eq("group_id", group_id)
+      .eq("user_id", auth.userId)
+      .eq("status", "accepted")
+      .maybeSingle();
+    if (!membership) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 

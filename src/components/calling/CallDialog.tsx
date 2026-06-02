@@ -94,14 +94,14 @@ export function CallDialog({
   // Show fallback suggestion when quality is poor
   useEffect(() => {
     if (
-      qualityStats.shouldFallbackToAudio && 
-      callType === 'video' && 
+      qualityStats.shouldFallbackToAudio &&
+      callType === 'video' &&
       !fallbackDismissed &&
-      isConnected
+      callStatus === 'connected'
     ) {
       setShowFallbackSuggestion(true);
     }
-  }, [qualityStats.shouldFallbackToAudio, callType, fallbackDismissed]);
+  }, [qualityStats.shouldFallbackToAudio, callType, fallbackDismissed, callStatus]);
 
   const handleAcceptFallback = () => {
     setShowFallbackSuggestion(false);

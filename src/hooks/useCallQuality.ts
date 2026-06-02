@@ -182,28 +182,32 @@ export function useCallQuality(peerConnection: RTCPeerConnection | null) {
           newStats.selectedCandidatePair = null;
         }
 
-        // Calculate signal strength
-        newStats.signalStrength = calculateSignalStrength(
-          newStats.packetLoss ?? stats.packetLoss,
-          newStats.latency ?? stats.latency,
-          newStats.jitter ?? stats.jitter
-        );
-
-        // Check if we should suggest fallback to audio
+        // Check if we should suggest fallback to audio (this tick's fresh readings)
         const isVideoQualityPoor = (
           (newStats.packetLoss !== undefined && newStats.packetLoss !== null && newStats.packetLoss > PACKET_LOSS_THRESHOLD) ||
           (newStats.latency !== undefined && newStats.latency !== null && newStats.latency > LATENCY_THRESHOLD) ||
           (newStats.bitrate !== undefined && newStats.bitrate !== null && newStats.bitrate < BITRATE_LOW_THRESHOLD && newStats.bitrate > 0)
         );
 
-        const newPoorStreak = isVideoQualityPoor 
-          ? (stats.poorQualityStreak + 1) 
-          : 0;
-
-        newStats.poorQualityStreak = newPoorStreak;
-        newStats.shouldFallbackToAudio = newPoorStreak >= POOR_QUALITY_STREAK_THRESHOLD;
-
-        setStats((prev) => ({ ...prev, ...newStats }));
+        setStats((prev) => {
+          // Derive the streak and signal strength from `prev` (not the effect
+          // closure). The interval below keeps the same closure between effect
+          // re-runs, so reading `stats.poorQualityStreak` would freeze the streak
+          // whenever packetLoss/latency/jitter are stable — and the auto-fallback
+          // (threshold 3) would never fire on a steadily-poor connection.
+          const newPoorStreak = isVideoQualityPoor ? prev.poorQualityStreak + 1 : 0;
+          return {
+            ...prev,
+            ...newStats,
+            signalStrength: calculateSignalStrength(
+              newStats.packetLoss ?? prev.packetLoss,
+              newStats.latency ?? prev.latency,
+              newStats.jitter ?? prev.jitter
+            ),
+            poorQualityStreak: newPoorStreak,
+            shouldFallbackToAudio: newPoorStreak >= POOR_QUALITY_STREAK_THRESHOLD,
+          };
+        });
       } catch (error) {
         console.error('Error getting WebRTC stats:', error);
       }
@@ -232,7 +236,7 @@ export function useCallQuality(peerConnection: RTCPeerConnection | null) {
       peerConnection.removeEventListener('connectionstatechange', handleConnectionChange);
       peerConnection.removeEventListener('iceconnectionstatechange', handleConnectionChange);
     };
-  }, [peerConnection, calculateSignalStrength, stats.packetLoss, stats.latency, stats.jitter]);
+  }, [peerConnection, calculateSignalStrength]);
 
   return stats;
 }
