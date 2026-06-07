@@ -89,6 +89,12 @@ serve(async (req) => {
     connection.refresh_token = (await decryptTokenIfNeeded(connection.refresh_token)) ?? connection.refresh_token;
     let accessToken = connection.access_token;
     if (connection.token_expires_at && new Date(connection.token_expires_at) < new Date(Date.now() + 60_000)) {
+      if (!connection.refresh_token) {
+        await admin.from('external_calendar_connections').update({ last_sync_error: 'missing_refresh_token' }).eq('id', connectionId);
+        return new Response(JSON.stringify({ error: 'Failed to refresh Outlook token. Please reconnect.' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       const newTokens = await refreshOutlookToken(connection.refresh_token);
       if (!newTokens) {
         await admin.from('external_calendar_connections').update({ last_sync_error: 'token_refresh_failed' }).eq('id', connectionId);
