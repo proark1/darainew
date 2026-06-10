@@ -49,6 +49,12 @@ function escapeHtml(s: string): string {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// For HTML attribute values (e.g. href): also escape double quotes, which would
+// otherwise terminate the attribute and make Telegram reject the message.
+function escapeAttr(s: string): string {
+  return escapeHtml(s).replace(/"/g, "&quot;");
+}
+
 function partsIn(now: Date, tz: string) {
   const hour = parseInt(
     new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", hour12: false }).format(now), 10,
@@ -130,7 +136,7 @@ function buildTelegramMessages(ideas: ContentIdea[]): string[] {
   const blocks = ideas.map((i) => {
     const tag = i.kind === "current" ? "🔥" : "♻️";
     const title = i.source_url
-      ? `<a href="${i.source_url}">${escapeHtml(i.headline)}</a>`
+      ? `<a href="${escapeAttr(i.source_url)}">${escapeHtml(i.headline)}</a>`
       : escapeHtml(i.headline);
     const lines = [`${tag} <b>${title}</b>`];
     if (i.hook) lines.push(`<i>${escapeHtml(i.hook)}</i>`);
