@@ -24,6 +24,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { describeEdgeError } from '@/lib/edgeError';
 import { useAuth } from '@/hooks/useAuth';
@@ -41,6 +43,8 @@ interface GroupLink {
   title: string | null;
   linked_at: string | null;
   partner_user_id: string | null;
+  voice_replies_enabled: boolean;
+  voice_digest_enabled: boolean;
 }
 
 // Fallback only — real username is fetched from telegram-link (getMe) so the
@@ -71,6 +75,7 @@ export function TelegramHubPanel() {
   const { toast } = useToast();
   const [link, setLink] = useState<TelegramLink | null>(null);
   const [group, setGroup] = useState<GroupLink | null>(null);
+  const [personalVoiceReplies, setPersonalVoiceReplies] = useState(false);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [generatingGroup, setGeneratingGroup] = useState(false);
@@ -88,12 +93,14 @@ export function TelegramHubPanel() {
 
   const fetchLink = async () => {
     if (!user) return;
-    const [{ data: l }, { data: g }] = await Promise.all([
+    const [{ data: l }, { data: g }, { data: ps }] = await Promise.all([
       supabase.from('telegram_links').select('is_active, telegram_username, telegram_first_name, linked_at').eq('user_id', user.id).maybeSingle(),
-      supabase.from('telegram_group_links').select('is_active, title, linked_at, partner_user_id').eq('owner_user_id', user.id).maybeSingle(),
+      supabase.from('telegram_group_links').select('is_active, title, linked_at, partner_user_id, voice_replies_enabled, voice_digest_enabled').eq('owner_user_id', user.id).maybeSingle(),
+      supabase.from('proactive_settings').select('prefer_voice_replies').eq('user_id', user.id).maybeSingle(),
     ]);
     setLink(l);
     setGroup(g);
+    setPersonalVoiceReplies(!!ps?.prefer_voice_replies);
     setLoading(false);
   };
 
@@ -153,6 +160,40 @@ export function TelegramHubPanel() {
       toast({ title: scope === 'group' ? 'Family group disconnected' : 'Telegram disconnected' });
     } catch {
       toast({ title: 'Could not unlink', variant: 'destructive' });
+    }
+  };
+
+  const updatePersonalVoiceReplies = async (value: boolean) => {
+    if (!user) return;
+    const previous = personalVoiceReplies;
+    setPersonalVoiceReplies(value);
+    const { error } = await supabase
+      .from('proactive_settings')
+      .upsert({
+        user_id: user.id,
+        prefer_voice_replies: value,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+    if (error) {
+      setPersonalVoiceReplies(previous);
+      toast({ title: 'Could not update voice replies', description: await describeEdgeError(error, 'Could not update voice replies'), variant: 'destructive' });
+    }
+  };
+
+  const updateGroupVoiceSetting = async (column: 'voice_replies_enabled' | 'voice_digest_enabled', value: boolean) => {
+    if (!user || !group) return;
+    const previous = group;
+    setGroup({ ...group, [column]: value });
+    const update = column === 'voice_replies_enabled'
+      ? { voice_replies_enabled: value, updated_at: new Date().toISOString() }
+      : { voice_digest_enabled: value, updated_at: new Date().toISOString() };
+    const { error } = await supabase
+      .from('telegram_group_links')
+      .update(update)
+      .eq('owner_user_id', user.id);
+    if (error) {
+      setGroup(previous);
+      toast({ title: 'Could not update group voice setting', description: await describeEdgeError(error, 'Could not update group voice setting'), variant: 'destructive' });
     }
   };
 
@@ -267,6 +308,25 @@ export function TelegramHubPanel() {
               <p className="text-sm text-muted-foreground">
                 You're chatting as <span className="font-medium text-foreground">@{link.telegram_username ?? link.telegram_first_name}</span>. Open Telegram and search <span className="font-medium text-foreground">@{botUsername}</span> to start.
               </p>
+              <div className="rounded-md border border-border p-3 space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="telegram-personal-voice-replies" className="text-sm flex items-center gap-1.5">
+                      <Mic className="w-3.5 h-3.5" /> Voice replies in 1:1 chat
+                    </Label>
+                    <p className="text-xs text-muted-foreground">When enabled, Dori can answer short personal Telegram replies as voice notes. You can also send <code className="text-[11px] bg-muted px-1 py-0.5 rounded">/voice on</code> or <code className="text-[11px] bg-muted px-1 py-0.5 rounded">/voice off</code>.</p>
+                  </div>
+                  <Switch
+                    id="telegram-personal-voice-replies"
+                    checked={personalVoiceReplies}
+                    onCheckedChange={updatePersonalVoiceReplies}
+                  />
+                </div>
+                <div className="rounded-md bg-muted/40 border border-border p-3 text-xs text-muted-foreground space-y-1">
+                  <p><span className="font-medium text-foreground">Voice news:</span> send <code className="text-[11px] bg-background px-1 py-0.5 rounded">/news voice</code> or ask “send today's news as audio”.</p>
+                  <p><span className="font-medium text-foreground">Scheduled voice briefings:</span> enable <span className="font-medium text-foreground">Telegram voice</span> in the Briefings tab.</p>
+                </div>
+              </div>
               <div className="flex gap-2 flex-wrap">
                 <a
                   href={`https://t.me/${botUsername}`}
@@ -342,6 +402,30 @@ export function TelegramHubPanel() {
                   💡 Want your spouse's items in the group too? Invite them in <span className="font-medium text-foreground">Settings → Team</span>, then they should also send <code className="text-[11px] bg-background px-1 py-0.5 rounded">/linkme &lt;their-personal-code&gt;</code> in the group.
                 </div>
               )}
+              <div className="rounded-md border border-border p-3 space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="telegram-group-voice-replies" className="text-sm">Voice replies in group</Label>
+                    <p className="text-xs text-muted-foreground">Let Dori answer normal group chats with short Telegram voice notes.</p>
+                  </div>
+                  <Switch
+                    id="telegram-group-voice-replies"
+                    checked={!!group.voice_replies_enabled}
+                    onCheckedChange={(v) => updateGroupVoiceSetting('voice_replies_enabled', v)}
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="telegram-group-voice-digest" className="text-sm">Voice morning digest</Label>
+                    <p className="text-xs text-muted-foreground">Send a spoken family digest before the text version with details.</p>
+                  </div>
+                  <Switch
+                    id="telegram-group-voice-digest"
+                    checked={!!group.voice_digest_enabled}
+                    onCheckedChange={(v) => updateGroupVoiceSetting('voice_digest_enabled', v)}
+                  />
+                </div>
+              </div>
               <Button variant="outline" size="sm" onClick={() => handleUnlink('group')}>
                 <Unlink className="w-3 h-3 mr-2" /> Disconnect group
               </Button>
