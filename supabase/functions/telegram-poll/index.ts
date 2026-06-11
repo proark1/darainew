@@ -34,6 +34,22 @@ import {
   tgEditReplyMarkup,
 } from '../_shared/telegram-inline.ts';
 import { buildDoriContext } from '../_shared/dori-context.ts';
+import {
+  buildAssistantCockpitKeyboard,
+  buildAssistantCockpitMessage,
+  buildSteeringCommandMessage,
+  buildSteeringPrompt,
+  dispatchTelegramControlCommand,
+  type TelegramControlCommand,
+  type TelegramSteeringCommand,
+} from '../_shared/telegram-control.ts';
+import {
+  buildBestNextActionMessage,
+  buildMemorySnapshotMessage,
+  escapeTelegramHtml,
+  formatTelegramDate,
+  userDayYmd,
+} from '../_shared/telegram-quick.ts';
 import { strictAppOrigin } from '../_shared/cors.ts';
 import {
   fetchLatestUndoableForUser,
@@ -69,6 +85,294 @@ async function sendMessage(chatId: number, text: string, tgKey: string) {
     console.error('sendMessage failed:', e);
   }
 }
+
+async function markTelegramProcessed(
+  supabase: SupabaseClient,
+  updateId: number,
+  chatId: number,
+  text: string,
+  rawUpdate: unknown,
+): Promise<void> {
+  await supabase.from('telegram_messages').upsert({
+    update_id: updateId,
+    chat_id: chatId,
+    text,
+    raw_update: rawUpdate,
+    processed: true,
+  }, { onConflict: 'update_id' });
+}
+
+async function loadUserTimezone(supabase: SupabaseClient, userId: string): Promise<string | undefined> {
+  const { data } = await supabase.from('profiles').select('timezone').eq('user_id', userId).maybeSingle();
+  return data?.timezone || undefined;
+}
+
+async function resolveActiveWorkspaceForChat(
+  supabase: SupabaseClient,
+  userId: string,
+  activeWorkspaceId?: string | null,
+): Promise<string | null> {
+  if (!activeWorkspaceId) return null;
+  const { data: membership } = await supabase.from('workspace_members')
+    .select('user_id')
+    .eq('workspace_id', activeWorkspaceId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (membership) return activeWorkspaceId;
+
+  // Clear stale workspace scope so command shortcuts and the main AI path
+  // can't leak or act inside a workspace the user has left.
+  await supabase.from('telegram_links').update({ active_workspace_id: null }).eq('user_id', userId);
+  return null;
+}
+
+async function sendApprovalInbox(
+  supabase: SupabaseClient,
+  chatId: number,
+  userId: string,
+  tgKey: string,
+  preferVoice: boolean,
+): Promise<void> {
+  const tz = await loadUserTimezone(supabase, userId);
+  const nowIso = new Date().toISOString();
+  const { data: pending, error } = await supabase
+    .from('auto_actions_log')
+    .select('id, action_type, entity_type, reason, source, created_at, expires_at')
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+    .order('created_at', { ascending: false })
+    .limit(10);
+
+  if (error) {
+    console.error('/approvals failed', error);
+    await sendMessage(chatId, '⚠️ Could not load your approval inbox. Try again shortly.', tgKey);
+    return;
+  }
+
+  const rows = (pending ?? []) as Array<{
+    id: string;
+    action_type?: string | null;
+    reason?: string | null;
+    source?: string | null;
+    expires_at?: string | null;
+  }>;
+
+  if (rows.length === 0) {
+    await sendDoriReply({
+      chatId,
+      text: '✅ <b>Approval inbox is clear.</b>\nNo pending actions need your OK right now.',
+      preferVoice,
+      telegramKey: tgKey,
+    });
+    return;
+  }
+
+  await sendDoriReply({
+    chatId,
+    text: `📥 <b>Approval inbox</b>\n${rows.length} pending action${rows.length === 1 ? '' : 's'} need your OK. Tap a button on each card:`,
+    preferVoice,
+    telegramKey: tgKey,
+  });
+
+  for (const row of rows) {
+    const title = row.reason || row.action_type || 'Pending action';
+    const expires = row.expires_at ? `\n⏳ Expires ${escapeTelegramHtml(formatTelegramDate(row.expires_at, tz))}` : '';
+    const source = row.source ? `\nSource: <code>${escapeTelegramHtml(row.source)}</code>` : '';
+    await tgSendWithKeyboard(
+      chatId,
+      `🤔 <b>${escapeTelegramHtml(title)}</b>${source}${expires}`,
+      buildConfirmKeyboard(row.id),
+      tgKey,
+    );
+  }
+}
+
+async function sendBestNextAction(
+  supabase: SupabaseClient,
+  chatId: number,
+  userId: string,
+  tgKey: string,
+  preferVoice: boolean,
+  workspaceId: string | null,
+): Promise<void> {
+  const tz = await loadUserTimezone(supabase, userId);
+  const nowIso = new Date().toISOString();
+  const { count: pendingCount } = await supabase
+    .from('auto_actions_log')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .or(`expires_at.is.null,expires_at.gt.${nowIso}`);
+
+  const ctx = await buildDoriContext(supabase, userId, workspaceId, { timezone: tz });
+  const now = new Date();
+  const nextEvent = ctx.todayEvents
+    .filter((e) => new Date(e.start_time).getTime() >= now.getTime())
+    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0];
+  const todayYmd = userDayYmd(now, tz);
+  const overdue = ctx.openTasks
+    .filter((t) => t.due_date && userDayYmd(new Date(t.due_date), tz) < todayYmd)
+    .sort((a, b) => {
+      const priorityScore = (p: string) => p === 'high' ? 0 : p === 'medium' ? 1 : 2;
+      return priorityScore(a.priority) - priorityScore(b.priority);
+    })[0];
+  const dueToday = ctx.openTasks.find((t) => t.due_date && userDayYmd(new Date(t.due_date), tz) === todayYmd);
+
+  const text = buildBestNextActionMessage({
+    pendingCount: pendingCount ?? 0,
+    workspaceId,
+    nextEvent,
+    overdue,
+    dueToday,
+    now,
+    timezone: tz,
+  });
+
+  await sendDoriReply({ chatId, text, preferVoice, telegramKey: tgKey });
+}
+
+async function sendMemorySnapshot(
+  supabase: SupabaseClient,
+  chatId: number,
+  userId: string,
+  tgKey: string,
+  preferVoice: boolean,
+  workspaceId: string | null,
+): Promise<void> {
+  let memoryQuery = supabase
+    .from('ai_memory')
+    .select('memory_type, category, key, value, confidence, source, updated_at')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .order('updated_at', { ascending: false });
+  memoryQuery = workspaceId
+    ? memoryQuery.eq('workspace_id', workspaceId)
+    : memoryQuery.is('workspace_id', null);
+
+  const [{ data: memories }, { data: prefs }] = await Promise.all([
+    memoryQuery.limit(8),
+    supabase
+      .from('dori_learned_preferences')
+      .select('key, value, confidence, times_seen, last_seen_at')
+      .eq('user_id', userId)
+      .order('confidence', { ascending: false })
+      .limit(8),
+  ]);
+
+  const memoryRows = (memories ?? []) as Array<{
+    memory_type?: string | null;
+    category?: string | null;
+    key?: string | null;
+    value?: string | null;
+  }>;
+  const prefRows = (prefs ?? []) as Array<{
+    key?: string | null;
+    value?: string | null;
+    confidence?: number | null;
+    times_seen?: number | null;
+  }>;
+
+  const text = buildMemorySnapshotMessage({ workspaceId, memoryRows, prefRows });
+  await sendDoriReply({ chatId, text, preferVoice, telegramKey: tgKey });
+}
+
+
+async function sendAssistantCockpit(chatId: number, tgKey: string): Promise<void> {
+  await tgSendWithKeyboard(chatId, buildAssistantCockpitMessage(), buildAssistantCockpitKeyboard(), tgKey);
+}
+
+async function sendSteeringCommand(
+  chatId: number,
+  tgKey: string,
+  command: TelegramSteeringCommand,
+): Promise<void> {
+  await tgSendWithKeyboard(chatId, buildSteeringCommandMessage(command), buildAssistantCockpitKeyboard(), tgKey);
+}
+
+async function runSteeringCommand(
+  chatId: number,
+  userId: string,
+  tgKey: string,
+  command: TelegramSteeringCommand,
+  args: string,
+  preferVoice: boolean,
+  workspaceId: string | null,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<void> {
+  if (!args.trim()) {
+    await sendSteeringCommand(chatId, tgKey, command);
+    return;
+  }
+
+  await tg('sendChatAction', { chat_id: chatId, action: 'typing' }, tgKey).catch(() => {});
+  const dori = await callDori(userId, buildSteeringPrompt(command, args), chatId, supabaseUrl, serviceKey, null, undefined, workspaceId);
+  const queued = dori.toolResults.filter((t) => t.queued && t.actionId);
+  const executed = dori.toolResults.filter((t) => !t.queued);
+  const bodyParts: string[] = [];
+  if (dori.reply) bodyParts.push(dori.reply);
+  if (executed.length > 0) bodyParts.push(executed.map((t) => t.message).join('\n'));
+  const replyText = bodyParts.join('\n\n').trim() || `I prepared the /${command} request.`;
+
+  await sendDoriReply({ chatId, text: replyText, preferVoice, telegramKey: tgKey });
+
+  for (const action of queued) {
+    await tgSendWithKeyboard(
+      chatId,
+      `🤔 <b>Approve Dori action?</b>
+${escapeTelegramHtml(action.summary || action.message || 'Queued action')}`,
+      buildConfirmKeyboard(action.actionId as string),
+      tgKey,
+    );
+  }
+}
+
+async function recordTelegramControlMetric(
+  supabase: SupabaseClient,
+  userId: string,
+  chatId: number,
+  command: TelegramControlCommand,
+  source: 'slash' | 'callback',
+  workspaceId?: string | null,
+): Promise<void> {
+  try {
+    await supabase.from('analytics_events').insert({
+      user_id: userId,
+      event_category: 'telegram',
+      event_type: 'telegram_control_command',
+      page_path: 'telegram',
+      event_data: {
+        command,
+        source,
+        chat_id: chatId,
+        workspace_id: workspaceId ?? null,
+      },
+    });
+  } catch (e) {
+    console.warn('telegram control metric failed', e);
+  }
+}
+
+const PRIVATE_HELP_TEXT = `<b>🤖 Dori in Telegram</b>
+
+Talk naturally, send voice notes, forward messages, or upload photos/screenshots.
+
+<b>Core commands</b>
+/cockpit — open the button-based command center
+/me — today at a glance
+/now — best next move (<code>/next</code>, <code>/whatnow</code>)
+/approvals — approve or cancel pending actions (<code>/pending</code>)
+/memory — what I remember + how to forget (<code>/memories</code>)
+
+<b>Steering modes</b>
+/brief — command-center briefing prompt
+/plan — plan a day, project, or outcome
+/delegate — hand Dori a job with approval rules
+/review — review pending decisions and recent work
+/settings — steer preferences, workspace, focus, voice, and memory
+
+Try: <code>plan my day</code>, <code>summarize unread emails</code>, <code>move dentist to Friday</code>, <code>remember I prefer meetings after 10</code>.`;
 
 // Download a Telegram file by id and return the raw bytes. Used by the
 // document-intake path which extracts text rather than passing the file
@@ -801,6 +1105,61 @@ Deno.serve(async (req) => {
         try {
           if (!cbChatId) {
             await tgAnswerCallback(cb.id, '', TELEGRAM_API_KEY);
+          } else if (payload.kind === 'quick_command') {
+            await tgAnswerCallback(cb.id, `/${payload.command}`, TELEGRAM_API_KEY);
+            let commandUserId = tappingUserId;
+            if (!commandUserId) {
+              const { data: linked } = await supabase.from('telegram_links')
+                .select('user_id, active_workspace_id')
+                .eq('chat_id', cbChatId)
+                .eq('is_active', true)
+                .maybeSingle();
+              commandUserId = linked?.user_id as string | undefined;
+            }
+            if (!commandUserId) {
+              await sendMessage(cbChatId, '🔒 Link this chat to Dori first, then reopen the cockpit.', TELEGRAM_API_KEY);
+            } else {
+              const { data: linked } = await supabase.from('telegram_links')
+                .select('active_workspace_id')
+                .eq('chat_id', cbChatId)
+                .eq('is_active', true)
+                .maybeSingle();
+              const activeWs = await resolveActiveWorkspaceForChat(
+                supabase,
+                commandUserId,
+                (linked as Record<string, unknown> | null)?.active_workspace_id as string | null,
+              );
+              await dispatchTelegramControlCommand({
+                text: `/${payload.command}`,
+                chatId: cbChatId,
+                userId: commandUserId,
+                workspaceId: activeWs,
+                source: 'callback',
+                handlers: {
+                  sendHelp: () => tgSendWithKeyboard(cbChatId, PRIVATE_HELP_TEXT, buildAssistantCockpitKeyboard(), TELEGRAM_API_KEY),
+                  sendCockpit: () => sendAssistantCockpit(cbChatId, TELEGRAM_API_KEY),
+                  sendApprovals: () => sendApprovalInbox(supabase, cbChatId, commandUserId, TELEGRAM_API_KEY, false),
+                  sendNow: async () => {
+                    try {
+                      await sendBestNextAction(supabase, cbChatId, commandUserId, TELEGRAM_API_KEY, false, activeWs);
+                    } catch (e) {
+                      console.error('cockpit /now failed', e);
+                      await sendMessage(cbChatId, '⚠️ Could not pick a next action. Try /me or ask “plan my day”.', TELEGRAM_API_KEY);
+                    }
+                  },
+                  sendMemory: async () => {
+                    try {
+                      await sendMemorySnapshot(supabase, cbChatId, commandUserId, TELEGRAM_API_KEY, false, activeWs);
+                    } catch (e) {
+                      console.error('cockpit /memory failed', e);
+                      await sendMessage(cbChatId, '⚠️ Could not load memory right now. Try again shortly.', TELEGRAM_API_KEY);
+                    }
+                  },
+                  sendSteering: (command, args) => runSteeringCommand(cbChatId, commandUserId, TELEGRAM_API_KEY, command, args, false, activeWs, supabaseUrl, serviceKey),
+                  recordMetric: (command) => recordTelegramControlMetric(supabase, commandUserId, cbChatId, command, 'callback', activeWs),
+                },
+              });
+            }
           } else if (payload.kind === 'confirm' || payload.kind === 'reject') {
             const actionId = payload.kind === 'confirm' ? payload.actionId : payload.actionId;
             const { data: action } = await supabase.from('auto_actions_log')
@@ -1084,7 +1443,7 @@ Deno.serve(async (req) => {
                 telegram_first_name: fromFirstName,
               }, { onConflict: 'telegram_user_id' });
             }
-            await sendMessage(chatId, `✅ <b>Linked successfully!</b>\n\nHi ${fromFirstName ?? 'there'}, I'm Dori — your personal assistant.`, TELEGRAM_API_KEY);
+            await sendMessage(chatId, `✅ <b>Linked successfully!</b>\n\nHi ${fromFirstName ?? 'there'}, I'm Dori — your personal assistant. Send /help for the Telegram command center.`, TELEGRAM_API_KEY);
           } else {
             await sendMessage(chatId, '❌ This link code is invalid or expired.', TELEGRAM_API_KEY);
           }
@@ -1542,6 +1901,52 @@ Deno.serve(async (req) => {
         }
       }
 
+      const activeWsForChat = await resolveActiveWorkspaceForChat(
+        supabase,
+        link.user_id,
+        (link as Record<string, unknown>).active_workspace_id as string | null,
+      );
+
+      // Compact Telegram control surface: keep common steering actions fast
+      // and deterministic instead of spending an AI round on command parsing.
+      const handledControlCommand = await dispatchTelegramControlCommand({
+        text,
+        updateId: u.update_id,
+        chatId,
+        userId: link.user_id,
+        rawUpdate: u,
+        workspaceId: activeWsForChat,
+        source: 'slash',
+        handlers: {
+          sendHelp: () => tgSendWithKeyboard(chatId, PRIVATE_HELP_TEXT, buildAssistantCockpitKeyboard(), TELEGRAM_API_KEY),
+          sendCockpit: () => sendAssistantCockpit(chatId, TELEGRAM_API_KEY),
+          sendApprovals: () => sendApprovalInbox(supabase, chatId, link.user_id, TELEGRAM_API_KEY, wasVoiceMessage),
+          sendNow: async () => {
+            try {
+              await sendBestNextAction(supabase, chatId, link.user_id, TELEGRAM_API_KEY, wasVoiceMessage, activeWsForChat);
+            } catch (e) {
+              console.error('/now failed', e);
+              await sendMessage(chatId, '⚠️ Could not pick a next action. Try /me or ask “plan my day”.', TELEGRAM_API_KEY);
+            }
+          },
+          sendMemory: async () => {
+            try {
+              await sendMemorySnapshot(supabase, chatId, link.user_id, TELEGRAM_API_KEY, wasVoiceMessage, activeWsForChat);
+            } catch (e) {
+              console.error('/memory failed', e);
+              await sendMessage(chatId, '⚠️ Could not load memory right now. Try again shortly.', TELEGRAM_API_KEY);
+            }
+          },
+          sendSteering: (command, args) => runSteeringCommand(chatId, link.user_id, TELEGRAM_API_KEY, command, args, wasVoiceMessage, activeWsForChat, supabaseUrl, serviceKey),
+          recordMetric: (command) => recordTelegramControlMetric(supabase, link.user_id, chatId, command, 'slash', activeWsForChat),
+          markProcessed: () => markTelegramProcessed(supabase, u.update_id, chatId, text, u),
+        },
+      });
+      if (handledControlCommand) {
+        processed++;
+        continue;
+      }
+
       // /me — instant personal digest, no AI round-trip.
       if (text.trim().toLowerCase() === '/me') {
         try {
@@ -1684,20 +2089,6 @@ Deno.serve(async (req) => {
             },
           }
         : undefined;
-
-      // Respect the user's /workspace selection for this chat (default: Personal).
-      // Re-verify membership at read-time so a stale id from a workspace the
-      // user left can't leak data — if they're no longer a member, fall back
-      // to Personal and silently clear the stored id.
-      let activeWsForChat: string | null = (link as Record<string, unknown>).active_workspace_id as string | null || null;
-      if (activeWsForChat) {
-        const { data: mem } = await supabase.from('workspace_members')
-          .select('user_id').eq('workspace_id', activeWsForChat).eq('user_id', link.user_id).maybeSingle();
-        if (!mem) {
-          await supabase.from('telegram_links').update({ active_workspace_id: null }).eq('user_id', link.user_id);
-          activeWsForChat = null;
-        }
-      }
 
       const dori = await callDori(link.user_id, text, chatId, supabaseUrl, serviceKey, photoDataUrl, streamCbs, activeWsForChat);
       if (pendingEdit) { clearTimeout(pendingEdit); pendingEdit = null; }
