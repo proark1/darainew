@@ -5532,7 +5532,11 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
     });
 
     const model = 'gemini-3-flash-preview';
-    
+    // Stable model used as a fallback when the preview model is capacity
+    // throttled (Gemini returns 503/5xx). Same family used by every other
+    // call in this file, so quality stays consistent.
+    const FALLBACK_MODEL = 'gemini-2.5-flash';
+
     // Native function-calling is opt-in per request via a header so we
     // can roll it out one surface at a time. The legacy XML path stays
     // intact — when tools are NOT sent, the model continues to emit
@@ -5542,8 +5546,8 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
     const useNativeTools = req.headers.get('x-dori-native-tools') === '1';
 
     type AiMessageContent = string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
-    async function callAI(msgs: { role: string; content: AiMessageContent }[], stream: boolean) {
-      const payload: Record<string, unknown> = { model, messages: msgs, stream };
+    async function callAIOnce(msgs: { role: string; content: AiMessageContent }[], stream: boolean, modelName: string) {
+      const payload: Record<string, unknown> = { model: modelName, messages: msgs, stream };
       if (useNativeTools) {
         payload.tools = NATIVE_TOOLS;
         payload.tool_choice = 'auto';
@@ -5556,6 +5560,26 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
         },
         body: JSON.stringify(payload),
       });
+    }
+
+    // The primary is a preview model that returns 503 ("overloaded") when
+    // capacity-throttled, which otherwise surfaces to the user as "couldn't
+    // reach Dori". Retry the primary once, then fall back to the stable model.
+    // Only 5xx is retried — 4xx (quota 429, bad request 400) is returned as-is
+    // so the caller's existing 429/402 handling still applies.
+    async function callAI(msgs: { role: string; content: AiMessageContent }[], stream: boolean) {
+      const attempts = [model, model, FALLBACK_MODEL];
+      let resp!: Response;
+      for (let i = 0; i < attempts.length; i++) {
+        if (i > 0) {
+          await resp.body?.cancel().catch(() => {});
+          await new Promise((r) => setTimeout(r, 500 * i));
+        }
+        resp = await callAIOnce(msgs, stream, attempts[i]);
+        if (resp.ok || resp.status < 500) break;
+        console.error(`Gemini ${attempts[i]} returned ${resp.status}; ${i < attempts.length - 1 ? 'retrying' : 'giving up'}`);
+      }
+      return resp;
     }
 
     // Pull the assistant content + tool_calls out of a non-streaming
