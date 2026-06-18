@@ -19,6 +19,7 @@ import {
   buildShoppingRowKeyboard,
   buildTaskRowKeyboard,
   buildUndoKeyboard,
+  chunkForTelegram,
 } from '../_shared/telegram-inline.ts';
 import { fetchLatestUndoableForUser, runUndo } from '../_shared/dori-undo.ts';
 import { buildDoriContext } from '../_shared/dori-context.ts';
@@ -39,6 +40,7 @@ const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 async function tgSend(chatId: number, text: string, replyMarkup?: unknown) {
   try {
+    const chunks = chunkForTelegram(text);
     await fetch(`https://api.telegram.org/bot${TELEGRAM_API_KEY}/sendMessage`, {
       method: 'POST',
       headers: {
@@ -46,12 +48,26 @@ async function tgSend(chatId: number, text: string, replyMarkup?: unknown) {
       },
       body: JSON.stringify({
         chat_id: chatId,
-        text,
+        text: chunks[0],
         parse_mode: 'HTML',
         disable_web_page_preview: true,
         ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
       }),
     });
+    for (const chunk of chunks.slice(1)) {
+      await fetch(`https://api.telegram.org/bot${TELEGRAM_API_KEY}/sendMessage`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: chunk,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+        }),
+      });
+    }
   } catch (e) {
     console.error('tgSend failed', e);
   }
@@ -207,6 +223,35 @@ Reply <b>yes</b> / <b>no</b> to confirm any action I propose.
 
 <b>🇩🇪 Tipp:</b> Schreib einfach normal — "Milch auf Einkaufsliste", "Termin morgen 14 Uhr Zahnarzt", "Was steht heute an?". Antworte mit <b>ja</b> / <b>nein</b>, um Aktionen zu bestätigen, oder schick <b>/undo</b>, um das Letzte rückgängig zu machen.`;
 
+const HELP_TEXT_DE = `<b>🤖 Dori — dein Assistent</b>
+
+Schreib einfach normal. Ich speichere Aufgaben, Einkaeufe, Termine, Erinnerungen und Notizen.
+Sende ein <b>Foto</b> (Rechnung, Beleg, Visitenkarte, Rezept, Screenshot) oder eine <b>Sprachnachricht</b>.
+
+<b>📅 Planung</b>
+/me — dein Tag auf einen Blick
+/today · /tomorrow — Agenda mit Buttons
+/week — naechste 7 Tage
+/agenda &lt;YYYY-MM-DD&gt; — bestimmtes Datum
+/free [dauer] [tag] — freie Zeiten finden
+/undo — letzte Aktion rueckgaengig machen
+
+<b>➕ Schnell erfassen</b>
+/add &lt;aufgabe&gt; · /buy &lt;artikel&gt; · /event &lt;titel&gt; @ &lt;zeit&gt;
+/note &lt;text&gt; · /remind &lt;text&gt;
+
+<b>👥 Workspace</b>
+/standup — Team Standup
+/recap — Wochenrueckblick
+/comment &lt;aufgabe&gt; :: &lt;text&gt; — Aufgabe kommentieren
+/schedule &lt;titel&gt; with @a @b for 30m — Termin finden
+
+<b>⚙️ Einstellungen</b>
+/voice on|off — Sprachantworten in Familiengruppen
+/lang de|en — Sprache wechseln
+
+Beispiele: <code>Milch auf die Einkaufsliste</code>, <code>Termin morgen 14 Uhr Zahnarzt</code>, <code>verschieb das Meeting auf Freitag</code>, <code>mach das rueckgaengig</code>.`;
+
 const HELP_TRIGGERS = [
   'dori help', 'dori commands', 'dori menu', 'dori was kannst du',
   'what can you do', 'help me', 'show commands', 'show menu',
@@ -245,6 +290,27 @@ async function getHouseholdMembers(
   const map = new Map<string, string>();
   (profiles || []).forEach((p: { user_id: string; display_name?: string | null; email?: string | null }) => map.set(p.user_id, p.display_name || (p.email?.split('@')[0]) || 'Member'));
   return { ids: idList, nameOf: (uid: string) => map.get(uid) || 'Member', multi: idList.length > 1 };
+}
+
+async function getWorkspaceMembers(
+  supabase: SupabaseClient,
+  workspaceId: string,
+): Promise<HouseholdInfo & { fallbackUserId: string | null }> {
+  const { data: members } = await supabase
+    .from('workspace_members')
+    .select('user_id, display_name, role')
+    .eq('workspace_id', workspaceId);
+  const rows = (members || []) as Array<{ user_id: string; display_name?: string | null; role?: string | null }>;
+  const ids = rows.map((m) => m.user_id);
+  const fallback = rows.find((m) => m.role === 'owner') || rows.find((m) => m.role === 'admin') || rows[0] || null;
+  const map = new Map<string, string>();
+  rows.forEach((m) => map.set(m.user_id, m.display_name || 'Member'));
+  return {
+    ids,
+    fallbackUserId: fallback?.user_id || null,
+    nameOf: (uid: string) => map.get(uid) || 'Member',
+    multi: ids.length > 1,
+  };
 }
 
 // Auto-onboard a pre-authorized family member. If this Telegram user matches a
@@ -1062,16 +1128,37 @@ Deno.serve(async (req) => {
   }
 
   const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
-  const { chat_id, text, telegram_user_id, telegram_first_name, telegram_username, workspace_id } = await req.json();
+  const {
+    chat_id,
+    text,
+    telegram_user_id,
+    telegram_first_name,
+    telegram_username,
+    workspace_id: requestedWorkspaceId,
+  } = await req.json();
 
-  // Resolve group → owner + partner
-  const { data: group } = await supabase
-    .from('telegram_group_links')
-    .select('id, owner_user_id, partner_user_id, voice_replies_enabled, voice_digest_enabled')
-    .eq('chat_id', chat_id).eq('is_active', true).maybeSingle();
+  // Resolve group context. A Telegram group can be linked as a family group or
+  // a workspace group; workspace context takes precedence when telegram-poll
+  // passes the linked workspace id.
+  const [{ data: group }, { data: workspaceLink }] = await Promise.all([
+    supabase
+      .from('telegram_group_links')
+      .select('id, owner_user_id, partner_user_id, voice_replies_enabled, voice_digest_enabled')
+      .eq('chat_id', chat_id).eq('is_active', true).maybeSingle(),
+    requestedWorkspaceId
+      ? supabase
+        .from('workspace_telegram_links')
+        .select('workspace_id')
+        .eq('chat_id', chat_id)
+        .eq('workspace_id', requestedWorkspaceId)
+        .eq('is_active', true)
+        .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+  const workspace_id = workspaceLink?.workspace_id || null;
 
-  if (!group) {
-    await tgSend(chat_id, '🔒 This group is not linked to a Dori family space yet.');
+  if (!group && !workspace_id) {
+    await tgSend(chat_id, '🔒 This group is not linked to Dori yet. Use /linkfamily for a family space or /linkworkspace for a workspace.');
     return new Response('{"ok":true}', { headers: corsHeaders });
   }
 
@@ -1083,26 +1170,40 @@ Deno.serve(async (req) => {
     if (mapped) senderUserId = mapped.user_id;
   }
 
-  // Auto-accept by @username: if this Telegram user isn't mapped yet but their
-  // username was pre-authorized on the family roster, bind them now so Dori
-  // starts acting for them (no /linkme code needed). Their actions land in the
-  // shared family space; if their roster row points at an app account, we use
-  // it, otherwise we attribute to the owner (household-scoped).
-  senderUserId = await acceptRosterMember(
-    supabase, group.id, telegram_user_id, telegram_username, telegram_first_name, senderUserId,
-  );
+  let household: HouseholdInfo;
+  let userForChat: string | null = null;
+  if (workspace_id) {
+    const workspaceMembers = await getWorkspaceMembers(supabase, workspace_id);
+    if (senderUserId && !workspaceMembers.ids.includes(senderUserId)) senderUserId = null;
+    userForChat = senderUserId || workspaceMembers.fallbackUserId;
+    household = workspaceMembers;
+  } else {
+    // Auto-accept by @username: if this Telegram user isn't mapped yet but their
+    // username was pre-authorized on the family roster, bind them now so Dori
+    // starts acting for them (no /linkme code needed). Their actions land in the
+    // shared family space; if their roster row points at an app account, we use
+    // it, otherwise we attribute to the owner (household-scoped).
+    senderUserId = await acceptRosterMember(
+      supabase, group!.id, telegram_user_id, telegram_username, telegram_first_name, senderUserId,
+    );
+    userForChat = senderUserId || group!.owner_user_id;
+    household = await getHouseholdMembers(supabase, group!.owner_user_id, group!.partner_user_id, group!.id);
+  }
 
-  const userForChat = senderUserId || group.owner_user_id;
-
-  const household = await getHouseholdMembers(supabase, group.owner_user_id, group.partner_user_id, group.id);
-  const memberIds = household.ids;
+  if (!userForChat) {
+    await tgSend(chat_id, '🔒 I can see this group, but no workspace member is linked yet. Link your Telegram account in private chat, then try again.');
+    return new Response('{"ok":true}', { headers: corsHeaders });
+  }
+  const memberIds = household.ids.length ? household.ids : [userForChat];
 
   // Pull the caller's timezone so every formatted time in digests /
   // standups / recaps / scheduled slots is in their local clock, not UTC.
   let userTimezone: string | undefined;
+  let userLocale: string | null = null;
   try {
-    const { data: p } = await supabase.from('profiles').select('timezone').eq('user_id', userForChat).maybeSingle();
+    const { data: p } = await supabase.from('profiles').select('timezone, locale').eq('user_id', userForChat).maybeSingle();
     userTimezone = p?.timezone || undefined;
+    userLocale = p?.locale || null;
   } catch { /* ignore */ }
 
   const trimmed = text.trim();
@@ -1127,7 +1228,7 @@ Deno.serve(async (req) => {
 
   // ─── Help / discoverability ──────────────────────────────
   if (isHelpRequest(lower)) {
-    await tgSend(chat_id, HELP_TEXT);
+    await tgSend(chat_id, userLocale?.toLowerCase().startsWith('de') ? HELP_TEXT_DE : HELP_TEXT);
     return new Response('{"ok":true}', { headers: corsHeaders });
   }
 
@@ -1325,13 +1426,17 @@ Deno.serve(async (req) => {
   }
   const digestVoiceMatch = lower.match(/^\/digest\s+voice\s+(on|off)$/);
   if (digestVoiceMatch) {
+    if (!group) {
+      await tgSend(chat_id, '🎙 Voice digests are a family-group setting. Use /recap in workspace groups.');
+      return new Response('{"ok":true}', { headers: corsHeaders });
+    }
     await tgSend(chat_id, await handleToggleGroupSetting(
       supabase, group.id, 'voice_digest_enabled', digestVoiceMatch[1] === 'on', 'Voice morning digest'));
     return new Response('{"ok":true}', { headers: corsHeaders });
   }
   if (lower === '/digest' || lower === '/morning' || lower === '/family' || lower === '/next7') {
     const digest = await buildSharedFamilyDigest(supabase, memberIds, household, { limit: 7, tz: userTimezone, greeting: lower === '/morning', horizonDays: 14 });
-    if (group.voice_digest_enabled && lower === '/morning') {
+    if (group?.voice_digest_enabled && lower === '/morning') {
       await sendVoiceMessage({
         chatId: chat_id,
         script: buildSharedFamilyDigestVoiceScript(digest),
@@ -1384,6 +1489,10 @@ Deno.serve(async (req) => {
     return new Response('{"ok":true}', { headers: corsHeaders });
   }
   if (lower === '/shopping' || lower === '/list') {
+    if (!group) {
+      await tgSend(chat_id, '🛒 Shopping lists are available in family groups. In workspace groups, say “add task …” or use /add.');
+      return new Response('{"ok":true}', { headers: corsHeaders });
+    }
     const sent = await sendTappableShoppingList(chat_id, supabase, group.owner_user_id, TELEGRAM_API_KEY);
     if (!sent) await tgSend(chat_id, '🛒 No active shopping lists.');
     return new Response('{"ok":true}', { headers: corsHeaders });
@@ -1401,6 +1510,8 @@ Deno.serve(async (req) => {
   if (lower === '/linkme') {
     if (!telegram_user_id) {
       await tgSend(chat_id, 'Could not read your Telegram ID — try again.');
+    } else if (!group) {
+      await tgSend(chat_id, 'Link your Telegram account in private chat with Dori, then I can recognize you in this workspace group.');
     } else {
       await supabase.from('telegram_user_map').upsert({
         telegram_user_id, user_id: group.owner_user_id,
@@ -1762,6 +1873,10 @@ Deno.serve(async (req) => {
   }
   const voiceMatch = lower.match(/^\/voice\s+(on|off)$/);
   if (voiceMatch) {
+    if (!group) {
+      await tgSend(chat_id, '🎙 Workspace group voice replies are kept off for now. Voice notes still work as input.');
+      return new Response('{"ok":true}', { headers: corsHeaders });
+    }
     await tgSend(chat_id, await handleToggleGroupSetting(
       supabase, group.id, 'voice_replies_enabled', voiceMatch[1] === 'on', 'Voice replies'));
     return new Response('{"ok":true}', { headers: corsHeaders });
@@ -1834,7 +1949,7 @@ Deno.serve(async (req) => {
         'x-dori-channel-ref': String(chat_id),
         // Tag new calendar events with the family household so every member's
         // individual calendar shows them. Personal/workspace chats omit this.
-        ...(workspace_id ? {} : { 'x-dori-household': String(group.id) }),
+        ...(workspace_id || !group ? {} : { 'x-dori-household': String(group.id) }),
       },
       body: JSON.stringify({
         messages: conversationMessages,
@@ -1843,7 +1958,7 @@ Deno.serve(async (req) => {
         actionSource: channel,
         actionSourceRef: String(chat_id),
         workspaceId: workspace_id || undefined,
-        householdId: workspace_id ? undefined : group.id,
+        householdId: workspace_id || !group ? undefined : group.id,
       }),
     });
 
@@ -1880,24 +1995,24 @@ Deno.serve(async (req) => {
       let preferVoice = false;
       let voiceLocale: string | undefined;
       try {
-        const prefUser = senderUserId || group.owner_user_id;
+        const prefUser = senderUserId || group?.owner_user_id || userForChat;
         const { data: prof } = await supabase.from('profiles').select('locale').eq('user_id', prefUser).maybeSingle();
         // Group chats are intentionally controlled by the group-level toggle only.
         // A member's private voice preference should not make family groups noisy.
-        preferVoice = !!group.voice_replies_enabled;
+        preferVoice = !!group?.voice_replies_enabled;
         voiceLocale = prof?.locale || undefined;
       } catch { /* ignore */ }
 
       if (latestUndoId && !preferVoice) {
         await tgSendWithKeyboard(
           chat_id,
-          finalMsg.slice(0, 4000),
+          finalMsg,
           buildUndoKeyboard(latestUndoId),
           TELEGRAM_API_KEY,
         );
       } else {
         await sendDoriReply({
-          chatId: chat_id, text: finalMsg.slice(0, 4000), preferVoice, locale: voiceLocale,
+          chatId: chat_id, text: finalMsg, preferVoice, locale: voiceLocale,
           telegramKey: TELEGRAM_API_KEY,
         });
         if (latestUndoId) {

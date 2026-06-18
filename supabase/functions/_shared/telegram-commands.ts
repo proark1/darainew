@@ -5,6 +5,8 @@ export interface TelegramBotCommand {
 
 export const TELEGRAM_COMMAND_LIMIT = 100;
 
+export type TelegramCommandScopeName = 'default' | 'private' | 'groups' | 'workspace';
+
 export const TELEGRAM_QUICK_COMMAND_ALIASES = {
   help: ['help', 'commands'],
   cockpit: ['cockpit', 'control', 'controls'],
@@ -115,6 +117,186 @@ export const TELEGRAM_COMMANDS = [
   { command: 'help',       description: 'Show the full command list' },
   { command: 'commands',   description: 'Alias for /help' },
 ] as const satisfies readonly TelegramBotCommand[];
+
+export const TELEGRAM_PRIVATE_COMMANDS = [
+  { command: 'me',         description: 'Your day, tasks, events, and next move' },
+  { command: 'cockpit',    description: 'Open the Dori button cockpit' },
+  { command: 'now',        description: 'Best next move' },
+  { command: 'plan',       description: 'Plan a day, goal, or project' },
+  { command: 'delegate',   description: 'Delegate a job with approval rules' },
+  { command: 'review',     description: 'Review decisions and recent work' },
+  { command: 'approvals',  description: 'Approve or cancel pending actions' },
+  { command: 'memory',     description: 'What Dori remembers' },
+  { command: 'workspace',  description: 'Switch personal/workspace scope' },
+  { command: 'focus',      description: 'Focus mode on/off' },
+  { command: 'undo',       description: 'Undo the last action' },
+  { command: 'voice',      description: 'Voice replies on/off' },
+  { command: 'lang',       description: 'Switch language de/en' },
+  { command: 'help',       description: 'Show Telegram help' },
+] as const satisfies readonly TelegramBotCommand[];
+
+export const TELEGRAM_PRIVATE_COMMANDS_DE = [
+  { command: 'me',         description: 'Dein Tag, Aufgaben, Termine und naechster Schritt' },
+  { command: 'cockpit',    description: 'Dori Cockpit mit Buttons oeffnen' },
+  { command: 'now',        description: 'Bester naechster Schritt' },
+  { command: 'plan',       description: 'Tag, Ziel oder Projekt planen' },
+  { command: 'delegate',   description: 'Aufgabe mit Freigaberegeln delegieren' },
+  { command: 'review',     description: 'Entscheidungen und letzte Aktionen pruefen' },
+  { command: 'approvals',  description: 'Offene Aktionen freigeben oder abbrechen' },
+  { command: 'memory',     description: 'Was Dori gespeichert hat' },
+  { command: 'workspace',  description: 'Privaten oder Arbeitskontext wechseln' },
+  { command: 'focus',      description: 'Fokusmodus ein/aus' },
+  { command: 'undo',       description: 'Letzte Aktion rueckgaengig machen' },
+  { command: 'voice',      description: 'Sprachantworten ein/aus' },
+  { command: 'lang',       description: 'Sprache wechseln de/en' },
+  { command: 'help',       description: 'Telegram Hilfe anzeigen' },
+] as const satisfies readonly TelegramBotCommand[];
+
+export const TELEGRAM_GROUP_COMMANDS = [
+  { command: 'today',      description: 'Today agenda with tappable cards' },
+  { command: 'tomorrow',   description: 'Tomorrow agenda' },
+  { command: 'week',       description: 'Next 7 days' },
+  { command: 'digest',     description: 'Family next-7 digest' },
+  { command: 'shopping',   description: 'Shopping list' },
+  { command: 'buy',        description: 'Add shopping item' },
+  { command: 'add',        description: 'Add a task' },
+  { command: 'event',      description: 'Create an event' },
+  { command: 'remind',     description: 'Set a reminder' },
+  { command: 'undo',       description: 'Undo the last action' },
+  { command: 'linkme',     description: 'Link your Telegram user' },
+  { command: 'voice',      description: 'Group voice replies on/off' },
+  { command: 'help',       description: 'Show group help' },
+] as const satisfies readonly TelegramBotCommand[];
+
+export const TELEGRAM_GROUP_COMMANDS_DE = [
+  { command: 'today',      description: 'Heutige Agenda mit Buttons' },
+  { command: 'tomorrow',   description: 'Agenda fuer morgen' },
+  { command: 'week',       description: 'Naechste 7 Tage' },
+  { command: 'digest',     description: 'Familienueberblick' },
+  { command: 'shopping',   description: 'Einkaufsliste' },
+  { command: 'buy',        description: 'Einkauf hinzufuegen' },
+  { command: 'add',        description: 'Aufgabe hinzufuegen' },
+  { command: 'event',      description: 'Termin erstellen' },
+  { command: 'remind',     description: 'Erinnerung setzen' },
+  { command: 'undo',       description: 'Letzte Aktion rueckgaengig machen' },
+  { command: 'linkme',     description: 'Telegram Nutzer verknuepfen' },
+  { command: 'voice',      description: 'Sprachantworten ein/aus' },
+  { command: 'help',       description: 'Gruppenhilfe anzeigen' },
+] as const satisfies readonly TelegramBotCommand[];
+
+export const TELEGRAM_WORKSPACE_COMMANDS = [
+  { command: 'standup',       description: 'Team standup summary' },
+  { command: 'recap',         description: 'Workspace weekly recap' },
+  { command: 'schedule',      description: 'Find a meeting time' },
+  { command: 'comment',       description: 'Comment on a task' },
+  { command: 'add',           description: 'Add a workspace task' },
+  { command: 'event',         description: 'Create a workspace event' },
+  { command: 'remind',        description: 'Set a work reminder' },
+  { command: 'undo',          description: 'Undo the last action' },
+  { command: 'linkme',        description: 'Link your Telegram user' },
+  { command: 'linkworkspace', description: 'Link this group to a workspace' },
+  { command: 'help',          description: 'Show workspace help' },
+] as const satisfies readonly TelegramBotCommand[];
+
+export const TELEGRAM_WORKSPACE_COMMANDS_DE = [
+  { command: 'standup',       description: 'Team Standup Zusammenfassung' },
+  { command: 'recap',         description: 'Woechentlicher Workspace Rueckblick' },
+  { command: 'schedule',      description: 'Meetingzeit finden' },
+  { command: 'comment',       description: 'Kommentar zu Aufgabe schreiben' },
+  { command: 'add',           description: 'Workspace Aufgabe hinzufuegen' },
+  { command: 'event',         description: 'Workspace Termin erstellen' },
+  { command: 'remind',        description: 'Arbeits-Erinnerung setzen' },
+  { command: 'undo',          description: 'Letzte Aktion rueckgaengig machen' },
+  { command: 'linkme',        description: 'Telegram Nutzer verknuepfen' },
+  { command: 'linkworkspace', description: 'Gruppe mit Workspace verknuepfen' },
+  { command: 'help',          description: 'Workspace Hilfe anzeigen' },
+] as const satisfies readonly TelegramBotCommand[];
+
+const GROUP_ACTION_PHRASES = [
+  'add',
+  'assign',
+  'appointment',
+  'book',
+  'buy',
+  'calendar',
+  'call',
+  'deadline',
+  'done',
+  'event',
+  'follow up',
+  'get',
+  'grab',
+  'meeting',
+  'move',
+  'need',
+  'pick up',
+  'plan',
+  'remind',
+  'reminder',
+  'schedule',
+  'shopping',
+  'task',
+  'todo',
+  'to-do',
+  'today',
+  'tomorrow',
+  'tonight',
+  'next week',
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+  'anfang',
+  'aufgabe',
+  'besorgen',
+  'brauchen',
+  'eintragen',
+  'einkauf',
+  'einkaufsliste',
+  'erinner',
+  'erinnere',
+  'erinnerung',
+  'freitag',
+  'heute',
+  'kaufen',
+  'kalender',
+  'mittwoch',
+  'montag',
+  'morgen',
+  'naechste woche',
+  'nachste woche',
+  'nächste woche',
+  'samstag',
+  'sonntag',
+  'termin',
+  'todo',
+  'uebermorgen',
+  'ubermorgen',
+  'übermorgen',
+  'verschieb',
+  'verschieben',
+] as const;
+
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const GROUP_ACTION_RE = new RegExp(
+  `(?:^|\\b)(?:${GROUP_ACTION_PHRASES.map(escapeRegex).join('|')})(?:\\b|$)`,
+  'i',
+);
+
+export function isTelegramGroupActionableText(text: string): boolean {
+  return GROUP_ACTION_RE.test(text.normalize('NFC'));
+}
+
+export function telegramCommandSet(scope: TelegramCommandScopeName, languageCode?: string | null): readonly TelegramBotCommand[] {
+  const isGerman = (languageCode || '').toLowerCase().startsWith('de');
+  if (scope === 'private') return isGerman ? TELEGRAM_PRIVATE_COMMANDS_DE : TELEGRAM_PRIVATE_COMMANDS;
+  if (scope === 'workspace') return isGerman ? TELEGRAM_WORKSPACE_COMMANDS_DE : TELEGRAM_WORKSPACE_COMMANDS;
+  if (scope === 'groups') return isGerman ? TELEGRAM_GROUP_COMMANDS_DE : TELEGRAM_GROUP_COMMANDS;
+  return isGerman ? TELEGRAM_PRIVATE_COMMANDS_DE : TELEGRAM_PRIVATE_COMMANDS;
+}
 
 export function validateTelegramCommands(commands: readonly TelegramBotCommand[]): string[] {
   const errors: string[] = [];

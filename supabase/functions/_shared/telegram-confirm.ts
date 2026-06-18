@@ -6,6 +6,8 @@
 // reply with plain text ("yes"/"no"/"ja"/"nein"/…) and we resolve that against
 // the most recently queued pending action for that chat.
 
+import { chunkForTelegram } from './telegram-inline.ts';
+
 
 export interface PendingAction {
   id: string;
@@ -27,6 +29,7 @@ export async function tgSendWithKeyboard(
   telegramKey: string,
 ): Promise<void> {
   try {
+    const chunks = chunkForTelegram(text);
     await fetch(`https://api.telegram.org/bot${telegramKey}/sendMessage`, {
       method: 'POST',
       headers: {
@@ -34,12 +37,26 @@ export async function tgSendWithKeyboard(
       },
       body: JSON.stringify({
         chat_id: chatId,
-        text: text.slice(0, 4000),
+        text: chunks[0],
         parse_mode: 'HTML',
         disable_web_page_preview: true,
         reply_markup: keyboard,
       }),
     });
+    for (const chunk of chunks.slice(1)) {
+      await fetch(`https://api.telegram.org/bot${telegramKey}/sendMessage`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: chunk,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+        }),
+      });
+    }
   } catch (e) {
     console.error('tgSendWithKeyboard failed', e);
   }
@@ -123,7 +140,7 @@ export function classifyConfirmationText(text: string): 'yes' | 'no' | null {
 }
 
 // Minimal Supabase client surface needed by this module.
-type TgConfirmClient = { from(table: string): Record<string, (...args: unknown[]) => unknown> };
+type TgConfirmClient = { from(table: string): any };
 
 // Fetch the most recent *still-actionable* pending action queued from this
 // Telegram surface. Actions whose expires_at has passed are filtered out so
@@ -180,6 +197,14 @@ export async function approveAndExecutePending(
   serviceKey: string,
 ): Promise<string> {
   const toolXml = action.action_data?.tool_xml as string | undefined;
+  const replaySource = String(action.action_data?.source || action.source || '');
+  const replaySourceRef = String(action.action_data?.source_ref || action.source_ref || '');
+  const replayWorkspaceId = typeof action.action_data?.workspace_id === 'string'
+    ? action.action_data.workspace_id
+    : null;
+  const replayHouseholdId = typeof action.action_data?.household_id === 'string'
+    ? action.action_data.household_id
+    : null;
   if (!toolXml) {
     await supabase.from('auto_actions_log')
       .update({ status: 'approved', approved_at: new Date().toISOString() })
@@ -193,12 +218,19 @@ export async function approveAndExecutePending(
         'Authorization': `Bearer ${serviceKey}`,
         'Content-Type': 'application/json',
         'x-telegram-user-id': action.user_id,
+        ...(replaySource ? { 'x-dori-channel': replaySource } : {}),
+        ...(replaySourceRef ? { 'x-dori-channel-ref': replaySourceRef } : {}),
+        ...(replayHouseholdId ? { 'x-dori-household': replayHouseholdId } : {}),
       },
       body: JSON.stringify({
         messages: [],
         executeServerSide: true,
         skipApprovalGate: true,
         preformedToolText: toolXml,
+        actionSource: replaySource || action.source,
+        actionSourceRef: replaySourceRef || action.source_ref,
+        ...(replayWorkspaceId ? { workspaceId: replayWorkspaceId } : {}),
+        ...(replayHouseholdId ? { householdId: replayHouseholdId } : {}),
       }),
     });
     const data = await resp.json();

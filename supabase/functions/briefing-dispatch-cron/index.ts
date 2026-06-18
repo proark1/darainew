@@ -300,7 +300,7 @@ Deno.serve(async (req) => {
           maxChars: defaultBriefingVoiceLimit(),
           sendFallbackText: false,
         });
-        if (voice.sent === 'voice') channelsSent.push('telegram_voice');
+        if (voice.sent === 'voice' || voice.sent === 'audio') channelsSent.push('telegram_voice');
       }
 
       if (wantsTelegramText) {

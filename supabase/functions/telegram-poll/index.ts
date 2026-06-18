@@ -31,9 +31,12 @@ import {
 } from '../_shared/telegram-confirm.ts';
 import {
   buildUndoKeyboard,
+  chunkForTelegram,
   decodeCallback,
   tgEditReplyMarkup,
 } from '../_shared/telegram-inline.ts';
+import { isTelegramGroupActionableText } from '../_shared/telegram-commands.ts';
+import { transcribeTelegramVoice } from '../_shared/telegram-stt.ts';
 import { buildDoriContext } from '../_shared/dori-context.ts';
 import {
   buildAssistantCockpitKeyboard,
@@ -63,7 +66,7 @@ const MIN_REMAINING_MS = 5_000;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': strictAppOrigin(),
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-telegram-bot-api-secret-token',
 };
 
 async function tg(method: string, body: Record<string, unknown>, tgKey: string) {
@@ -81,7 +84,9 @@ async function tg(method: string, body: Record<string, unknown>, tgKey: string) 
 
 async function sendMessage(chatId: number, text: string, tgKey: string) {
   try {
-    await tg('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' }, tgKey);
+    for (const chunk of chunkForTelegram(text)) {
+      await tg('sendMessage', { chat_id: chatId, text: chunk, parse_mode: 'HTML' }, tgKey);
+    }
   } catch (e) {
     console.error('sendMessage failed:', e);
   }
@@ -378,6 +383,49 @@ Talk naturally, send voice notes, forward messages, or upload photos/screenshots
 
 Try: <code>plan my day</code>, <code>summarize unread emails</code>, <code>move dentist to Friday</code>, <code>remember I prefer meetings after 10</code>.`;
 
+const PRIVATE_HELP_TEXT_DE = `<b>🤖 Dori in Telegram</b>
+
+Schreib natuerlich, sende Sprachnachrichten, leite Nachrichten weiter oder lade Fotos/Screenshots hoch.
+
+<b>Wichtige Befehle</b>
+/cockpit — Kommandozentrale mit Buttons
+/me — dein Tag auf einen Blick
+/now — bester naechster Schritt (<code>/next</code>, <code>/whatnow</code>)
+/approvals — offene Aktionen freigeben oder abbrechen
+/memory — was ich mir gemerkt habe
+/workspace list — privaten/Arbeitskontext wechseln
+/focus on 2h — proaktive Hinweise pausieren
+/undo — letzte Aktion rueckgaengig machen
+
+<b>Steuerung</b>
+/brief — Briefing-Prompt
+/plan — Tag, Projekt oder Ziel planen
+/delegate — Dori eine Aufgabe mit Freigaberegeln geben
+/review — offene Entscheidungen und letzte Aktionen pruefen
+/settings — Einstellungen, Workspace, Fokus, Stimme und Erinnerung steuern
+
+Beispiele: <code>plane meinen Tag</code>, <code>Termin morgen 14 Uhr Zahnarzt</code>, <code>verschieb Zahnarzt auf Freitag</code>, <code>merk dir, dass Meetings nach 10 besser sind</code>.`;
+
+async function loadProfileLocale(supabase: SupabaseClient, userId: string): Promise<string | null> {
+  try {
+    const { data } = await supabase.from('profiles').select('locale').eq('user_id', userId).maybeSingle();
+    return data?.locale || null;
+  } catch {
+    return null;
+  }
+}
+
+async function sendPrivateHelp(
+  supabase: SupabaseClient,
+  chatId: number,
+  userId: string,
+  telegramKey: string,
+): Promise<void> {
+  const locale = await loadProfileLocale(supabase, userId);
+  const text = locale?.toLowerCase().startsWith('de') ? PRIVATE_HELP_TEXT_DE : PRIVATE_HELP_TEXT;
+  await tgSendWithKeyboard(chatId, text, buildAssistantCockpitKeyboard(), telegramKey);
+}
+
 // Download a Telegram file by id and return the raw bytes. Used by the
 // document-intake path which extracts text rather than passing the file
 // straight to a multimodal model.
@@ -440,66 +488,6 @@ function extractPdfText(bytes: Uint8Array): string {
   return out.join(' ').replace(/\s+/g, ' ').trim();
 }
 
-// Download a Telegram file (voice/audio) and transcribe via Gemini.
-// Returns the transcript text, or null on failure.
-async function transcribeTelegramVoice(
-  fileId: string,
-  mime: string,
-  geminiKey: string,
-  tgKey: string,
-): Promise<string | null> {
-  try {
-    // 1) Resolve file_path
-    const fileRes = await tg('getFile', { file_id: fileId }, tgKey);
-    const filePath = fileRes?.result?.file_path;
-    if (!filePath) return null;
-
-    // 2) Download file bytes via Telegram Bot API
-    const dl = await fetch(`https://api.telegram.org/file/bot${tgKey}/${filePath}`);
-    if (!dl.ok) {
-      console.error('voice download failed', dl.status);
-      return null;
-    }
-    const bytes = new Uint8Array(await dl.arrayBuffer());
-
-    // 3) Base64 encode via std/encoding/base64 (native, no chunking needed).
-    const base64Audio = encodeBase64(bytes);
-
-    // 4) Transcribe via Gemini (audio inline as data URL)
-    const audioMime = mime || 'audio/ogg';
-    const aiRes = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${geminiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'gemini-2.5-flash',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a precise transcriber. Transcribe the audio verbatim in the original language. Output ONLY the transcript, no quotes, no commentary.',
-          },
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: 'Transcribe this voice message.' },
-              { type: 'image_url', image_url: { url: `data:${audioMime};base64,${base64Audio}` } },
-            ],
-          },
-        ],
-      }),
-    });
-    if (!aiRes.ok) {
-      console.error('transcription failed', aiRes.status, await aiRes.text());
-      return null;
-    }
-    const aiData = await aiRes.json();
-    const transcript = aiData?.choices?.[0]?.message?.content?.trim();
-    return transcript || null;
-  } catch (e) {
-    console.error('transcribeTelegramVoice error', e);
-    return null;
-  }
-}
-
 interface ToolResult {
   ok: boolean;
   message: string;
@@ -533,8 +521,13 @@ async function callDori(
   imageUrl?: string | null,
   streamCbs?: StreamCallbacks,
   workspaceId?: string | null,
+  opts?: {
+    channel?: 'tg_private' | 'tg_family' | 'tg_workspace';
+    householdId?: string | null;
+  },
 ): Promise<DoriCallResult> {
   const streaming = !!streamCbs;
+  const channel = opts?.channel || 'tg_private';
   async function doRequest(): Promise<Response> {
     return fetch(`${supabaseUrl}/functions/v1/chat`, {
       method: 'POST',
@@ -542,17 +535,19 @@ async function callDori(
         'Authorization': `Bearer ${serviceKey}`,
         'Content-Type': 'application/json',
         'x-telegram-user-id': userId,
-        'x-dori-channel': 'tg_private',
+        'x-dori-channel': channel,
         'x-dori-channel-ref': String(chatId),
+        ...(opts?.householdId ? { 'x-dori-household': opts.householdId } : {}),
       },
       body: JSON.stringify({
         messages: [{ role: 'user', content: message }],
         personality: 'balanced',
         executeServerSide: true,
-        actionSource: 'tg_private',
+        actionSource: channel,
         actionSourceRef: String(chatId),
         streamFinalText: streaming,
         ...(workspaceId ? { workspaceId } : {}),
+        ...(opts?.householdId ? { householdId: opts.householdId } : {}),
         ...(imageUrl ? { imageUrl } : {}),
       }),
     });
@@ -1038,7 +1033,6 @@ Deno.serve(async (req) => {
   // function rate limits + timeouts bound worst-case abuse, and expensive paths
   // (voice transcription) only fire on real Telegram inputs.
   const startTime = Date.now();
-  const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')!;
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   const TELEGRAM_API_KEY = Deno.env.get('TELEGRAM_API_KEY')!;
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -1061,19 +1055,22 @@ Deno.serve(async (req) => {
   } catch { /* no/invalid JSON body → polling mode */ }
   const isWebhook = webhookUpdate !== null;
 
-  // Optional shared-secret check for webhook deliveries. When
-  // TELEGRAM_WEBHOOK_SECRET is set (and registered via setWebhook's
-  // secret_token), Telegram echoes it back in this header on every call. We
-  // reject mismatches so a leaked function URL can't be used to spoof updates.
+  // Shared-secret check for webhook deliveries. When TELEGRAM_WEBHOOK_SECRET is
+  // registered via setWebhook's secret_token, Telegram echoes it back in this
+  // header on every call. This function is public (verify_jwt=false), so
+  // production webhooks must set the secret unless explicitly allowed for dev.
   const webhookSecret = Deno.env.get('TELEGRAM_WEBHOOK_SECRET');
-  if (isWebhook && webhookSecret) {
-    const got = req.headers.get('x-telegram-bot-api-secret-token');
-    if (got !== webhookSecret) {
-      console.warn('[telegram-poll] webhook secret mismatch — rejecting');
-      return new Response(JSON.stringify({ error: 'forbidden' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+  if (isWebhook && !webhookSecret && Deno.env.get('DORI_ALLOW_UNSECURED_TELEGRAM_WEBHOOK') !== 'true') {
+    console.error('[telegram-poll] TELEGRAM_WEBHOOK_SECRET is required for webhook mode');
+    return new Response(JSON.stringify({ error: 'webhook_secret_required' }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+  if (isWebhook && webhookSecret && req.headers.get('x-telegram-bot-api-secret-token') !== webhookSecret) {
+    console.warn('[telegram-poll] webhook secret mismatch — rejecting');
+    return new Response(JSON.stringify({ error: 'forbidden' }), {
+      status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   const { data: state } = await supabase
@@ -1172,7 +1169,7 @@ Deno.serve(async (req) => {
                 workspaceId: activeWs,
                 source: 'callback',
                 handlers: {
-                  sendHelp: () => tgSendWithKeyboard(cbChatId, PRIVATE_HELP_TEXT, buildAssistantCockpitKeyboard(), TELEGRAM_API_KEY),
+                  sendHelp: () => sendPrivateHelp(supabase, cbChatId, commandUserId, TELEGRAM_API_KEY),
                   sendCockpit: () => sendAssistantCockpit(cbChatId, TELEGRAM_API_KEY),
                   sendApprovals: () => sendApprovalInbox(supabase, cbChatId, commandUserId, TELEGRAM_API_KEY, false),
                   sendNow: async () => {
@@ -1275,7 +1272,7 @@ Deno.serve(async (req) => {
       const chatId = msg.chat.id;
       const chatType = msg.chat.type as string;
 
-      // ---------- VOICE / AUDIO → transcribe via Gemini, then treat as text ----------
+      // ---------- VOICE / AUDIO → transcribe, then treat as text ----------
       let textFromVoice: string | null = null;
       if (!msg.text && (msg.voice || msg.audio)) {
         const v = msg.voice || msg.audio;
@@ -1283,13 +1280,28 @@ Deno.serve(async (req) => {
         try {
           await tg('sendChatAction', { chat_id: chatId, action: 'typing' }, TELEGRAM_API_KEY);
         } catch { /* ignore */ }
-        textFromVoice = await transcribeTelegramVoice(v.file_id, mime, GEMINI_API_KEY, TELEGRAM_API_KEY);
+        const transcript = await transcribeTelegramVoice({
+          fileId: v.file_id,
+          mime,
+          telegramKey: TELEGRAM_API_KEY,
+          fileSize: v.file_size ?? null,
+          durationSeconds: v.duration ?? null,
+        });
+        textFromVoice = transcript.transcript;
         if (!textFromVoice) {
+          console.warn('[telegram-poll] voice transcription failed', transcript.error);
           await sendMessage(chatId, "🎙️ I couldn't understand that voice message. Try again or type it.", TELEGRAM_API_KEY);
           await supabase.from('telegram_bot_state').update({ update_offset: u.update_id + 1, updated_at: new Date().toISOString() }).eq('id', 1);
           currentOffset = u.update_id + 1;
           continue;
         }
+        msg.dori_voice_transcript = {
+          language: transcript.language,
+          confidence: transcript.confidence,
+          provider: transcript.provider,
+          duration_seconds: transcript.durationSeconds,
+          file_size: transcript.fileSize,
+        };
         // Inject transcript so the rest of the pipeline treats it as a text message
         msg.text = textFromVoice;
       }
@@ -1620,7 +1632,7 @@ Deno.serve(async (req) => {
         // Workspace link takes precedence since it's explicit startup context.
         const [{ data: wsLink }, { data: glink }] = await Promise.all([
           supabase.from('workspace_telegram_links').select('workspace_id').eq('chat_id', chatId).eq('is_active', true).maybeSingle(),
-          supabase.from('telegram_group_links').select('owner_user_id').eq('chat_id', chatId).eq('is_active', true).maybeSingle(),
+          supabase.from('telegram_group_links').select('id, owner_user_id').eq('chat_id', chatId).eq('is_active', true).maybeSingle(),
         ]);
         // Wake-word matchers — broad to handle voice transcription variants
         // (Dori / Dory / Dorie / Doree / Dora / Dorai / Darai / DarAI / Tory / Lori etc.)
@@ -1642,8 +1654,7 @@ Deno.serve(async (req) => {
         const repliedToIsBot = msg.reply_to_message?.from?.is_bot === true;
         const hasMention = BOT_MENTION.test(rawText);
         const addressesDori = ADDRESSES_DORI.test(rawText.trim());
-        const actionKeywords = /\b(buy|need|get|pick up|grab|remind|reminder|task|todo|to-do|schedule|meeting|appointment|event|tomorrow|today|tonight|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday|kaufen|brauchen|besorgen|erinner|termin|morgen|heute)\b/i;
-        const looksActionable = actionKeywords.test(rawText);
+        const looksActionable = isTelegramGroupActionableText(rawText);
         const isCommand = rawText.startsWith('/');
         // Voice/audio messages → always respond (user clearly meant to interact)
         const isVoice = !!(msg.voice || msg.audio);
@@ -1684,9 +1695,32 @@ Deno.serve(async (req) => {
               .maybeSingle();
             actingUserId = userMap?.user_id ?? null;
           }
+          if (actingUserId && wsLink?.workspace_id) {
+            const { data: member } = await supabase
+              .from('workspace_members')
+              .select('user_id')
+              .eq('workspace_id', wsLink.workspace_id)
+              .eq('user_id', actingUserId)
+              .maybeSingle();
+            if (!member) actingUserId = null;
+          }
+          if (!actingUserId && wsLink?.workspace_id) {
+            const { data: members } = await supabase
+              .from('workspace_members')
+              .select('user_id, role')
+              .eq('workspace_id', wsLink.workspace_id)
+              .order('role', { ascending: false })
+              .limit(10);
+            const rows = (members || []) as Array<{ user_id: string; role?: string | null }>;
+            actingUserId =
+              rows.find((m) => m.role === 'owner')?.user_id
+              || rows.find((m) => m.role === 'admin')?.user_id
+              || rows[0]?.user_id
+              || null;
+          }
           if (!actingUserId) actingUserId = glink?.owner_user_id ?? null;
           if (!actingUserId) {
-            await sendMessage(chatId, "📸 I can read photos here, but this group isn't linked to a personal account yet. Run /linkfamily or have a member link via Settings → Telegram.", TELEGRAM_API_KEY);
+            await sendMessage(chatId, "📸 I can read photos here, but I couldn't find a linked Dori user for this group. Link a member via Settings → Telegram, then try again.", TELEGRAM_API_KEY);
             await supabase.from('telegram_messages').upsert({
               update_id: u.update_id, chat_id: chatId, text: photoUserText ?? text, raw_update: u, processed: true,
             }, { onConflict: 'update_id' });
@@ -1715,6 +1749,10 @@ Deno.serve(async (req) => {
             photoDataUrl,
             undefined,
             wsLink?.workspace_id || null,
+            {
+              channel: wsLink?.workspace_id ? 'tg_workspace' : 'tg_family',
+              householdId: wsLink?.workspace_id ? null : glink?.id ?? null,
+            },
           );
 
           // Mirror the private-chat photo flow: combine the AI's prose with
@@ -1739,7 +1777,11 @@ Deno.serve(async (req) => {
 
           if (placeholderMessageId && outgoingText) {
             try {
-              await tgEditMessageText(chatId, placeholderMessageId, outgoingText.slice(0, 4000), TELEGRAM_API_KEY);
+              const chunks = chunkForTelegram(outgoingText);
+              await tgEditMessageText(chatId, placeholderMessageId, chunks[0], TELEGRAM_API_KEY);
+              for (const chunk of chunks.slice(1)) {
+                await sendMessage(chatId, chunk, TELEGRAM_API_KEY);
+              }
               if (latestUndoId) {
                 await tgEditReplyMarkup(chatId, placeholderMessageId, buildUndoKeyboard(latestUndoId), TELEGRAM_API_KEY);
               }
@@ -2013,7 +2055,7 @@ Deno.serve(async (req) => {
         workspaceId: activeWsForChat,
         source: 'slash',
         handlers: {
-          sendHelp: () => tgSendWithKeyboard(chatId, PRIVATE_HELP_TEXT, buildAssistantCockpitKeyboard(), TELEGRAM_API_KEY),
+          sendHelp: () => sendPrivateHelp(supabase, chatId, link.user_id, TELEGRAM_API_KEY),
           sendCockpit: () => sendAssistantCockpit(chatId, TELEGRAM_API_KEY),
           sendApprovals: () => sendApprovalInbox(supabase, chatId, link.user_id, TELEGRAM_API_KEY, wasVoiceMessage),
           sendNow: async () => {
@@ -2221,7 +2263,11 @@ Deno.serve(async (req) => {
       if (placeholderMessageId && outgoingText && !preferVoice) {
         // Update the placeholder in place → the user sees the same message
         // transform from "🤔 Thinking…" into the real answer. Feels instant.
-        await tgEditMessageText(chatId, placeholderMessageId, outgoingText.slice(0, 4000), TELEGRAM_API_KEY);
+        const chunks = chunkForTelegram(outgoingText);
+        await tgEditMessageText(chatId, placeholderMessageId, chunks[0], TELEGRAM_API_KEY);
+        for (const chunk of chunks.slice(1)) {
+          await sendMessage(chatId, chunk, TELEGRAM_API_KEY);
+        }
         if (latestUndoId) {
           await tgEditReplyMarkup(chatId, placeholderMessageId, buildUndoKeyboard(latestUndoId), TELEGRAM_API_KEY);
         }

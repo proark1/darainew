@@ -1,6 +1,7 @@
 // Shared helper: send Telegram messages, optionally as voice notes via Gemini TTS.
 // Falls back to text if voice generation fails or message is too long.
 import { encode as base64Encode } from 'https://deno.land/std@0.168.0/encoding/base64.ts';
+import { chunkForTelegram } from './telegram-inline.ts';
 
 const DEFAULT_REPLY_VOICE_CHARS = 600; // ~30s at normal speed
 const DEFAULT_BRIEFING_VOICE_CHARS = 3000; // ~2 minutes at normal speed
@@ -33,7 +34,7 @@ export interface SendVoiceMessageOpts {
 
 export interface SendVoiceMessageResult {
   ok: boolean;
-  sent: 'voice' | 'text' | 'skipped';
+  sent: 'voice' | 'audio' | 'text' | 'skipped';
   reason?: string;
 }
 
@@ -64,13 +65,15 @@ function pickVoiceForLocale(locale?: string | null): string {
 }
 
 async function sendText(chatId: number, text: string, telegramKey: string) {
-  await fetch(`https://api.telegram.org/bot${telegramKey}/sendMessage`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ chat_id: chatId, text: text.slice(0, 4000), parse_mode: 'HTML' }),
-  });
+  for (const chunk of chunkForTelegram(text)) {
+    await fetch(`https://api.telegram.org/bot${telegramKey}/sendMessage`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ chat_id: chatId, text: chunk, parse_mode: 'HTML' }),
+    });
+  }
 }
 
 // Strip HTML for cleaner TTS narration.
@@ -146,18 +149,51 @@ async function generateVoiceWav(text: string, voiceName = 'Kore'): Promise<Uint8
   }
 }
 
+async function generateVoiceMp3(text: string, locale?: string | null): Promise<Uint8Array | null> {
+  const apiKey = Deno.env.get('OPENAI_API_KEY');
+  if (!apiKey) return null;
+  try {
+    const lang = (locale || '').toLowerCase().split(/[-_]/)[0];
+    const voice = lang === 'de' ? 'nova' : 'alloy';
+    const r = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'tts-1',
+        input: text.substring(0, 4096),
+        voice,
+        response_format: 'mp3',
+      }),
+    });
+    if (!r.ok) {
+      console.error('OpenAI TTS failed', r.status, await r.text());
+      return null;
+    }
+    return new Uint8Array(await r.arrayBuffer());
+  } catch (e) {
+    console.error('OpenAI TTS error', e);
+    return null;
+  }
+}
+
 async function sendVoiceNote(
   chatId: number,
   audio: Uint8Array,
   caption: string,
   telegramKey: string,
+  opts?: { mime?: string; filename?: string; fallbackAudio?: boolean },
 ): Promise<boolean> {
   try {
     const fd = new FormData();
     fd.append('chat_id', String(chatId));
+    const mime = opts?.mime || 'audio/mpeg';
+    const filename = opts?.filename || 'reply.mp3';
     // Cast to BlobPart — Deno's Uint8Array typing (ArrayBufferLike) is not
     // directly assignable to lib.dom's BlobPart (ArrayBuffer-only) but works at runtime.
-    fd.append('voice', new Blob([audio as unknown as BlobPart], { type: 'audio/wav' }), 'reply.wav');
+    fd.append('voice', new Blob([audio as unknown as BlobPart], { type: mime }), filename);
     if (caption) fd.append('caption', caption.slice(0, 1000));
     const r = await fetch(`https://api.telegram.org/bot${telegramKey}/sendVoice`, {
       method: 'POST',
@@ -167,11 +203,41 @@ async function sendVoiceNote(
     });
     if (!r.ok) {
       console.error('sendVoice failed', r.status, await r.text());
+      if (opts?.fallbackAudio) {
+        return sendAudioFile(chatId, audio, caption, telegramKey, { mime, filename });
+      }
       return false;
     }
     return true;
   } catch (e) {
     console.error('sendVoice error', e);
+    return false;
+  }
+}
+
+async function sendAudioFile(
+  chatId: number,
+  audio: Uint8Array,
+  caption: string,
+  telegramKey: string,
+  opts?: { mime?: string; filename?: string },
+): Promise<boolean> {
+  try {
+    const fd = new FormData();
+    fd.append('chat_id', String(chatId));
+    fd.append('audio', new Blob([audio as unknown as BlobPart], { type: opts?.mime || 'audio/wav' }), opts?.filename || 'reply.wav');
+    if (caption) fd.append('caption', caption.slice(0, 1000));
+    const r = await fetch(`https://api.telegram.org/bot${telegramKey}/sendAudio`, {
+      method: 'POST',
+      body: fd,
+    });
+    if (!r.ok) {
+      console.error('sendAudio failed', r.status, await r.text());
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error('sendAudio error', e);
     return false;
   }
 }
@@ -207,10 +273,25 @@ export async function sendVoiceMessage(opts: SendVoiceMessageOpts): Promise<Send
   if (!cleanForVoice) return fallback('empty_script');
   if (cleanForVoice.length > maxChars) return fallback('script_too_long');
 
-  const audio = await generateVoiceWav(cleanForVoice, pickVoiceForLocale(locale));
-  if (audio && audio.length > 0) {
-    const ok = await sendVoiceNote(chatId, audio, caption || fallbackText, telegramKey);
+  const mp3 = await generateVoiceMp3(cleanForVoice, locale);
+  if (mp3 && mp3.length > 0) {
+    const ok = await sendVoiceNote(chatId, mp3, caption || fallbackText, telegramKey, {
+      mime: 'audio/mpeg',
+      filename: 'reply.mp3',
+      fallbackAudio: true,
+    });
     if (ok) return { ok: true, sent: 'voice' };
+  }
+
+  // Gemini currently returns raw PCM, which we wrap as WAV. WAV is useful as a
+  // fallback audio file, but not as a Telegram voice note format.
+  const wav = await generateVoiceWav(cleanForVoice, pickVoiceForLocale(locale));
+  if (wav && wav.length > 0) {
+    const ok = await sendAudioFile(chatId, wav, caption || fallbackText, telegramKey, {
+      mime: 'audio/wav',
+      filename: 'reply.wav',
+    });
+    if (ok) return { ok: true, sent: 'audio', reason: 'sent_as_audio_fallback' };
   }
   return fallback('voice_generation_or_send_failed');
 }

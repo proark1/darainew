@@ -2,10 +2,11 @@
 // self-diagnose from Settings → Telegram → Diagnose.
 //
 // Checks:
-//   - Env var presence (GEMINI_API_KEY, TELEGRAM_API_KEY) — booleans only, never values
+//   - Env var presence (GEMINI_API_KEY, TELEGRAM_API_KEY, TELEGRAM_WEBHOOK_SECRET) — booleans only, never values
 //   - Telegram bot reachability via getMe (confirms TELEGRAM_API_KEY is valid)
-//   - telegram_bot_state.update_offset + updated_at (confirms cron is actually running)
-//   - Current user's personal + group link rows
+//   - Telegram webhook state via getWebhookInfo
+//   - telegram_bot_state.update_offset + updated_at (useful for polling fallback)
+//   - Current user's personal, family group, and workspace group link rows
 //   - On request (runPoll = true): invokes telegram-poll and returns its response
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { strictAppOrigin } from '../_shared/cors.ts';
@@ -24,6 +25,7 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
     const TELEGRAM_API_KEY = Deno.env.get('TELEGRAM_API_KEY') ?? '';
+    const TELEGRAM_WEBHOOK_SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET') ?? '';
 
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
@@ -50,6 +52,7 @@ Deno.serve(async (req) => {
     const envVars = {
       GEMINI_API_KEY: Boolean(GEMINI_API_KEY),
       TELEGRAM_API_KEY: Boolean(TELEGRAM_API_KEY),
+      TELEGRAM_WEBHOOK_SECRET: Boolean(TELEGRAM_WEBHOOK_SECRET),
     };
 
     // 2. getMe — confirms bot token is valid
@@ -83,6 +86,35 @@ Deno.serve(async (req) => {
       botInfo = { ok: false, error: 'missing TELEGRAM_API_KEY' };
     }
 
+    let webhookInfo: {
+      ok: boolean;
+      url?: string;
+      has_custom_certificate?: boolean;
+      pending_update_count?: number;
+      last_error_date?: number;
+      last_error_message?: string;
+      max_connections?: number;
+      allowed_updates?: string[];
+      error?: string;
+    } = { ok: false };
+    if (TELEGRAM_API_KEY) {
+      try {
+        const r = await fetch(`https://api.telegram.org/bot${TELEGRAM_API_KEY}/getWebhookInfo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+        const data = await r.json().catch(() => null);
+        if (!r.ok || !data?.ok) {
+          webhookInfo = { ok: false, error: `telegram ${r.status}: ${JSON.stringify(data)}` };
+        } else {
+          webhookInfo = { ok: true, ...data.result };
+        }
+      } catch (e) {
+        webhookInfo = { ok: false, error: e instanceof Error ? e.message : String(e) };
+      }
+    }
+
     // 3. Cron / bot state — updated_at moves forward every tick
     const { data: botState } = await admin
       .from('telegram_bot_state')
@@ -94,14 +126,30 @@ Deno.serve(async (req) => {
       : null;
 
     // 4. Current user links
-    const [{ data: link }, { data: group }] = await Promise.all([
+    const { data: userWorkspaceRows } = await admin
+      .from('workspace_members')
+      .select('workspace_id')
+      .eq('user_id', user.id);
+    const userWorkspaceIds = (userWorkspaceRows || [])
+      .map((row: { workspace_id?: string | null }) => row.workspace_id)
+      .filter(Boolean) as string[];
+
+    const [{ data: link }, { data: group }, workspaceLinksResult] = await Promise.all([
       admin.from('telegram_links')
         .select('is_active, chat_id, telegram_username, telegram_first_name, linked_at, link_code_expires_at')
         .eq('user_id', user.id).maybeSingle(),
       admin.from('telegram_group_links')
         .select('is_active, chat_id, title, linked_at, link_code_expires_at')
         .eq('owner_user_id', user.id).maybeSingle(),
+      userWorkspaceIds.length
+        ? admin.from('workspace_telegram_links')
+          .select('is_active, chat_id, title, linked_at, workspace_id, workspaces(name)')
+          .eq('is_active', true)
+          .in('workspace_id', userWorkspaceIds)
+          .limit(20)
+        : Promise.resolve({ data: [] }),
     ]);
+    const workspaceLinks = workspaceLinksResult.data || [];
 
     // 5. Optional manual poll trigger
     let pollResult: { ok: boolean; status?: number; body?: unknown; error?: string } | null = null;
@@ -124,9 +172,11 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       envVars,
       botInfo,
+      webhookInfo,
       botState: botState ? { ...botState, lastTickSeconds } : null,
       link,
       group,
+      workspaceLinks,
       pollResult,
       timestamp: new Date().toISOString(),
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

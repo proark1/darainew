@@ -1,11 +1,11 @@
 // Cross-turn conversation state.
 //
-// One row per (user_id, channel). Holds the current open intent + a
-// blob the next turn can read to resolve "do it", "the meeting", etc.
+// One row per (user_id, channel, channel_ref). Holds the current open intent
+// + a blob the next turn can read to resolve "do it", "the meeting", etc.
 // Auto-expires after 1h so a stale "awaiting confirm" doesn't leak
 // into tomorrow's first turn.
 
-export type Channel = 'web' | 'tg_private' | 'tg_family' | 'voice';
+export type Channel = 'web' | 'tg_private' | 'tg_family' | 'tg_workspace' | 'voice';
 
 export interface RecentEntity {
   kind: 'task' | 'event' | 'contact' | 'note' | 'contract' | 'project' | 'family_member' | 'business' | 'property';
@@ -17,6 +17,8 @@ export interface RecentEntity {
 export interface ConversationState {
   user_id: string;
   channel: Channel;
+  channel_ref?: string | null;
+  workspace_id?: string | null;
   open_intent: string | null;
   pending_payload: Record<string, unknown>;
   recent_entities: RecentEntity[];
@@ -25,20 +27,24 @@ export interface ConversationState {
 }
 
 // Minimal Supabase client surface needed by this module.
-type ConvStateClient = { from(table: string): Record<string, (...args: unknown[]) => unknown> };
+type ConvStateClient = { from(table: string): any };
 
 export async function loadConversationState(
   supabase: ConvStateClient,
   userId: string,
   channel: Channel,
+  opts?: { channelRef?: string | null; workspaceId?: string | null },
 ): Promise<ConversationState | null> {
   try {
-    const { data, error } = await supabase
+    const channelRef = opts?.channelRef ?? '';
+    let q = supabase
       .from('dori_conversation_state')
       .select('*')
       .eq('user_id', userId)
       .eq('channel', channel)
-      .maybeSingle();
+      .eq('channel_ref', channelRef);
+    if (opts?.workspaceId) q = q.eq('workspace_id', opts.workspaceId);
+    const { data, error } = await q.maybeSingle();
     if (error) {
       console.warn('[loadConversationState] failed', error.message);
       return null;
@@ -51,7 +57,8 @@ export async function loadConversationState(
         .from('dori_conversation_state')
         .update({ open_intent: null, pending_payload: {} })
         .eq('user_id', userId)
-        .eq('channel', channel);
+        .eq('channel', channel)
+        .eq('channel_ref', channelRef);
       return { ...data, open_intent: null, pending_payload: {} } as ConversationState;
     }
     return data as ConversationState;
@@ -64,6 +71,8 @@ export async function loadConversationState(
 export interface SaveStateArgs {
   userId: string;
   channel: Channel;
+  channelRef?: string | null;
+  workspaceId?: string | null;
   openIntent?: string | null;
   pendingPayload?: Record<string, unknown>;
   recentEntities?: RecentEntity[];
@@ -77,6 +86,8 @@ export async function saveConversationState(supabase: ConvStateClient, args: Sav
     const row: Record<string, unknown> = {
       user_id: args.userId,
       channel: args.channel,
+      channel_ref: args.channelRef ?? '',
+      workspace_id: args.workspaceId ?? null,
       open_intent: args.openIntent ?? null,
       pending_payload: args.pendingPayload ?? {},
       recent_entities: args.recentEntities ?? [],
@@ -86,7 +97,7 @@ export async function saveConversationState(supabase: ConvStateClient, args: Sav
     };
     const { error } = await supabase
       .from('dori_conversation_state')
-      .upsert(row, { onConflict: 'user_id,channel' });
+      .upsert(row, { onConflict: 'user_id,channel,channel_ref' });
     if (error) console.warn('[saveConversationState] failed', error.message);
   } catch (e) {
     console.warn('[saveConversationState] threw', (e as Error).message);
@@ -140,13 +151,15 @@ export async function clearConversationState(
   supabase: ConvStateClient,
   userId: string,
   channel: Channel,
+  opts?: { channelRef?: string | null },
 ): Promise<void> {
   try {
     await supabase
       .from('dori_conversation_state')
       .update({ open_intent: null, pending_payload: {} })
       .eq('user_id', userId)
-      .eq('channel', channel);
+      .eq('channel', channel)
+      .eq('channel_ref', opts?.channelRef ?? '');
   } catch (e) {
     console.warn('[clearConversationState] failed', (e as Error).message);
   }

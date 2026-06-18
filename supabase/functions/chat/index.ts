@@ -1405,7 +1405,7 @@ interface ToolExecResult {
 
 interface ServerExecOpts {
   skipApprovalGate?: boolean;
-  source?: string;       // 'web' | 'tg_private' | 'tg_family' | 'voice' | 'proactive'
+  source?: string;       // 'web' | 'tg_private' | 'tg_family' | 'tg_workspace' | 'voice' | 'proactive'
   sourceRef?: string | null;
   // When set, every NEW row the executor creates is tagged with this workspace.
   workspaceId?: string | null;
@@ -1624,7 +1624,15 @@ async function executeToolsServerSide(
             user_id: userId,
             action_type: actionType,
             entity_type: spec.entity,
-            action_data: { tool_xml: parsed.fullMatch, parsed: parsed.data, op },
+            action_data: {
+              tool_xml: parsed.fullMatch,
+              parsed: parsed.data,
+              op,
+              source: opts?.source || 'web',
+              source_ref: opts?.sourceRef || null,
+              workspace_id: opts?.workspaceId || null,
+              household_id: opts?.householdId || null,
+            },
             reason: summary,
             status: 'pending',
             source: opts?.source || 'web',
@@ -4589,6 +4597,7 @@ async function loadDoriIntelligence(
   supabase: SupabaseClient,
   userId: string,
   currentChannel: string,
+  currentChannelRef?: string | null,
   workspaceId?: string | null,
   // Latest user message — drives semantic recall. Optional so existing
   // callers without a query (digests, recaps) keep working; in that
@@ -4613,7 +4622,7 @@ async function loadDoriIntelligence(
   const [{ data: turns }, { data: prefs }, { data: memories }] = await Promise.all([
     supabase
       .from('dori_conversations')
-      .select('channel, role, content, created_at')
+      .select('channel, channel_ref, role, content, created_at')
       .eq('user_id', userId)
       .gte('created_at', sinceIso)
       .order('created_at', { ascending: false })
@@ -4630,10 +4639,15 @@ async function loadDoriIntelligence(
 
   let memoryBlock = '';
   if (turns && turns.length > 0) {
-    const otherChannelTurns = turns.filter((t: { channel: string }) => t.channel !== currentChannel).slice(0, 12).reverse();
+    const otherChannelTurns = turns
+      .filter((t: { channel: string; channel_ref?: string | null }) =>
+        t.channel !== currentChannel || (!!currentChannelRef && t.channel_ref !== currentChannelRef),
+      )
+      .slice(0, 12)
+      .reverse();
     if (otherChannelTurns.length > 0) {
       memoryBlock += '\n\n## RECENT CROSS-CHANNEL CONVERSATIONS (last 24h, other channels)';
-      memoryBlock += '\nUse these to maintain context across web, Telegram private, and Telegram family group:';
+      memoryBlock += '\nUse these to maintain context across web, Telegram private, family groups, and workspace groups:';
       for (const t of otherChannelTurns) {
         const when = new Date(t.created_at).toISOString().slice(11, 16);
         memoryBlock += `\n[${t.channel} ${when}] ${t.role}: ${String(t.content).slice(0, 200)}`;
@@ -4855,10 +4869,10 @@ serve(async (req) => {
 
     // Determine which channel this request is coming from (for unified memory)
     const telegramUserIdHeader = req.headers.get('x-telegram-user-id');
-    const tgChannelHint = req.headers.get('x-dori-channel'); // 'tg_private' | 'tg_family'
+    const tgChannelHint = req.headers.get('x-dori-channel'); // 'tg_private' | 'tg_family' | 'tg_workspace'
     const tgChannelRef = req.headers.get('x-dori-channel-ref') || null;
     const currentChannel = telegramUserIdHeader
-      ? (tgChannelHint === 'tg_family' ? 'tg_family' : 'tg_private')
+      ? (tgChannelHint === 'tg_family' || tgChannelHint === 'tg_workspace' ? tgChannelHint : 'tg_private')
       : 'web';
 
     // Telegram surfaces (and the voice channel) ship one user turn per
@@ -4875,11 +4889,15 @@ serve(async (req) => {
       && messages.length <= 2
     ) {
       try {
-        const { data: priorTurns } = await supabaseAdmin
+        let priorQuery = supabaseAdmin
           .from('dori_conversations')
           .select('role, content, created_at')
           .eq('user_id', userId)
-          .eq('channel', currentChannel)
+          .eq('channel', currentChannel);
+        if (tgChannelRef) {
+          priorQuery = priorQuery.eq('channel_ref', tgChannelRef);
+        }
+        const { data: priorTurns } = await priorQuery
           .order('created_at', { ascending: false })
           .limit(8);
         if (priorTurns && priorTurns.length > 0) {
@@ -4984,6 +5002,7 @@ serve(async (req) => {
       supabaseAdmin,
       userId,
       currentChannel,
+      tgChannelRef,
       activeWorkspace?.id ?? null,
       lastUserContent,
     );
@@ -4996,6 +5015,7 @@ serve(async (req) => {
       supabaseAdmin,
       userId,
       currentChannel as Channel,
+      { channelRef: tgChannelRef, workspaceId: activeWorkspace?.id ?? null },
     );
     const stateBlock = formatStateForPrompt(conversationState);
 
@@ -5736,7 +5756,7 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
       const conversationMsgs: { role: string; content: AiMessageContent }[] = [...allMessages];
       const allExecResults: ToolExecResult[] = [];
 
-      const effectiveSource = actionSource || (currentChannel === 'tg_family' ? 'tg_family'
+      const effectiveSource = actionSource || (currentChannel === 'tg_family' || currentChannel === 'tg_workspace' ? currentChannel
         : currentChannel === 'tg_private' ? 'tg_private'
         : 'web');
       const effectiveSourceRef = actionSourceRef ?? tgChannelRef ?? null;
@@ -5853,6 +5873,8 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
             saveConversationState(supabaseAdmin, {
               userId,
               channel: currentChannel as Channel,
+              channelRef: tgChannelRef,
+              workspaceId: activeWorkspace?.id ?? null,
               openIntent: null,
               pendingPayload: {},
               recentEntities: [],
@@ -5863,9 +5885,9 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
                 userId,
                 workspaceId: activeWorkspace?.id ?? null,
                 source: 'chat_turn',
-                sourceRef: `chat:${currentChannel}:${Date.now()}`,
+                sourceRef: `chat:${currentChannel}:${tgChannelRef || 'global'}:${Date.now()}`,
                 content: `User: ${lastUserContent}\nAssistant: ${cleanText.slice(0, 800)}`,
-                metadata: { channel: currentChannel, specialist: route.effective },
+                metadata: { channel: currentChannel, channel_ref: tgChannelRef, specialist: route.effective },
                 importance: route.specialist === 'general' ? 0.3 : 0.55,
               }).catch(() => {});
             }
@@ -5914,7 +5936,7 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
         totalCompletionTokens += aiData.usage?.completion_tokens || 0;
 
         // Default the action source from the channel if caller didn't specify one.
-        const effectiveSource = actionSource || (currentChannel === 'tg_family' ? 'tg_family'
+        const effectiveSource = actionSource || (currentChannel === 'tg_family' || currentChannel === 'tg_workspace' ? currentChannel
           : currentChannel === 'tg_private' ? 'tg_private'
           : 'web');
         const effectiveSourceRef = actionSourceRef ?? tgChannelRef ?? null;
@@ -5972,6 +5994,8 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
         await saveConversationState(supabaseAdmin, {
           userId,
           channel: currentChannel as Channel,
+          channelRef: tgChannelRef,
+          workspaceId: activeWorkspace?.id ?? null,
           openIntent: proposedPlan ? 'awaiting_plan_approval' : null,
           pendingPayload: proposedPlan ? proposedPlan.payload ?? {} : {},
           recentEntities,
@@ -5987,9 +6011,9 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
           userId,
           workspaceId: activeWorkspace?.id ?? null,
           source: 'chat_turn',
-          sourceRef: `chat:${currentChannel}:${Date.now()}`,
+          sourceRef: `chat:${currentChannel}:${tgChannelRef || 'global'}:${Date.now()}`,
           content: `User: ${lastUserContent}\nAssistant: ${cleanText.trim().slice(0, 800)}`,
-          metadata: { channel: currentChannel, specialist: route.effective },
+          metadata: { channel: currentChannel, channel_ref: tgChannelRef, specialist: route.effective },
           importance: route.specialist === 'general' ? 0.3 : 0.55,
         }).catch(() => {});
       }
@@ -6079,6 +6103,8 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
             saveConversationState(supabaseAdmin, {
               userId,
               channel: currentChannel as Channel,
+              channelRef: tgChannelRef,
+              workspaceId: activeWorkspace?.id ?? null,
               openIntent: null,
               pendingPayload: {},
               recentEntities: [],
@@ -6089,9 +6115,9 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
                 userId,
                 workspaceId: activeWorkspace?.id ?? null,
                 source: 'chat_turn',
-                sourceRef: `chat:${currentChannel}:${Date.now()}`,
+                sourceRef: `chat:${currentChannel}:${tgChannelRef || 'global'}:${Date.now()}`,
                 content: `User: ${lastUserContent}\nAssistant: ${cleaned.slice(0, 800)}`,
-                metadata: { channel: currentChannel, specialist: route.effective },
+                metadata: { channel: currentChannel, channel_ref: tgChannelRef, specialist: route.effective },
                 importance: route.specialist === 'general' ? 0.3 : 0.55,
               }).catch(() => {});
             }
