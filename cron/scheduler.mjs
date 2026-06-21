@@ -59,6 +59,7 @@ const JOBS = [
   { name: "routine-learner", schedule: "0 3 * * *" },
   { name: "episodic-memory-builder", schedule: "0 4 * * *" },
   { name: "learned-preferences-rollup", schedule: "0 2 * * *" },
+  { name: "memory-consolidation-cron", schedule: "30 3 * * *" },
   { name: "life-score-commentary", schedule: "0 22 * * *" },
 ];
 

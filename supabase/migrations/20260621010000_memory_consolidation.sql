@@ -143,16 +143,23 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.dori_run_memory_consolidation() TO service_role;
 
--- Nightly at 03:30 UTC. Runs SQL directly — no edge function / HTTP needed.
+-- Nightly scheduling. If pg_cron is present, schedule in-DB at 03:30 UTC.
+-- This deployment runs crons via the Railway "cron" service instead (see
+-- cron/scheduler.mjs), so pg_cron is usually absent — in that case this is a
+-- no-op and the job is triggered by calling dori_run_memory_consolidation()
+-- from the cron service. Guarded so the migration is portable either way.
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'memory-consolidation-cron') THEN
-    PERFORM cron.unschedule('memory-consolidation-cron');
+  IF to_regnamespace('cron') IS NOT NULL THEN
+    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'memory-consolidation-cron') THEN
+      PERFORM cron.unschedule('memory-consolidation-cron');
+    END IF;
+    PERFORM cron.schedule(
+      'memory-consolidation-cron',
+      '30 3 * * *',
+      $cron$ SELECT public.dori_run_memory_consolidation(); $cron$
+    );
+  ELSE
+    RAISE NOTICE 'pg_cron absent — schedule dori_run_memory_consolidation() via the Railway cron service';
   END IF;
 END $$;
-
-SELECT cron.schedule(
-  'memory-consolidation-cron',
-  '30 3 * * *',
-  $$ SELECT public.dori_run_memory_consolidation(); $$
-);
