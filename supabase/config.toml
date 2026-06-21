@@ -247,6 +247,9 @@ verify_jwt = false
 [functions.trip-prep-cron]
 verify_jwt = false
 
+[functions.memory-consolidation-cron]
+verify_jwt = false
+
 [functions.telegram-family-morning-digest]
 verify_jwt = false
 
