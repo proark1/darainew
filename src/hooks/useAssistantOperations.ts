@@ -368,7 +368,12 @@ function mapBlock(value: unknown, index: number): DailyPlanBlock | null {
   const start = asString(row.start || row.startTime || row.start_time);
   const end = asString(row.end || row.endTime || row.end_time);
   const title = asString(row.title || row.name, "Focus block");
-  if (!start || !end || Number.isNaN(new Date(start).getTime()) || Number.isNaN(new Date(end).getTime())) {
+  if (
+    !start ||
+    !end ||
+    Number.isNaN(new Date(start).getTime()) ||
+    Number.isNaN(new Date(end).getTime())
+  ) {
     return null;
   }
   return {
@@ -468,7 +473,10 @@ export function useAssistantOperations() {
           q.eq("user_id", user.id).order("created_at", { ascending: false }).limit(100),
         ),
         readTable("assistant_eval_cases", (q) =>
-          q.order("active", { ascending: false }).order("created_at", { ascending: false }).limit(100),
+          q
+            .order("active", { ascending: false })
+            .order("created_at", { ascending: false })
+            .limit(100),
         ),
         readTable("assistant_eval_runs", (q) =>
           q.eq("user_id", user.id).order("created_at", { ascending: false }).limit(30),
@@ -480,7 +488,11 @@ export function useAssistantOperations() {
           q.eq("user_id", user.id).order("updated_at", { ascending: false }).limit(80),
         ),
         readTable("assistant_opportunities", (q) =>
-          q.eq("user_id", user.id).order("status", { ascending: true }).order("score", { ascending: false }).limit(80),
+          q
+            .eq("user_id", user.id)
+            .order("status", { ascending: true })
+            .order("score", { ascending: false })
+            .limit(80),
         ),
         readTable("assistant_daily_plans", (q) =>
           q.eq("user_id", user.id).order("plan_date", { ascending: false }).limit(30),
@@ -516,8 +528,12 @@ export function useAssistantOperations() {
 
   const stats = useMemo(() => {
     const queuedMemory = snapshot.memoryQueue.length;
-    const candidateOpportunities = snapshot.opportunities.filter((o) => o.status === "candidate").length;
-    const pendingPlans = snapshot.dailyPlans.filter((p) => !p.appliedAt && p.scheduledBlocks.length > 0).length;
+    const candidateOpportunities = snapshot.opportunities.filter(
+      (o) => o.status === "candidate",
+    ).length;
+    const pendingPlans = snapshot.dailyPlans.filter(
+      (p) => !p.appliedAt && p.scheduledBlocks.length > 0,
+    ).length;
     const failedToolCalls = snapshot.toolCalls.filter((c) => c.status === "error").length;
     const evalPassRate =
       snapshot.evalResults.length === 0
@@ -559,7 +575,11 @@ export function useAssistantOperations() {
           .eq("user_id", user.id);
         if (dbError) throw dbError;
         toast.success(action === "approve" ? "Memory approved" : "Memory rejected");
-        moduleBus.emit("ai:memory-updated", { memoryId: id, reviewed: true }, "useAssistantOperations");
+        moduleBus.emit(
+          "ai:memory-updated",
+          { memoryId: id, reviewed: true },
+          "useAssistantOperations",
+        );
         await refresh();
         return true;
       } catch (e) {
@@ -685,7 +705,11 @@ export function useAssistantOperations() {
           .eq("user_id", user.id);
         if (planError) throw planError;
 
-        moduleBus.emit("event:created", { planId: plan.id, count: rows.length }, "useAssistantOperations");
+        moduleBus.emit(
+          "event:created",
+          { planId: plan.id, count: rows.length },
+          "useAssistantOperations",
+        );
         toast.success(`Applied ${rows.length} calendar block${rows.length === 1 ? "" : "s"}`);
         await refresh();
         return true;

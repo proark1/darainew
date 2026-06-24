@@ -1465,7 +1465,9 @@ Deno.serve(async (req) => {
                   "That action is no longer available.",
                   TELEGRAM_API_KEY,
                 );
-              } else if (!isActionableNow(action as PendingAction & { expires_at?: string | null })) {
+              } else if (
+                !isActionableNow(action as PendingAction & { expires_at?: string | null })
+              ) {
                 await tgAnswerCallback(cb.id, `This expired.`, TELEGRAM_API_KEY);
                 if (cbMessageId) {
                   await tgEditMessageText(

@@ -75,10 +75,16 @@ function taskScore(task: PlanningTask, day: Date): number {
     due && !Number.isNaN(due.getTime())
       ? Math.max(0, 7 - Math.ceil((due.getTime() - day.getTime()) / 86_400_000))
       : 0;
-  return priorityWeight(task.priority) * 10 + dueSoon - Math.max(0, task.estimatedMinutes - 90) / 30;
+  return (
+    priorityWeight(task.priority) * 10 + dueSoon - Math.max(0, task.estimatedMinutes - 90) / 30
+  );
 }
 
-function buildFreeSlots(day: Date, busy: BusyBlock[], options: Required<Pick<PlanOptions, "workdayStartHour" | "workdayEndHour" | "bufferMinutes">>) {
+function buildFreeSlots(
+  day: Date,
+  busy: BusyBlock[],
+  options: Required<Pick<PlanOptions, "workdayStartHour" | "workdayEndHour" | "bufferMinutes">>,
+) {
   const workStart = atHour(day, options.workdayStartHour);
   const workEnd = atHour(day, options.workdayEndHour);
   const sortedBusy = busy
@@ -123,27 +129,47 @@ export function planDay(tasks: PlanningTask[], busy: BusyBlock[], options: PlanO
   const sortedTasks = [...tasks].sort((a, b) => taskScore(b, day) - taskScore(a, day));
 
   for (const task of sortedTasks) {
-    const duration = Math.max(minBlockMinutes, Math.ceil(task.estimatedMinutes / minBlockMinutes) * minBlockMinutes);
+    const duration = Math.max(
+      minBlockMinutes,
+      Math.ceil(task.estimatedMinutes / minBlockMinutes) * minBlockMinutes,
+    );
     const fixedStart = task.fixedStart ? toDate(task.fixedStart) : null;
 
     if (fixedStart && !Number.isNaN(fixedStart.getTime())) {
       const fixedEnd = addMinutes(fixedStart, duration);
-      const conflict = busy.some((block) => overlaps(fixedStart, fixedEnd, toDate(block.start), toDate(block.end)));
+      const conflict = busy.some((block) =>
+        overlaps(fixedStart, fixedEnd, toDate(block.start), toDate(block.end)),
+      );
       if (conflict) {
-        unscheduled.push({ taskId: task.id, title: task.title, reason: "Fixed time conflicts with existing calendar." });
+        unscheduled.push({
+          taskId: task.id,
+          title: task.title,
+          reason: "Fixed time conflicts with existing calendar.",
+        });
         continue;
       }
-      scheduled.push({ taskId: task.id, title: task.title, start: fixedStart, end: fixedEnd, reason: "User requested a fixed time." });
+      scheduled.push({
+        taskId: task.id,
+        title: task.title,
+        start: fixedStart,
+        end: fixedEnd,
+        reason: "User requested a fixed time.",
+      });
       busy.push({ start: fixedStart, end: fixedEnd });
       continue;
     }
 
     const slotIndex = freeSlots.findIndex(
-      (slot) => minutesBetween(slot.start, slot.end) >= duration && energyFits(task, slot.start, options),
+      (slot) =>
+        minutesBetween(slot.start, slot.end) >= duration && energyFits(task, slot.start, options),
     );
 
     if (slotIndex === -1) {
-      unscheduled.push({ taskId: task.id, title: task.title, reason: "No free slot long enough in the planning window." });
+      unscheduled.push({
+        taskId: task.id,
+        title: task.title,
+        reason: "No free slot long enough in the planning window.",
+      });
       continue;
     }
 

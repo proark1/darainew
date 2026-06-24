@@ -1391,9 +1391,7 @@ function buildSystemPrompt(
   const overdueTasks = asRows<Record<string, unknown>>(contextData?.overdueTasks);
   const upcomingEvents = asRows<Record<string, unknown>>(contextData?.upcomingEvents);
   const contactsDue = asRows<Record<string, unknown>>(contextData?.contactsDue);
-  const contractsWithRenewals = asRows<Record<string, unknown>>(
-    contextData?.contractsWithRenewals,
-  );
+  const contractsWithRenewals = asRows<Record<string, unknown>>(contextData?.contractsWithRenewals);
   const allProjects = asRows<Record<string, unknown>>(contextData?.allProjects);
   const unreadEmails = asRows<Record<string, unknown>>(contextData?.unreadEmails);
   const familyMembers = asRows<Record<string, unknown>>(contextData?.familyMembers);
@@ -1589,8 +1587,8 @@ If you know the user's name, include it: "Hey [Name]! What can I help with?"
     if (habits.length > 0) {
       prompt += `\n### Active Habits:\n`;
       habits.slice(0, 5).forEach((habit) => {
-          prompt += `- ${habit.icon} ${habit.name} (${habit.frequency})\n`;
-        });
+        prompt += `- ${habit.icon} ${habit.name} (${habit.frequency})\n`;
+      });
     }
 
     // Today's tasks

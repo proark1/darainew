@@ -32,11 +32,7 @@ export function estimateCostUsd(
 
 // Compact footer appended to a Telegram reply. Emphasises the SUM of input +
 // output tokens, with the split and an estimated cost.
-export function usageFooter(
-  model: string,
-  promptTokens: number,
-  completionTokens: number,
-): string {
+export function usageFooter(model: string, promptTokens: number, completionTokens: number): string {
   const total = promptTokens + completionTokens;
   const cost = estimateCostUsd(model, promptTokens, completionTokens);
   const costStr = cost >= 0.01 ? `$${cost.toFixed(3)}` : `$${cost.toFixed(5)}`;

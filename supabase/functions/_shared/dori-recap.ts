@@ -85,11 +85,13 @@ export async function buildWorkspaceWeeklyRecap(
     assignee: nameFor(t.assignee_id || t.user_id),
   }));
 
-  const inProgress = asRows<RecapTask>(openRows).slice(0, 15).map((t) => ({
-    title: t.title,
-    assignee: nameFor(t.assignee_id || t.user_id),
-    due_date: t.due_date ?? null,
-  }));
+  const inProgress = asRows<RecapTask>(openRows)
+    .slice(0, 15)
+    .map((t) => ({
+      title: t.title,
+      assignee: nameFor(t.assignee_id || t.user_id),
+      due_date: t.due_date ?? null,
+    }));
 
   // Use calendar-day math in the target timezone so "due late yesterday /
   // now early today" reports 1 day overdue (not 0 via millisecond division).

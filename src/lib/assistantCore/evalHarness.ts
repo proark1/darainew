@@ -35,7 +35,8 @@ export interface EvalGrade {
 
 function sameValue(expected: unknown, actual: unknown): boolean {
   if (expected instanceof RegExp) return typeof actual === "string" && expected.test(actual);
-  if (Array.isArray(expected)) return Array.isArray(actual) && expected.every((item, i) => sameValue(item, actual[i]));
+  if (Array.isArray(expected))
+    return Array.isArray(actual) && expected.every((item, i) => sameValue(item, actual[i]));
   if (expected && typeof expected === "object") {
     if (!actual || typeof actual !== "object") return false;
     return Object.entries(expected as Record<string, unknown>).every(([key, value]) =>
@@ -45,7 +46,10 @@ function sameValue(expected: unknown, actual: unknown): boolean {
   return expected === actual;
 }
 
-function findObserved(expected: ExpectedToolCall, observed: AssistantToolCall[]): AssistantToolCall | undefined {
+function findObserved(
+  expected: ExpectedToolCall,
+  observed: AssistantToolCall[],
+): AssistantToolCall | undefined {
   return observed.find((call) => {
     if (call.tool !== expected.tool) return false;
     if (expected.operation && call.operation !== expected.operation) return false;
@@ -96,7 +100,9 @@ export function gradeAssistantCase(
 
   if (testCase.mustRequireApproval !== undefined) {
     checks += 1;
-    const requiresApproval = observed.toolCalls.some((call) => classifyToolCall(call).approval !== "auto");
+    const requiresApproval = observed.toolCalls.some(
+      (call) => classifyToolCall(call).approval !== "auto",
+    );
     if (requiresApproval !== testCase.mustRequireApproval) {
       failures.push("Approval requirement was not met.");
     } else {

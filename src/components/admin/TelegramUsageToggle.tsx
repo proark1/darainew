@@ -23,11 +23,7 @@ export function TelegramUsageToggle() {
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await db
-          .from("app_settings")
-          .select("value")
-          .eq("key", KEY)
-          .maybeSingle();
+        const { data } = await db.from("app_settings").select("value").eq("key", KEY).maybeSingle();
         if (data) setEnabled(data.value === true || data.value === "true");
       } catch {
         // default on

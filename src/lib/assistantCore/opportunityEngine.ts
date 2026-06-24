@@ -88,7 +88,9 @@ export function scoreOpportunity(
   const novelty = clamp01(candidate.novelty, 0.8);
   const receptivity = clamp01(context.acceptRateByType?.[candidate.type], 0.65);
   const timingFit = context.focusMode || context.inMeeting ? 0.55 : 1;
-  const duplicatePenalty = context.recentCandidateKeys?.includes(candidateKey(candidate)) ? 0.35 : 0;
+  const duplicatePenalty = context.recentCandidateKeys?.includes(candidateKey(candidate))
+    ? 0.35
+    : 0;
 
   const score =
     100 * utility * confidence * novelty * receptivity * timingFit -
@@ -122,7 +124,8 @@ export function decideOpportunity(
   if (context.inMeeting && candidate.urgency < 0.9) gates.push("in_meeting");
   if (context.focusMode && candidate.urgency < 0.8) gates.push("focus_mode");
 
-  if (context.recentCandidateKeys?.includes(candidateKey(candidate))) gates.push("duplicate_recent");
+  if (context.recentCandidateKeys?.includes(candidateKey(candidate)))
+    gates.push("duplicate_recent");
 
   if (context.groupSurface && candidate.sensitivity && candidate.sensitivity !== "public") {
     gates.push("private_context_in_group");

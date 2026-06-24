@@ -35,12 +35,7 @@ import { recallEntities } from "../_shared/dori-kg-recall.ts";
 import { estimateCostUsd, usageFooter } from "../_shared/ai-pricing.ts";
 import { strictAppOrigin } from "../_shared/cors.ts";
 import { mintInternalToken, resolveUserId } from "../_shared/auth.ts";
-import {
-  asRecord,
-  type DbClient,
-  type DbResult,
-  type DbRow,
-} from "../_shared/supabase-edge.ts";
+import { asRecord, type DbClient, type DbResult, type DbRow } from "../_shared/supabase-edge.ts";
 import {
   finishAssistantTrace,
   recordToolCallTrace,
@@ -1564,8 +1559,7 @@ const MUTATING_TOOLS: MutatingTool[] = [
   {
     tool: "email_action",
     entity: "email",
-    regex:
-      /<tool>email_action<\/tool>\s*<action>(\w+)<\/action>\s*<email>(\{[\s\S]*?\})<\/email>/g,
+    regex: /<tool>email_action<\/tool>\s*<action>(\w+)<\/action>\s*<email>(\{[\s\S]*?\})<\/email>/g,
     parse: (m) => {
       const data = safeParseJson(m[2]);
       if (!data) return null;
@@ -1579,7 +1573,8 @@ const MUTATING_TOOLS: MutatingTool[] = [
     summarize: (action, d) => {
       if (action === "forward") return `Forward email to ${d.to || "(recipient missing)"}`;
       if (action === "snooze") return `Snooze email until ${d.snooze_until || "(time missing)"}`;
-      if (action === "unsubscribe") return `Unsubscribe from email sender ${d.email_id || ""}`.trim();
+      if (action === "unsubscribe")
+        return `Unsubscribe from email sender ${d.email_id || ""}`.trim();
       return `Email action: ${action}${d.email_id ? ` (${d.email_id})` : ""}`;
     },
     forceConfirm: true,
@@ -1639,8 +1634,14 @@ function registryOperationFor(tool: string, action: string, op: OpKind): string 
   if (normalized === "add" || normalized === "create") return "create";
   if (normalized === "send" || normalized === "forward" || normalized === "reply") return "send";
   if (normalized === "unsubscribe") return "unsubscribe";
-  if (normalized === "delete" || normalized === "remove" || normalized === "cancel") return "delete";
-  if (normalized === "search" || normalized === "summarize" || normalized === "translate" || normalized === "list") {
+  if (normalized === "delete" || normalized === "remove" || normalized === "cancel")
+    return "delete";
+  if (
+    normalized === "search" ||
+    normalized === "summarize" ||
+    normalized === "translate" ||
+    normalized === "list"
+  ) {
     return normalized === "search" ? "search" : "read";
   }
   return op;
@@ -7915,7 +7916,12 @@ serve(async (req) => {
     // turns the regex handles. Sharpens BOTH routing (below) and the
     // model-tier decision (when a Pro model is configured).
     let triage: TriageResult | null = null;
-    if (TRIAGE_ENABLED && route.confidence < 0.55 && lastUserContent.length >= 8 && userId !== "anonymous") {
+    if (
+      TRIAGE_ENABLED &&
+      route.confidence < 0.55 &&
+      lastUserContent.length >= 8 &&
+      userId !== "anonymous"
+    ) {
       triage = await runTriage(lastUserContent, GEMINI_API_KEY ?? "");
     }
 
@@ -7946,7 +7952,13 @@ serve(async (req) => {
           used_specialist: effectiveSpecialists[0] ?? "general",
           metadata: {
             matched: route.matched,
-            triage: triage ? { specialists: triage.specialists, complexity: triage.complexity, multiStep: triage.multiStep } : null,
+            triage: triage
+              ? {
+                  specialists: triage.specialists,
+                  complexity: triage.complexity,
+                  multiStep: triage.multiStep,
+                }
+              : null,
             effective_specialists: effectiveSpecialists,
           },
         })
@@ -8588,13 +8600,16 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
     // Per-turn model + agent-round budget. Cheap heuristic + (when it ran)
     // the triage signal. With no Pro model configured this is always Flash/4
     // — identical to the previous hardcoded behaviour.
-    const tier = decideTier({
-      message: lastUserContent,
-      routeConfidence: route.confidence,
-      hasImage: !!imageUrl,
-      triageComplexity: triage?.complexity ?? null,
-      triageMultiStep: triage?.multiStep ?? null,
-    }, proModelEnabled);
+    const tier = decideTier(
+      {
+        message: lastUserContent,
+        routeConfidence: route.confidence,
+        hasImage: !!imageUrl,
+        triageComplexity: triage?.complexity ?? null,
+        triageMultiStep: triage?.multiStep ?? null,
+      },
+      proModelEnabled,
+    );
     const model = tier.model;
     if (tier.tier === "pro") {
       console.log("[tier] pro", { model, maxRounds: tier.maxRounds, reason: tier.reason });
@@ -8663,7 +8678,11 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
     // reach Dori". Retry the primary once, then fall back to the stable model.
     // Only 5xx is retried — 4xx (quota 429, bad request 400) is returned as-is
     // so the caller's existing 429/402 handling still applies.
-    async function callAI(msgs: { role: string; content: AiMessageContent }[], stream: boolean, modelOverride?: string) {
+    async function callAI(
+      msgs: { role: string; content: AiMessageContent }[],
+      stream: boolean,
+      modelOverride?: string,
+    ) {
       const base = modelOverride || model;
       const attempts = [base, base, FALLBACK_MODEL];
       let resp!: Response;
@@ -8933,7 +8952,10 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
               // buildToolObservation adds explicit self-correction guidance on
               // failures so the model retries/asks instead of faking success.
               conversationMsgs.push({ role: "assistant", content: roundText });
-              conversationMsgs.push({ role: "system", content: buildToolObservation(roundResults) });
+              conversationMsgs.push({
+                role: "system",
+                content: buildToolObservation(roundResults),
+              });
             }
 
             const cleanText = stripAllToolTags(finalPromptText).trim();
@@ -9136,7 +9158,12 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
       // Verify pass — one self-check, gated to Pro-tier turns that did real
       // multi-step work. Catches "claimed done but skipped a step" without
       // adding latency to simple turns.
-      if (proModelEnabled && currentTier === "pro" && allExecResults.length >= ESCALATE_AFTER_TOOLS && finalText) {
+      if (
+        proModelEnabled &&
+        currentTier === "pro" &&
+        allExecResults.length >= ESCALATE_AFTER_TOOLS &&
+        finalText
+      ) {
         try {
           conversationMsgs.push({ role: "assistant", content: finalText });
           conversationMsgs.push({

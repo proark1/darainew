@@ -48,7 +48,12 @@ function riskClass(risk: string): string {
 }
 
 function statusIcon(status: string) {
-  if (status === "success" || status === "completed" || status === "applied" || status === "accepted") {
+  if (
+    status === "success" ||
+    status === "completed" ||
+    status === "applied" ||
+    status === "accepted"
+  ) {
     return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />;
   }
   if (status === "error" || status === "failed" || status === "rejected") {
@@ -92,8 +97,18 @@ export function AssistantOpsPanel() {
               Review assistant quality, memory, proactive candidates, and daily planning.
             </p>
           </div>
-          <Button size="sm" variant="ghost" className="gap-2" onClick={ops.refresh} disabled={ops.loading}>
-            {ops.loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="gap-2"
+            onClick={ops.refresh}
+            disabled={ops.loading}
+          >
+            {ops.loading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
             Refresh
           </Button>
         </div>
@@ -103,7 +118,11 @@ export function AssistantOpsPanel() {
           <Metric icon={Inbox} label="Opportunities" value={ops.stats.candidateOpportunities} />
           <Metric icon={CalendarPlus} label="Plans" value={ops.stats.pendingPlans} />
           <Metric icon={AlertTriangle} label="Tool errors" value={ops.stats.failedToolCalls} />
-          <Metric icon={ClipboardCheck} label="Eval pass" value={passRate == null ? "n/a" : `${passRate}%`} />
+          <Metric
+            icon={ClipboardCheck}
+            label="Eval pass"
+            value={passRate == null ? "n/a" : `${passRate}%`}
+          />
         </div>
 
         {ops.error && (
@@ -149,7 +168,10 @@ export function AssistantOpsPanel() {
           <TabsContent value="evals" className="h-full m-0">
             <ScrollArea className="h-full">
               <div className="space-y-4 p-4">
-                <SectionTitle title="Latest Run" subtitle={latestEvalRun?.name ?? "No eval runs recorded yet"} />
+                <SectionTitle
+                  title="Latest Run"
+                  subtitle={latestEvalRun?.name ?? "No eval runs recorded yet"}
+                />
                 {latestEvalRun ? (
                   <div className="rounded-lg border border-border p-3">
                     <div className="flex items-center justify-between gap-3">
@@ -165,14 +187,19 @@ export function AssistantOpsPanel() {
                       <Badge variant="outline">{latestEvalRun.status}</Badge>
                     </div>
                     {Object.keys(latestEvalRun.summary).length > 0 && (
-                      <p className="mt-2 text-xs text-muted-foreground">{shortJson(latestEvalRun.summary)}</p>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {shortJson(latestEvalRun.summary)}
+                      </p>
                     )}
                   </div>
                 ) : (
                   <EmptyLine text="No eval runs have been persisted yet." />
                 )}
 
-                <SectionTitle title="Recent Results" subtitle={`${latestEvalResults.length} result rows`} />
+                <SectionTitle
+                  title="Recent Results"
+                  subtitle={`${latestEvalResults.length} result rows`}
+                />
                 <div className="space-y-2">
                   {latestEvalResults.length === 0 ? (
                     <EmptyLine text="Run the eval harness to populate result rows." />
@@ -186,7 +213,9 @@ export function AssistantOpsPanel() {
                               <p className="truncate text-sm font-medium">{result.caseId}</p>
                             </div>
                             {result.failures.length > 0 && (
-                              <p className="mt-1 text-xs text-destructive">{result.failures.join("; ")}</p>
+                              <p className="mt-1 text-xs text-destructive">
+                                {result.failures.join("; ")}
+                              </p>
                             )}
                           </div>
                           <Badge variant="outline">{percent(result.score)}%</Badge>
@@ -196,7 +225,10 @@ export function AssistantOpsPanel() {
                   )}
                 </div>
 
-                <SectionTitle title="Active Cases" subtitle={`${ops.evalCases.length} available cases`} />
+                <SectionTitle
+                  title="Active Cases"
+                  subtitle={`${ops.evalCases.length} available cases`}
+                />
                 <div className="grid gap-2 lg:grid-cols-2">
                   {ops.evalCases.map((testCase) => (
                     <div key={testCase.id} className="rounded-lg border border-border p-3">
@@ -206,7 +238,9 @@ export function AssistantOpsPanel() {
                         </Badge>
                         <p className="min-w-0 truncate text-sm font-medium">{testCase.name}</p>
                       </div>
-                      <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{testCase.input}</p>
+                      <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                        {testCase.input}
+                      </p>
                       <div className="mt-2 flex flex-wrap gap-1">
                         {testCase.tags.map((tag) => (
                           <Badge key={tag} variant="outline" className="text-[10px]">
@@ -234,12 +268,16 @@ export function AssistantOpsPanel() {
                           <div className="flex flex-wrap items-center gap-1.5">
                             <Badge variant="secondary">{memory.sensitivity}</Badge>
                             <Badge variant="outline">{memory.memoryType}</Badge>
-                            <Badge variant="outline">{Math.round(memory.confidence * 100)}% confidence</Badge>
+                            <Badge variant="outline">
+                              {Math.round(memory.confidence * 100)}% confidence
+                            </Badge>
                           </div>
                           <p className="mt-2 text-sm font-medium">{memory.key}</p>
                           <p className="mt-1 text-sm text-muted-foreground">{memory.value}</p>
                           {memory.context && (
-                            <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{memory.context}</p>
+                            <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                              {memory.context}
+                            </p>
                           )}
                           <p className="mt-2 text-[11px] text-muted-foreground">
                             {memory.source} · updated {when(memory.updatedAt)}
@@ -286,9 +324,15 @@ export function AssistantOpsPanel() {
                       opportunity={opportunity}
                       busy={ops.busyKey === `opportunity:${opportunity.id}`}
                       onAsk={() => ops.askDoriAboutOpportunity(opportunity)}
-                      onAccept={() => ops.updateOpportunity(opportunity.id, "accepted", "accepted_from_ops")}
-                      onDeliver={() => ops.updateOpportunity(opportunity.id, "delivered", "delivered_from_ops")}
-                      onDismiss={() => ops.updateOpportunity(opportunity.id, "dismissed", "dismissed_from_ops")}
+                      onAccept={() =>
+                        ops.updateOpportunity(opportunity.id, "accepted", "accepted_from_ops")
+                      }
+                      onDeliver={() =>
+                        ops.updateOpportunity(opportunity.id, "delivered", "delivered_from_ops")
+                      }
+                      onDismiss={() =>
+                        ops.updateOpportunity(opportunity.id, "dismissed", "dismissed_from_ops")
+                      }
                     />
                   ))
                 )}
@@ -382,7 +426,10 @@ function OverviewTab({
                     <div className="flex items-center gap-2">
                       {statusIcon(trace.status)}
                       <p className="truncate text-sm font-medium">{trace.surface}</p>
-                      <Badge variant="outline" className={cn("text-[10px]", riskClass(trace.riskLevel))}>
+                      <Badge
+                        variant="outline"
+                        className={cn("text-[10px]", riskClass(trace.riskLevel))}
+                      >
                         {trace.riskLevel}
                       </Badge>
                     </div>
@@ -413,7 +460,10 @@ function OverviewTab({
                       {statusIcon(call.status)}
                       <p className="truncate text-sm font-medium">{call.toolName}</p>
                     </div>
-                    <Badge variant="outline" className={cn("text-[10px]", riskClass(call.riskLevel))}>
+                    <Badge
+                      variant="outline"
+                      className={cn("text-[10px]", riskClass(call.riskLevel))}
+                    >
                       {call.approvalMode}
                     </Badge>
                   </div>
@@ -426,7 +476,10 @@ function OverviewTab({
           </div>
 
           <div className="space-y-3">
-            <SectionTitle title="Security Events" subtitle={`${securityEvents.length} recent events`} />
+            <SectionTitle
+              title="Security Events"
+              subtitle={`${securityEvents.length} recent events`}
+            />
             {securityEvents.length === 0 ? (
               <EmptyLine text="No security events logged yet." />
             ) : (
@@ -434,15 +487,25 @@ function OverviewTab({
                 <div key={event.id} className="rounded-lg border border-border p-3">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2">
-                      <Shield className={cn("h-3.5 w-3.5", event.blocked ? "text-destructive" : "text-muted-foreground")} />
+                      <Shield
+                        className={cn(
+                          "h-3.5 w-3.5",
+                          event.blocked ? "text-destructive" : "text-muted-foreground",
+                        )}
+                      />
                       <p className="truncate text-sm font-medium">{event.eventType}</p>
                     </div>
-                    <Badge variant="outline" className={cn("text-[10px]", riskClass(event.riskLevel))}>
+                    <Badge
+                      variant="outline"
+                      className={cn("text-[10px]", riskClass(event.riskLevel))}
+                    >
                       {event.blocked ? "blocked" : event.riskLevel}
                     </Badge>
                   </div>
                   {event.reasons.length > 0 && (
-                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{shortJson(event.reasons)}</p>
+                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                      {shortJson(event.reasons)}
+                    </p>
                   )}
                 </div>
               ))
@@ -469,7 +532,9 @@ function OpportunityRow({
   onDeliver: () => void;
   onDismiss: () => void;
 }) {
-  const gates = opportunity.gates.map((gate) => (typeof gate === "string" ? gate : shortJson(gate)));
+  const gates = opportunity.gates.map((gate) =>
+    typeof gate === "string" ? gate : shortJson(gate),
+  );
   return (
     <div className="rounded-lg border border-border p-3">
       <div className="flex items-start justify-between gap-3">
@@ -477,7 +542,10 @@ function OpportunityRow({
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant="secondary">{opportunity.status}</Badge>
             <Badge variant="outline">{opportunity.type}</Badge>
-            <Badge variant="outline" className={cn("text-[10px]", riskClass(opportunity.riskLevel))}>
+            <Badge
+              variant="outline"
+              className={cn("text-[10px]", riskClass(opportunity.riskLevel))}
+            >
               {opportunity.riskLevel}
             </Badge>
           </div>
@@ -552,17 +620,27 @@ function DailyPlanRow({
             <Badge variant="outline">{plan.planDate}</Badge>
             <Badge variant="outline">{percent(plan.score)}%</Badge>
           </div>
-          <p className="mt-2 text-sm font-medium">{plan.summary || `Daily plan for ${plan.planDate}`}</p>
+          <p className="mt-2 text-sm font-medium">
+            {plan.summary || `Daily plan for ${plan.planDate}`}
+          </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {plan.scheduledBlocks.length} scheduled · {plan.unscheduledItems.length} unscheduled · {plan.timezone}
+            {plan.scheduledBlocks.length} scheduled · {plan.unscheduledItems.length} unscheduled ·{" "}
+            {plan.timezone}
           </p>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             {plan.scheduledBlocks.slice(0, 6).map((block) => (
               <div key={block.key} className="rounded-md border border-border/70 px-3 py-2">
                 <p className="truncate text-xs font-medium">{block.title}</p>
                 <p className="text-[11px] text-muted-foreground">
-                  {new Date(block.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}-
-                  {new Date(block.end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  {new Date(block.start).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                  -
+                  {new Date(block.end).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                 </p>
               </div>
             ))}
@@ -575,7 +653,11 @@ function DailyPlanRow({
             </Button>
           )}
           <Button size="sm" className="h-7 gap-1.5" disabled={busy || !canApply} onClick={onApply}>
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
+            {busy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <CalendarPlus className="h-3.5 w-3.5" />
+            )}
             Apply
           </Button>
         </div>

@@ -23,9 +23,7 @@ describe("assistant tool registry", () => {
 
   it("allows known reversible operations and confirms destructive ones", () => {
     expect(classifyToolCall({ tool: "manage_task", operation: "create" }).approval).toBe("auto");
-    expect(classifyToolCall({ tool: "manage_task", operation: "delete" }).approval).toBe(
-      "confirm",
-    );
+    expect(classifyToolCall({ tool: "manage_task", operation: "delete" }).approval).toBe("confirm");
     expect(classifyToolCall({ tool: "email_action", operation: "summarize" }).approval).toBe(
       "auto",
     );
@@ -142,17 +140,14 @@ describe("assistant security policy", () => {
     const trust = classifyContentTrust({ source: "email" });
     expect(trust).toBe("external_untrusted");
     expect(externalContentInstructions(trust)).toContain("untrusted external data");
-    expect(
-      validateToolSecurity({ tool: "manage_task", operation: "create" }, trust).approval,
-    ).toBe("confirm");
+    expect(validateToolSecurity({ tool: "manage_task", operation: "create" }, trust).approval).toBe(
+      "confirm",
+    );
   });
 
   it("redacts common sensitive text and flags broad OAuth scopes", () => {
     expect(redactSensitiveText("Email me at test@example.com")).toContain("[email]");
-    const review = reviewOAuthScopes([
-      "https://www.googleapis.com/auth/gmail.send",
-      "openid",
-    ]);
+    const review = reviewOAuthScopes(["https://www.googleapis.com/auth/gmail.send", "openid"]);
     expect(review.risk).toBe("high");
     expect(review.highRiskScopes).toHaveLength(1);
   });

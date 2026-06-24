@@ -565,7 +565,8 @@ export function classifyToolCall(call: AssistantToolCall): ToolPolicy {
 
   const risk = escalateRisk(definition.defaultRisk, operation, definition);
   const approval = approvalFor(definition, operation, risk);
-  const destructive = definition.destructiveOps?.includes(operation) || DESTRUCTIVE_OPS.has(operation);
+  const destructive =
+    definition.destructiveOps?.includes(operation) || DESTRUCTIVE_OPS.has(operation);
 
   return {
     known: true,

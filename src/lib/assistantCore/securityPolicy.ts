@@ -28,7 +28,10 @@ const HIGH_RISK_SCOPES = [
 ];
 
 export function redactSensitiveText(text: string): string {
-  return SENSITIVE_PATTERNS.reduce((value, [pattern, replacement]) => value.replace(pattern, replacement), text);
+  return SENSITIVE_PATTERNS.reduce(
+    (value, [pattern, replacement]) => value.replace(pattern, replacement),
+    text,
+  );
 }
 
 export function classifyContentTrust(args: {
@@ -51,13 +54,20 @@ export function externalContentInstructions(trust: ContentTrust): string {
   ].join(" ");
 }
 
-export function validateToolSecurity(call: AssistantToolCall, contentTrust: ContentTrust): SecurityDecision {
+export function validateToolSecurity(
+  call: AssistantToolCall,
+  contentTrust: ContentTrust,
+): SecurityDecision {
   const policy = classifyToolCall(call);
   const reasons = [policy.reason];
   let risk = policy.risk;
   let approval = policy.approval;
 
-  if (contentTrust === "external_untrusted" && policy.approval === "auto" && policy.operation !== "read") {
+  if (
+    contentTrust === "external_untrusted" &&
+    policy.approval === "auto" &&
+    policy.operation !== "read"
+  ) {
     risk = risk === "low" ? "medium" : risk;
     approval = "confirm";
     reasons.push("External content cannot trigger mutating tools without explicit user approval.");
@@ -82,9 +92,11 @@ export function validateToolSecurity(call: AssistantToolCall, contentTrust: Cont
 
 export function classifySensitivityFromText(text: string): AssistantSensitivity {
   const lower = text.toLowerCase();
-  if (/\b(password|api key|secret|token|seed phrase|private key)\b/.test(lower)) return "credential";
+  if (/\b(password|api key|secret|token|seed phrase|private key)\b/.test(lower))
+    return "credential";
   if (/\b(iban|bank|debt|salary|income|tax|credit card|budget)\b/.test(lower)) return "financial";
-  if (/\b(medication|diagnosis|therapy|doctor|symptom|blood|heart|sleep)\b/.test(lower)) return "medical";
+  if (/\b(medication|diagnosis|therapy|doctor|symptom|blood|heart|sleep)\b/.test(lower))
+    return "medical";
   if (/\b(spouse|wife|husband|child|family|son|daughter)\b/.test(lower)) return "family";
   return "personal";
 }

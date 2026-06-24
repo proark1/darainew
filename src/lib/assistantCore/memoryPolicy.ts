@@ -71,7 +71,9 @@ function expirationFor(candidate: MemoryCandidate): Date | null {
 }
 
 export function scoreMemoryCandidate(candidate: MemoryCandidate): number {
-  const confidence = clamp01(candidate.confidence ?? (candidate.source === "explicit" ? 0.95 : 0.65));
+  const confidence = clamp01(
+    candidate.confidence ?? (candidate.source === "explicit" ? 0.95 : 0.65),
+  );
   const importance = clamp01(candidate.importance ?? 0.5);
   const evidenceScore = clamp01((candidate.evidence?.length ?? 0) / 2);
   const explicitBoost = candidate.userConfirmed || candidate.source === "explicit" ? 0.2 : 0;
@@ -83,7 +85,14 @@ export function scoreMemoryCandidate(candidate: MemoryCandidate): number {
         ? 0.2
         : 0;
 
-  return clamp01(0.45 * confidence + 0.3 * importance + 0.15 * evidenceScore + explicitBoost + correctionBoost - riskPenalty);
+  return clamp01(
+    0.45 * confidence +
+      0.3 * importance +
+      0.15 * evidenceScore +
+      explicitBoost +
+      correctionBoost -
+      riskPenalty,
+  );
 }
 
 export function decideMemory(candidate: MemoryCandidate): MemoryDecision {
@@ -113,7 +122,8 @@ export function decideMemory(candidate: MemoryCandidate): MemoryDecision {
   }
 
   const score = scoreMemoryCandidate({ ...candidate, text });
-  const sensitive = sensitivity === "financial" || sensitivity === "medical" || sensitivity === "family";
+  const sensitive =
+    sensitivity === "financial" || sensitivity === "medical" || sensitivity === "family";
   const requiresUserReview =
     sensitive || candidate.containsThirdPartyPrivateData || candidate.source === "external";
 
@@ -122,7 +132,8 @@ export function decideMemory(candidate: MemoryCandidate): MemoryDecision {
       status: "needs_review",
       score,
       sensitivity,
-      reason: "Sensitive or third-party memory needs explicit user review before long-term storage.",
+      reason:
+        "Sensitive or third-party memory needs explicit user review before long-term storage.",
       expiresAt: expirationFor(candidate),
       requiresUserReview: true,
     };

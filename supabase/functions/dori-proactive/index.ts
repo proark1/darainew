@@ -187,7 +187,11 @@ async function logSent(
         user_id: ctx.userId,
         candidate_key: `${type}:${key}`,
         type,
-        title: message.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180),
+        title: message
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 180),
         summary: message,
         preferred_channels: ["tg_private"],
         selected_channel: "tg_private",
@@ -273,9 +277,11 @@ async function composeSmartBrief(
       return `${t} ${e.title}${e.location ? ` @ ${e.location}` : ""}`;
     });
     const taskLines = tasks.map((t) => `${t.title} (${t.priority})`);
-    const c = checkin as
-      | { sleep_hours?: number; sleep_quality?: number; energy_level?: string }
-      | null;
+    const c = checkin as {
+      sleep_hours?: number;
+      sleep_quality?: number;
+      energy_level?: string;
+    } | null;
     const sleep = c
       ? `sleep ${c.sleep_hours ?? "?"}h (quality ${c.sleep_quality ?? "?"}/5), energy ${c.energy_level ?? "?"}`
       : "no recent check-in";

@@ -38,7 +38,9 @@ export interface StructuredOptions {
  * unparseable output.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function generateStructured<T = Record<string, any>>(opts: StructuredOptions): Promise<T> {
+export async function generateStructured<T = Record<string, any>>(
+  opts: StructuredOptions,
+): Promise<T> {
   const apiKey = opts.apiKey ?? Deno.env.get("GEMINI_API_KEY");
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
 
