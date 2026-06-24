@@ -103,7 +103,7 @@ serve(async (req) => {
         : documentType?.startsWith("image/")
           ? documentType
           : "image/jpeg");
-    const docB64 = base64Encode(new Uint8Array(await docResp.arrayBuffer()));
+    const docB64 = base64Encode(await docResp.arrayBuffer());
 
     const promptText = `Analyze this contract document and extract the following information in JSON format:
 {

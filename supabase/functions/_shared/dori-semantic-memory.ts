@@ -11,6 +11,7 @@
 
 import { embedText, toPgVectorLiteral } from "./dori-embeddings.ts";
 import { autoKgIngest } from "./kg.ts";
+import { asRecordOrNull, db } from "./supabase-edge.ts";
 
 export interface SemanticHit {
   id: string;
@@ -41,19 +42,11 @@ export interface RememberArgs {
   importance?: number;
 }
 
-// Minimal Supabase client surface needed by this module.
-type SemanticClient = {
-  from(table: string): Record<string, (...args: unknown[]) => unknown>;
-  rpc(
-    name: string,
-    args: Record<string, unknown>,
-  ): Promise<{ data: unknown; error: { message: string } | null }>;
-};
-
 export async function rememberSemantic(
-  supabase: SemanticClient,
+  supabaseClient: unknown,
   args: RememberArgs,
 ): Promise<boolean> {
+  const supabase = db(supabaseClient);
   const content = (args.content || "").trim();
   if (!content || content.length < 10) return false; // not worth indexing
   try {
@@ -82,12 +75,14 @@ export async function rememberSemantic(
     }
     // Knowledge graph ingest is fire-and-forget: a failed extraction
     // never blocks the underlying memory write.
-    if (upserted?.id) {
-      autoKgIngest(supabase, {
+    const upsertedRow = asRecordOrNull(upserted);
+    const memoryId = typeof upsertedRow?.id === "string" ? upsertedRow.id : null;
+    if (memoryId) {
+      autoKgIngest(supabaseClient, {
         userId: args.userId,
         workspaceId: args.workspaceId ?? null,
         sourceKind: "semantic",
-        sourceId: upserted.id,
+        sourceId: memoryId,
         text: content,
       }).catch((e) => console.warn("[rememberSemantic] kg ingest failed", (e as Error).message));
     }
@@ -107,9 +102,10 @@ export interface RetrieveArgs {
 }
 
 export async function retrieveRelevantMemories(
-  supabase: SemanticClient,
+  supabaseClient: unknown,
   args: RetrieveArgs,
 ): Promise<SemanticHit[]> {
+  const supabase = db(supabaseClient);
   const q = (args.query || "").trim();
   if (q.length < 4) return [];
   try {

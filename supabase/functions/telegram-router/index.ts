@@ -1,8 +1,9 @@
 // Classifies inbound Telegram group messages and writes to the right module.
 // Called by telegram-poll for messages from a linked family group.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { type DbClient } from "../_shared/supabase-edge.ts";
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = DbClient;
 type HouseholdInfo = { ids: string[]; nameOf: (uid: string) => string; multi: boolean };
 import {
   defaultBriefingVoiceLimit,
@@ -1578,7 +1579,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
+  const supabase = createClient(SUPABASE_URL, SERVICE_KEY) as unknown as SupabaseClient;
   const {
     chat_id,
     text,
@@ -2410,7 +2411,7 @@ Deno.serve(async (req) => {
     const periods = new Set(["today", "week", "month", "year"]);
     let period = "month";
     let category = "";
-    args.forEach((a) => {
+    args.forEach((a: string) => {
       if (periods.has(a.toLowerCase())) period = a.toLowerCase();
       else category = a;
     });

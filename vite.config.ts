@@ -9,6 +9,74 @@ import { visualizer } from "rollup-plugin-visualizer";
 // ANALYZE=1 bun run build → also emits dist/stats.html with treemap.
 const enableVisualizer = process.env.ANALYZE === "1";
 
+const manualChunkGroups: Record<string, string[]> = {
+  // Core React ecosystem
+  "vendor-react": ["react", "react-dom", "react-router-dom"],
+  // UI framework
+  "vendor-radix": [
+    "@radix-ui/react-accordion",
+    "@radix-ui/react-alert-dialog",
+    "@radix-ui/react-avatar",
+    "@radix-ui/react-checkbox",
+    "@radix-ui/react-collapsible",
+    "@radix-ui/react-context-menu",
+    "@radix-ui/react-dialog",
+    "@radix-ui/react-dropdown-menu",
+    "@radix-ui/react-hover-card",
+    "@radix-ui/react-label",
+    "@radix-ui/react-menubar",
+    "@radix-ui/react-navigation-menu",
+    "@radix-ui/react-popover",
+    "@radix-ui/react-progress",
+    "@radix-ui/react-radio-group",
+    "@radix-ui/react-scroll-area",
+    "@radix-ui/react-select",
+    "@radix-ui/react-separator",
+    "@radix-ui/react-slider",
+    "@radix-ui/react-slot",
+    "@radix-ui/react-switch",
+    "@radix-ui/react-tabs",
+    "@radix-ui/react-toast",
+    "@radix-ui/react-toggle",
+    "@radix-ui/react-toggle-group",
+    "@radix-ui/react-tooltip",
+  ],
+  // Charts (recharts) is intentionally NOT pinned to a vendor chunk:
+  // it's only used by lazy panels, so leaving it to Rollup lets it split
+  // into an on-demand async chunk instead of being modulepreloaded on
+  // first paint (~400 KB / ~110 KB gz saved on initial load).
+  // Animation
+  "vendor-animation": ["framer-motion"],
+  // Date utilities
+  "vendor-date": ["date-fns"],
+  // Drag and drop
+  "vendor-dnd": ["@dnd-kit/core", "@dnd-kit/sortable", "@dnd-kit/utilities"],
+  // Data fetching
+  "vendor-query": ["@tanstack/react-query"],
+  // Supabase
+  "vendor-supabase": ["@supabase/supabase-js"],
+  // Form handling
+  "vendor-forms": ["react-hook-form", "@hookform/resolvers", "zod"],
+};
+
+const manualChunkEntries = Object.entries(manualChunkGroups).flatMap(([chunk, packages]) =>
+  packages.map((pkg) => [pkg, chunk] as const),
+);
+
+function manualChunks(id: string): string | undefined {
+  const normalized = id.replace(/\\/g, "/");
+  const marker = "/node_modules/";
+  const idx = normalized.lastIndexOf(marker);
+  if (idx === -1) return undefined;
+
+  const modulePath = normalized.slice(idx + marker.length);
+  for (const [pkg, chunk] of manualChunkEntries) {
+    if (modulePath === pkg || modulePath.startsWith(`${pkg}/`)) return chunk;
+  }
+
+  return undefined;
+}
+
 export default defineConfig(({ mode }) => ({
   // Strip dev-only logging from production bundles. console.log/info/debug are
   // marked pure so the minifier drops them (their return value is never used);
@@ -39,55 +107,7 @@ export default defineConfig(({ mode }) => ({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          // Core React ecosystem
-          "vendor-react": ["react", "react-dom", "react-router-dom"],
-          // UI framework
-          "vendor-radix": [
-            "@radix-ui/react-accordion",
-            "@radix-ui/react-alert-dialog",
-            "@radix-ui/react-avatar",
-            "@radix-ui/react-checkbox",
-            "@radix-ui/react-collapsible",
-            "@radix-ui/react-context-menu",
-            "@radix-ui/react-dialog",
-            "@radix-ui/react-dropdown-menu",
-            "@radix-ui/react-hover-card",
-            "@radix-ui/react-label",
-            "@radix-ui/react-menubar",
-            "@radix-ui/react-navigation-menu",
-            "@radix-ui/react-popover",
-            "@radix-ui/react-progress",
-            "@radix-ui/react-radio-group",
-            "@radix-ui/react-scroll-area",
-            "@radix-ui/react-select",
-            "@radix-ui/react-separator",
-            "@radix-ui/react-slider",
-            "@radix-ui/react-slot",
-            "@radix-ui/react-switch",
-            "@radix-ui/react-tabs",
-            "@radix-ui/react-toast",
-            "@radix-ui/react-toggle",
-            "@radix-ui/react-toggle-group",
-            "@radix-ui/react-tooltip",
-          ],
-          // Charts (recharts) is intentionally NOT pinned to a vendor chunk:
-          // it's only used by lazy panels, so leaving it to Rollup lets it split
-          // into an on-demand async chunk instead of being modulepreloaded on
-          // first paint (~400 KB / ~110 KB gz saved on initial load).
-          // Animation
-          "vendor-animation": ["framer-motion"],
-          // Date utilities
-          "vendor-date": ["date-fns"],
-          // Drag and drop
-          "vendor-dnd": ["@dnd-kit/core", "@dnd-kit/sortable", "@dnd-kit/utilities"],
-          // Data fetching
-          "vendor-query": ["@tanstack/react-query"],
-          // Supabase
-          "vendor-supabase": ["@supabase/supabase-js"],
-          // Form handling
-          "vendor-forms": ["react-hook-form", "@hookform/resolvers", "zod"],
-        },
+        manualChunks,
       },
     },
   },

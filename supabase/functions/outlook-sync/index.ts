@@ -36,8 +36,8 @@ function toGraphEvent(localEvent: Record<string, unknown>) {
   return {
     subject: localEvent.title || "Untitled",
     body: { contentType: "Text", content: localEvent.description || "" },
-    start: { dateTime: new Date(localEvent.start_time).toISOString(), timeZone: "UTC" },
-    end: { dateTime: new Date(localEvent.end_time).toISOString(), timeZone: "UTC" },
+    start: { dateTime: new Date(String(localEvent.start_time)).toISOString(), timeZone: "UTC" },
+    end: { dateTime: new Date(String(localEvent.end_time)).toISOString(), timeZone: "UTC" },
     location: localEvent.location ? { displayName: localEvent.location } : undefined,
   };
 }

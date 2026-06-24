@@ -173,6 +173,7 @@ export const NAV_AREAS: NavArea[] = [
       { id: "contracts", label: "Contracts", labelKey: "nav.contracts", icon: FileText },
       { id: "projects", label: "Projects", labelKey: "nav.projects", icon: FolderKanban },
       { id: "startups", label: "Startups", labelKey: "nav.startups", icon: Briefcase },
+      { id: "properties", label: "Properties", labelKey: "nav.properties", icon: Home },
       { id: "assets", label: "Properties & Vehicles", labelKey: "nav.assets", icon: Home },
       { id: "travel", label: "Travel", labelKey: "nav.travel", icon: Plane },
     ],

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { strictAppOrigin } from "../_shared/cors.ts";
+import { db, type DbClient } from "../_shared/supabase-edge.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": strictAppOrigin(),
@@ -44,7 +45,7 @@ interface AIRequest {
 }
 
 async function logAIUsage(
-  supabase: ReturnType<typeof createClient>,
+  supabase: DbClient,
   userId: string,
   functionName: string,
   model: string,
@@ -120,7 +121,7 @@ serve(async (req) => {
 
   // Create service role client for logging
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+  const supabaseAdmin = db(createClient(supabaseUrl, supabaseServiceKey));
 
   try {
     const { type, task, tasks, events, checkin }: AIRequest = await req.json();

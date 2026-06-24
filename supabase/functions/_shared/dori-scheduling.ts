@@ -1,3 +1,5 @@
+import { asRows, db } from "./supabase-edge.ts";
+
 // Simple "find a time that works for everyone" engine.
 //
 // Given a workspace id and a set of participant user ids + a duration,
@@ -44,13 +46,11 @@ function hourIn(ms: number, tz?: string): number {
   return h ? Number(h) % 24 : 0;
 }
 
-// Minimal Supabase client surface needed by this module.
-type SchedulingClient = { from(table: string): Record<string, (...args: unknown[]) => unknown> };
-
 export async function findTimeSlots(
-  supabase: SchedulingClient,
+  supabaseClient: unknown,
   input: FindTimeInput,
 ): Promise<ProposedSlot[]> {
+  const supabase = db(supabaseClient);
   const {
     workspaceId: _workspaceId,
     participants,
@@ -80,14 +80,17 @@ export async function findTimeSlots(
   // Build a busy list per user.
   const busy = new Map<string, BusyInterval[]>();
   for (const p of participants) busy.set(p, []);
-  for (const ev of rows || []) {
-    const starter = ev.user_id as string;
-    const assignee = (ev.assignee_id as string) || null;
+  for (const ev of asRows(rows)) {
+    const starter = String(ev.user_id || "");
+    const assignee = typeof ev.assignee_id === "string" ? ev.assignee_id : null;
     // Event owner is busy. If it has an assignee who's different, they're busy too.
     for (const uid of new Set([starter, assignee].filter(Boolean) as string[])) {
       const list = busy.get(uid);
       if (!list) continue;
-      list.push({ start: new Date(ev.start_time).getTime(), end: new Date(ev.end_time).getTime() });
+      list.push({
+        start: new Date(String(ev.start_time)).getTime(),
+        end: new Date(String(ev.end_time)).getTime(),
+      });
     }
   }
   for (const list of busy.values()) list.sort((a, b) => a.start - b.start);

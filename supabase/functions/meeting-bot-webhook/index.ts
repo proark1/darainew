@@ -21,6 +21,7 @@ import {
   type BotAnalysis,
   type TranscriptEntry,
 } from "../_shared/meetingbot.ts";
+import { asRecord, asString } from "../_shared/supabase-edge.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": strictAppOrigin(),
@@ -59,10 +60,15 @@ serve(async (req) => {
     }
 
     const event = String(payload?.event || "").toLowerCase();
-    const data = payload?.data || {};
-    const externalBotId: string | undefined = data?.bot_id || data?.id || payload?.bot_id;
-    const localId: string | undefined =
-      data?.metadata?.local_meeting_bot_id || payload?.metadata?.local_meeting_bot_id;
+    const data = asRecord(payload?.data);
+    const dataMetadata = asRecord(data.metadata);
+    const payloadMetadata = asRecord(payload?.metadata);
+    const externalBotId =
+      asString(data.bot_id) || asString(data.id) || asString(payload?.bot_id) || undefined;
+    const localId =
+      asString(dataMetadata.local_meeting_bot_id) ||
+      asString(payloadMetadata.local_meeting_bot_id) ||
+      undefined;
 
     if (!externalBotId && !localId) {
       return json({ error: "no bot identifier in payload" }, 400);
@@ -103,12 +109,12 @@ serve(async (req) => {
 
     const evStatus = mapEventToStatus(event);
     if (evStatus) patch.status = evStatus;
-    else if (data?.status) patch.status = normaliseStatus(data.status);
+    else if (data.status) patch.status = normaliseStatus(asString(data.status));
 
-    if (Array.isArray(data?.transcript)) {
+    if (Array.isArray(data.transcript)) {
       patch.transcript = sanitiseTranscript(data.transcript);
     }
-    const analysis: BotAnalysis | undefined = data?.analysis;
+    const analysis = asRecord(data.analysis) as Partial<BotAnalysis>;
     if (analysis && typeof analysis === "object") {
       if (typeof analysis.summary === "string") patch.summary = analysis.summary.slice(0, 8000);
       if (Array.isArray(analysis.key_points)) patch.key_points = analysis.key_points.slice(0, 50);
@@ -119,9 +125,9 @@ serve(async (req) => {
       if (Array.isArray(analysis.topics)) patch.topics = analysis.topics.slice(0, 50);
       if (typeof analysis.sentiment === "string") patch.sentiment = analysis.sentiment.slice(0, 80);
     }
-    if (typeof data?.error === "string") patch.error_message = data.error.slice(0, 2000);
-    if (typeof data?.joined_at === "string") patch.joined_at = data.joined_at;
-    if (typeof data?.ended_at === "string") patch.ended_at = data.ended_at;
+    if (typeof data.error === "string") patch.error_message = data.error.slice(0, 2000);
+    if (typeof data.joined_at === "string") patch.joined_at = data.joined_at;
+    if (typeof data.ended_at === "string") patch.ended_at = data.ended_at;
     if (!row.external_bot_id && externalBotId) patch.external_bot_id = externalBotId;
 
     // Append the raw payload to metadata.events for an audit trail

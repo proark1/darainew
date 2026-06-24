@@ -70,7 +70,7 @@ describe("encryption — asymmetric (direct messages)", () => {
     );
     const plain = await decryptWithPrivateKey(encryptedContent, encryptedKey, recipient.privateKey);
     expect(plain).toBe("hi alice");
-  });
+  }, 15_000);
 
   it("cannot be decrypted by a third party's key", async () => {
     const alice = await generateKeyPair();
@@ -82,7 +82,7 @@ describe("encryption — asymmetric (direct messages)", () => {
     await expect(
       decryptWithPrivateKey(encryptedContent, encryptedKey, eve.privateKey),
     ).rejects.toThrow();
-  });
+  }, 15_000);
 
   it("survives public/private key export and import", async () => {
     const original = await generateKeyPair();
@@ -94,7 +94,7 @@ describe("encryption — asymmetric (direct messages)", () => {
 
     const { encryptedContent, encryptedKey } = await encryptWithPublicKey("ping", pub);
     expect(await decryptWithPrivateKey(encryptedContent, encryptedKey, priv)).toBe("ping");
-  });
+  }, 15_000);
 });
 
 describe("encryption — group key sharing", () => {

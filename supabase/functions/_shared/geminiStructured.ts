@@ -37,7 +37,8 @@ export interface StructuredOptions {
  * Error on gateway failure, a non-STOP finish (SAFETY/MAX_TOKENS/…), or
  * unparseable output.
  */
-export async function generateStructured(opts: StructuredOptions): Promise<unknown> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function generateStructured<T = Record<string, any>>(opts: StructuredOptions): Promise<T> {
   const apiKey = opts.apiKey ?? Deno.env.get("GEMINI_API_KEY");
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
 
@@ -86,7 +87,7 @@ export async function generateStructured(opts: StructuredOptions): Promise<unkno
   if (!text) throw new Error("Empty AI response");
 
   try {
-    return JSON.parse(text);
+    return JSON.parse(text) as T;
   } catch {
     // Tolerate stray fences/prose around the JSON object.
     const cleaned = text
@@ -97,7 +98,7 @@ export async function generateStructured(opts: StructuredOptions): Promise<unkno
 
     if (m) {
       try {
-        return JSON.parse(m[0]);
+        return JSON.parse(m[0]) as T;
       } catch {
         /* fall through */
       }

@@ -17,6 +17,8 @@
 // the message. The XML path stays as a fallback so we don't break
 // existing surfaces in flight; we prefer native when present.
 
+import { asRecord } from "./supabase-edge.ts";
+
 export interface ToolDef {
   type: "function";
   function: {
@@ -998,8 +1000,10 @@ function renderLegacy(name: string, args: Record<string, unknown>): string {
     case "task_filter":
       return `<tool>task_filter</tool><filter>${JSON.stringify(args.data ?? {})}</filter>`;
     case "task_tag": {
-      const d = args.data ?? {};
-      const action = d.add?.length ? "add" : d.remove?.length ? "remove" : "add";
+      const d = asRecord(args.data);
+      const add = Array.isArray(d.add) ? d.add : [];
+      const remove = Array.isArray(d.remove) ? d.remove : [];
+      const action = add.length ? "add" : remove.length ? "remove" : "add";
       return `<tool>task_tag</tool><action>${action}</action><tag>${JSON.stringify(d)}</tag>`;
     }
     case "task_estimate":
@@ -1015,7 +1019,7 @@ function renderLegacy(name: string, args: Record<string, unknown>): string {
     case "summarize_emails":
       return `<tool>summarize_emails</tool><summary>${JSON.stringify(args.data ?? {})}</summary>`;
     case "email_action": {
-      const d = args.data ?? {};
+      const d = asRecord(args.data);
       return `<tool>email_action</tool><action>${d.action}</action><email>${JSON.stringify(d)}</email>`;
     }
     case "period_log":
@@ -1023,7 +1027,7 @@ function renderLegacy(name: string, args: Record<string, unknown>): string {
     case "fasting_log":
       return `<tool>fasting_log</tool><fasting>${JSON.stringify(args.data ?? {})}</fasting>`;
     case "pantry": {
-      const d = args.data ?? {};
+      const d = asRecord(args.data);
       return `<tool>pantry</tool><action>${d.action}</action><pantry>${JSON.stringify(d)}</pantry>`;
     }
     case "flight_track":
@@ -1031,11 +1035,11 @@ function renderLegacy(name: string, args: Record<string, unknown>): string {
     case "presence":
       return `<tool>presence</tool><presence>${JSON.stringify(args.data ?? {})}</presence>`;
     case "budget": {
-      const d = args.data ?? {};
+      const d = asRecord(args.data);
       return `<tool>budget</tool><action>${d.action}</action><budget>${JSON.stringify(d)}</budget>`;
     }
     case "meds": {
-      const d = args.data ?? {};
+      const d = asRecord(args.data);
       return `<tool>meds</tool><action>${d.action}</action><meds>${JSON.stringify(d)}</meds>`;
     }
     case "zakat":

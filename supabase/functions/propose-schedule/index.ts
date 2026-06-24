@@ -202,8 +202,10 @@ serve(async (req) => {
       `Open tasks (${tasks.length}):`,
       tasks
         .map((t) => {
-          const slip = slipMap.get(t.id);
-          return `- [${t.priority}] [${t.category}] ${t.title}${t.due_date ? ` (due ${t.due_date.slice(0, 10)})` : ""}${slip != null ? ` (slip risk ${(slip * 100).toFixed(0)}%)` : ""} — id=${t.id}`;
+          const taskId = String(t.id || "");
+          const dueDate = t.due_date ? String(t.due_date).slice(0, 10) : "";
+          const slip = slipMap.get(taskId);
+          return `- [${t.priority}] [${t.category}] ${t.title}${dueDate ? ` (due ${dueDate})` : ""}${slip != null ? ` (slip risk ${(slip * 100).toFixed(0)}%)` : ""} — id=${taskId}`;
         })
         .join("\n") || "(none)",
       "",

@@ -6,6 +6,8 @@
 // BEFORE a task slips, so the user can catch it in time — not after
 // the deadline has already passed.
 
+import { db, type DbClient } from "./supabase-edge.ts";
+
 export interface AtRiskTask {
   task_id: string;
   user_id: string;
@@ -28,13 +30,11 @@ export interface FetchOptions {
   excludeOverdue?: boolean; // default true — we want predictive, not "already late"
 }
 
-// Minimal Supabase client surface needed by this module.
-type SlipRiskClient = { from(table: string): Record<string, (...args: unknown[]) => unknown> };
-
 export async function fetchAtRiskTasks(
-  supabase: SlipRiskClient,
+  supabaseClient: unknown,
   opts: FetchOptions,
 ): Promise<AtRiskTask[]> {
+  const supabase: DbClient = db(supabaseClient);
   const minRisk = opts.minRisk ?? 0.55;
   const withinHours = opts.withinHours ?? 48;
   const limit = opts.limit ?? 10;

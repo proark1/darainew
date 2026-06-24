@@ -111,7 +111,7 @@ serve(async (req) => {
     ): Map<string, T[]> => {
       const map = new Map<string, T[]>();
       items.forEach((item) => {
-        const date = item[dateField]?.split("T")[0];
+        const date = String(item[dateField] || "").split("T")[0];
         if (date) {
           if (!map.has(date)) map.set(date, []);
           map.get(date)!.push(item);

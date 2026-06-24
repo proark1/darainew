@@ -168,8 +168,9 @@ function weekdayName(d: number): string {
 
 function computeNext(b: PatternBucket): string | null {
   const wd = (b.pattern as Record<string, unknown>).weekday;
-  const hour = (b.pattern as Record<string, unknown>).hour ?? 9;
+  const hour = Number((b.pattern as Record<string, unknown>).hour ?? 9);
   if (typeof wd !== "number") return null;
+  if (!Number.isFinite(hour)) return null;
   const now = new Date();
   const next = new Date(now);
   const daysAhead = (wd - now.getUTCDay() + 7) % 7 || 7;

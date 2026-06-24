@@ -31,8 +31,8 @@ describe("classifyActionRisk", () => {
     expect(classifyActionRisk("manage_task", "DELETE")).toBe("confirm");
   });
 
-  it("defaults unknown tools without a destructive op to auto", () => {
-    expect(classifyActionRisk("some_new_tool")).toBe("auto");
+  it("defaults unknown tools to confirm", () => {
+    expect(classifyActionRisk("some_new_tool")).toBe("confirm");
     expect(classifyActionRisk("some_new_tool", "delete")).toBe("confirm");
   });
 

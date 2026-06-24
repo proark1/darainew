@@ -257,8 +257,40 @@ interface GmailConnection {
   refresh_token?: string;
   gmail_history_id?: string;
 }
+
+interface GmailMessage {
+  id: string;
+  threadId?: string;
+  snippet?: string;
+  internalDate?: string;
+  labelIds?: string[];
+  payload?: {
+    headers?: { name: string; value: string }[];
+  };
+}
+
 interface ParsedEmail {
-  [k: string]: unknown;
+  gmail_message_id: string;
+  thread_id: string | null;
+  from_email: string;
+  from_name: string;
+  to_email: string;
+  subject: string;
+  snippet: string;
+  received_at: string;
+  is_read: boolean;
+  is_starred: boolean;
+  gmail_labels: string[];
+  matched_contact_id: string | null;
+  priority_score: number;
+  category: string;
+  user_archived: boolean;
+  ai_summary: string | null;
+  ai_suggested_action: string | null;
+  is_spam: boolean;
+  is_phishing: boolean;
+  threat_reason: string | null;
+  sentiment: string;
 }
 
 async function processEmails(
@@ -275,7 +307,7 @@ async function processEmails(
 
   // Fetch message details in parallel batches
   const batchSize = 10;
-  const allMessages: Record<string, unknown>[] = [];
+  const allMessages: GmailMessage[] = [];
   for (let i = 0; i < messageIds.length; i += batchSize) {
     const batch = messageIds.slice(i, i + batchSize);
     const batchResults = await Promise.all(
@@ -288,10 +320,12 @@ async function processEmails(
           },
         );
         if (!resp.ok) return null;
-        return resp.json();
+        return (await resp.json()) as GmailMessage;
       }),
     );
-    allMessages.push(...batchResults.filter(Boolean));
+    allMessages.push(
+      ...batchResults.filter((msg): msg is GmailMessage => !!msg && typeof msg.id === "string"),
+    );
   }
 
   // Get contacts for matching + AI context
@@ -356,7 +390,7 @@ async function processEmails(
   // Parse messages
   const parsedEmails: ParsedEmail[] = [];
   for (const msg of allMessages) {
-    const headers = msg.payload?.headers || [];
+    const headers = Array.isArray(msg.payload?.headers) ? msg.payload.headers : [];
     const getHeader = (name: string) =>
       headers.find(
         (h: { name: string; value: string }) => h.name.toLowerCase() === name.toLowerCase(),
@@ -400,9 +434,10 @@ async function processEmails(
     if (appliedRule?.default_priority)
       priorityScore = Math.min(priorityScore, appliedRule.default_priority);
 
+    const labelIds = Array.isArray(msg.labelIds) ? msg.labelIds : [];
     parsedEmails.push({
       gmail_message_id: msg.id,
-      thread_id: msg.threadId,
+      thread_id: msg.threadId || null,
       from_email: fromEmail,
       from_name: fromName,
       to_email: toEmail,
@@ -410,10 +445,10 @@ async function processEmails(
       snippet: msg.snippet || "",
       received_at: dateStr
         ? new Date(dateStr).toISOString()
-        : new Date(parseInt(msg.internalDate)).toISOString(),
-      is_read: !msg.labelIds?.includes("UNREAD"),
-      is_starred: msg.labelIds?.includes("STARRED") || false,
-      gmail_labels: msg.labelIds || [],
+        : new Date(parseInt(String(msg.internalDate || Date.now()), 10)).toISOString(),
+      is_read: !labelIds.includes("UNREAD"),
+      is_starred: labelIds.includes("STARRED"),
+      gmail_labels: labelIds,
       matched_contact_id: matchedContact?.id || null,
       priority_score: priorityScore,
       category: appliedRule?.default_category || "other",
@@ -479,18 +514,18 @@ async function processEmails(
   // Notifications for high-priority new emails
   const highPriority = parsedEmails.filter((e) => e.priority_score <= 2 && !e.is_read);
   for (const email of highPriority.slice(0, 5)) {
-    await adminClient
-      .from("user_notifications")
-      .insert({
+    try {
+      await adminClient.from("user_notifications").insert({
         user_id: userId,
         type: "email",
         title: `Priority Email from ${email.from_name}`,
         message: email.ai_summary || email.subject || "(No subject)",
         data: { email_id: email.gmail_message_id, from: email.from_email },
         read: false,
-      })
-      .then(() => {})
-      .catch(() => {});
+      });
+    } catch {
+      // Best-effort notification; the email sync itself has already succeeded.
+    }
   }
 
   return { parsedEmails, highPriorityCount: highPriority.length, hadUpsertFailure };

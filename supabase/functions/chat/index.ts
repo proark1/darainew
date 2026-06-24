@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { recordUndo } from "../_shared/dori-undo.ts";
 import {
   buildDoriContext,
@@ -35,6 +35,19 @@ import { recallEntities } from "../_shared/dori-kg-recall.ts";
 import { estimateCostUsd, usageFooter } from "../_shared/ai-pricing.ts";
 import { strictAppOrigin } from "../_shared/cors.ts";
 import { mintInternalToken, resolveUserId } from "../_shared/auth.ts";
+import {
+  asRecord,
+  type DbClient,
+  type DbResult,
+  type DbRow,
+} from "../_shared/supabase-edge.ts";
+import {
+  finishAssistantTrace,
+  recordToolCallTrace,
+  startAssistantTrace,
+} from "../_shared/assistant-observability.ts";
+
+type SupabaseClient = DbClient;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": strictAppOrigin(),
@@ -1136,12 +1149,13 @@ interface MutatingTool {
   // Regex capturing (action?, payload?) for the tool XML block.
   // Groups vary per tool: provide a `parse` to normalize to { action, data, fullMatch }.
   regex: RegExp;
-  parse: (
-    m: RegExpMatchArray,
-  ) => { action: string; data: Record<string, unknown>; fullMatch: string } | null;
+  parse: (m: RegExpMatchArray) => { action: string; data: DbRow; fullMatch: string } | null;
   // Given action + data return OpKind (or null to skip confirmation for that action).
-  classify: (action: string, data: Record<string, unknown>) => OpKind | null;
-  summarize: (action: string, data: Record<string, unknown>, tz?: string) => string;
+  classify: (action: string, data: DbRow) => OpKind | null;
+  summarize: (action: string, data: DbRow, tz?: string) => string;
+  // High-stakes/outward-facing tools must be approved even when the user has
+  // disabled routine create/update/delete confirmations.
+  forceConfirm?: boolean;
   // Optional existence check run *before* a confirmation is queued. Lets a
   // tool that targets an existing record (update/delete by query) resolve the
   // target up front so the user is never asked to confirm an action that will
@@ -1152,7 +1166,7 @@ interface MutatingTool {
   //   null                   → no preflight applicable; queue as usual.
   preflight?: (
     action: string,
-    data: Record<string, unknown>,
+    data: DbRow,
     ctx: { supabase: SupabaseClient; userId: string; timezone?: string },
   ) => Promise<{ ok: false; message: string } | { ok: true; summary?: string } | null>;
 }
@@ -1185,7 +1199,7 @@ const fmtEventWhen = (s?: string | null, tz?: string): string | null => {
   }
 };
 
-const safeParseJson = (s: string): Record<string, unknown> | null => {
+const safeParseJson = (s: string): DbRow | null => {
   try {
     return JSON.parse(s);
   } catch {
@@ -1282,7 +1296,7 @@ const MUTATING_TOOLS: MutatingTool[] = [
       if (d.title && d.title !== target.title) bits.push(`rename to "${d.title}"`);
       if (d.startTime) {
         const oldW = fmtEventWhen(target.start_time, timezone);
-        const newW = fmtEventWhen(d.startTime, timezone);
+        const newW = fmtEventWhen(String(d.startTime), timezone);
         if (newW && newW !== oldW) bits.push(`move ${oldW ? `from ${oldW} ` : ""}to ${newW}`);
       }
       if (d.location !== undefined && d.location && d.location !== target.location) {
@@ -1466,7 +1480,7 @@ const MUTATING_TOOLS: MutatingTool[] = [
     },
     classify: () => "create",
     summarize: (_a, d) =>
-      `Add to shopping: ${d.quantity && d.quantity > 1 ? `${d.quantity}× ` : ""}${d.name || "(item)"}`,
+      `Add to shopping: ${Number(d.quantity || 0) > 1 ? `${d.quantity}× ` : ""}${d.name || "(item)"}`,
   },
   {
     tool: "set_reminder",
@@ -1479,7 +1493,7 @@ const MUTATING_TOOLS: MutatingTool[] = [
     },
     classify: () => "create",
     summarize: (_a, d) =>
-      `Set reminder${d.triggerAt ? ` for ${new Date(d.triggerAt).toLocaleString()}` : ""}: ${d.message || ""}`,
+      `Set reminder${d.triggerAt ? ` for ${new Date(String(d.triggerAt)).toLocaleString()}` : ""}: ${d.message || ""}`,
   },
   {
     // send_email is always gated: sending is irreversible so the user must
@@ -1496,6 +1510,7 @@ const MUTATING_TOOLS: MutatingTool[] = [
     },
     classify: () => "delete",
     summarize: (_a, d) => `📧 Send email to ${d.to}${d.subject ? ` — "${d.subject}"` : ""}`,
+    forceConfirm: true,
   },
   {
     // send_family_message is gated like send_email: relaying to a third party
@@ -1511,7 +1526,90 @@ const MUTATING_TOOLS: MutatingTool[] = [
     },
     classify: () => "delete",
     summarize: (_a, d) =>
-      `💬 Send to ${d.to || "(?)"}: "${String(d.body || "").slice(0, 60)}${(d.body || "").length > 60 ? "…" : ""}"`,
+      `💬 Send to ${d.to || "(?)"}: "${String(d.body || "").slice(0, 60)}${String(d.body || "").length > 60 ? "…" : ""}"`,
+    forceConfirm: true,
+  },
+  {
+    tool: "bulk_reschedule",
+    entity: "event",
+    regex: /<tool>bulk_reschedule<\/tool>\s*<bulk>(\{[\s\S]*?\})<\/bulk>/g,
+    parse: (m) => {
+      const data = safeParseJson(m[1]);
+      if (!data) return null;
+      return { action: "reschedule", data, fullMatch: m[0] };
+    },
+    classify: () => "update",
+    summarize: (_a, d) => {
+      const entity = d.entity === "event" ? "events" : "tasks";
+      const when = d.filter?.when || d.when || d.filter?.date || d.date || "matched items";
+      const shift = Number(d.shift_days);
+      return `Bulk reschedule ${entity}: ${when} by ${Number.isFinite(shift) ? `${shift > 0 ? "+" : ""}${shift}d` : "the requested shift"}`;
+    },
+    forceConfirm: true,
+  },
+  {
+    tool: "bulk_delete_events",
+    entity: "event",
+    regex: /<tool>bulk_delete_events<\/tool>\s*<bulk>(\{[\s\S]*?\})<\/bulk>/g,
+    parse: (m) => {
+      const data = safeParseJson(m[1]);
+      if (!data) return null;
+      return { action: "delete", data, fullMatch: m[0] };
+    },
+    classify: () => "delete",
+    summarize: (_a, d) => `Bulk delete events on ${d.date || "the selected date"}`,
+    forceConfirm: true,
+  },
+  {
+    tool: "email_action",
+    entity: "email",
+    regex:
+      /<tool>email_action<\/tool>\s*<action>(\w+)<\/action>\s*<email>(\{[\s\S]*?\})<\/email>/g,
+    parse: (m) => {
+      const data = safeParseJson(m[2]);
+      if (!data) return null;
+      return { action: m[1], data, fullMatch: m[0] };
+    },
+    classify: (action) => {
+      if (action === "summarize" || action === "translate") return null;
+      if (action === "forward" || action === "unsubscribe") return "delete";
+      return "update";
+    },
+    summarize: (action, d) => {
+      if (action === "forward") return `Forward email to ${d.to || "(recipient missing)"}`;
+      if (action === "snooze") return `Snooze email until ${d.snooze_until || "(time missing)"}`;
+      if (action === "unsubscribe") return `Unsubscribe from email sender ${d.email_id || ""}`.trim();
+      return `Email action: ${action}${d.email_id ? ` (${d.email_id})` : ""}`;
+    },
+    forceConfirm: true,
+  },
+  {
+    tool: "budget",
+    entity: "budget",
+    regex: /<tool>budget<\/tool>\s*<action>(\w+)<\/action>\s*<budget>(\{[\s\S]*?\})<\/budget>/g,
+    parse: (m) => {
+      const data = safeParseJson(m[2]);
+      if (!data) return null;
+      return { action: m[1], data, fullMatch: m[0] };
+    },
+    classify: (action) => (action === "set" ? "update" : null),
+    summarize: (_a, d) =>
+      `Set budget: ${d.category || "(category)"} = ${d.currency || "EUR"} ${d.monthly_limit || "(amount)"}/mo`,
+    forceConfirm: true,
+  },
+  {
+    tool: "meds",
+    entity: "medication",
+    regex: /<tool>meds<\/tool>\s*<action>(\w+)<\/action>\s*<meds>(\{[\s\S]*?\})<\/meds>/g,
+    parse: (m) => {
+      const data = safeParseJson(m[2]);
+      if (!data) return null;
+      return { action: m[1], data, fullMatch: m[0] };
+    },
+    classify: (action) => (action === "add" ? "create" : null),
+    summarize: (_a, d) =>
+      `Add medication: ${d.name || "(name missing)"}${d.dose ? ` (${d.dose})` : ""}`,
+    forceConfirm: true,
   },
 ];
 
@@ -1556,19 +1654,19 @@ interface ToolExecResult {
   tool: string;
   ok: boolean;
   message: string;
-  data?: Record<string, unknown>;
+  data?: unknown;
   queued?: boolean;
-  actionId?: string; // set when the call was queued for approval
+  actionId?: unknown; // set when the call was queued for approval
   summary?: string; // human-readable summary shown in confirmation prompts
-  undoId?: string; // set when the executed mutation can be reversed via /undo or an inline button
-  entityId?: string; // id of the row this result refers to (for row-level inline buttons)
-  id?: string; // alternate id field some tools set
+  undoId?: string | null; // set when the executed mutation can be reversed via /undo or an inline button
+  entityId?: unknown; // id of the row this result refers to (for row-level inline buttons)
+  id?: unknown; // alternate id field some tools set
   entityKind?: string; // kind of entity this result refers to
   kind?: string; // alternate kind field some tools set
-  label?: string; // human-readable label for the entity
-  title?: string; // alternate label some tools set
-  planId?: string; // set when the tool created a multi-step plan (propose_plan)
-  payload?: Record<string, unknown>; // tool-specific structured payload (e.g. propose_plan steps)
+  label?: unknown; // human-readable label for the entity
+  title?: unknown; // alternate label some tools set
+  planId?: unknown; // set when the tool created a multi-step plan (propose_plan)
+  payload?: unknown; // tool-specific structured payload (e.g. propose_plan steps)
 }
 
 interface ServerExecOpts {
@@ -1587,6 +1685,8 @@ interface ServerExecOpts {
   // The user's raw message text. Used as a deterministic fallback to infer a
   // recurrence rule for schedule_event when the model omits one ("every Friday").
   userText?: string;
+  // Optional assistant trace row to attach tool-call audit rows to.
+  traceId?: string | null;
 }
 
 // Deterministic natural-language → RRULE fallback. Only fires on explicit
@@ -1658,8 +1758,8 @@ function inferRecurrenceFromText(text: string, startISO: string): string | null 
 async function notifyAssignee(
   userId: string,
   entityType: "task" | "event",
-  entityId: string,
-  title: string,
+  entityId: unknown,
+  title: unknown,
   assigneeName: string | null,
   fromDisplayName: string | null,
 ): Promise<void> {
@@ -1670,8 +1770,8 @@ async function notifyAssignee(
   const from = fromDisplayName ? ` from ${fromDisplayName}` : "";
   const body =
     entityType === "task"
-      ? `New task${from}: ${title}`
-      : `You've been added to an event${from}: ${title}`;
+      ? `New task${from}: ${String(title || "Untitled")}`
+      : `You've been added to an event${from}: ${String(title || "Untitled")}`;
   try {
     await fetch(`${supabaseUrl}/functions/v1/push-delivery`, {
       method: "POST",
@@ -1683,7 +1783,7 @@ async function notifyAssignee(
         user_ids: [userId],
         title: assigneeName ? `For ${assigneeName}` : "You were tagged",
         body,
-        data: { entity_type: entityType, entity_id: entityId, source: "assignment" },
+        data: { entity_type: entityType, entity_id: String(entityId || ""), source: "assignment" },
       }),
     });
   } catch (e) {
@@ -1721,19 +1821,19 @@ async function insertWithSchemaCacheFallback(
   row: Record<string, unknown>,
   optionalCols: string[],
   selectCols: string,
-) {
+): Promise<DbResult<DbRow>> {
   let res = await supabase.from(table).insert(row).select(selectCols).single();
   const msg = (res?.error?.message || "") as string;
   const isSchemaCacheMiss =
     msg.includes("schema cache") && optionalCols.some((c) => msg.includes(`'${c}'`));
-  if (!isSchemaCacheMiss) return res;
+  if (!isSchemaCacheMiss) return res as DbResult<DbRow>;
   const stripped: Record<string, unknown> = { ...row };
   for (const c of optionalCols) delete stripped[c];
   console.warn(
     `[${table}] schema cache missing one of [${optionalCols.join(", ")}] — retrying without them`,
   );
   res = await supabase.from(table).insert(stripped).select(selectCols).single();
-  return res;
+  return res as DbResult<DbRow>;
 }
 
 async function executeToolsServerSide(
@@ -1759,7 +1859,7 @@ async function executeToolsServerSide(
         if (!parsed) continue;
         const op = spec.classify(parsed.action, parsed.data);
         if (!op) continue;
-        if (!requiresConfirmation(settings, spec.entity, op)) continue;
+        if (!spec.forceConfirm && !requiresConfirmation(settings, spec.entity, op)) continue;
 
         let summary = spec.summarize(parsed.action, parsed.data, opts?.timezone);
         // Resolve the target up front (if the tool supports it). If it can't be
@@ -1868,7 +1968,7 @@ async function executeToolsServerSide(
     text = strippedText;
   }
 
-  const safeJSON = (s: string) => {
+  const safeJSON = (s: string): DbRow | null => {
     try {
       return JSON.parse(s);
     } catch {
@@ -1940,15 +2040,15 @@ async function executeToolsServerSide(
     source: opts?.source || "web",
     source_ref: opts?.sourceRef || null,
   };
-  const undoCreate = (table: string, id: string, label: string, entity: string) =>
+  const undoCreate = (table: string, id: unknown, label: string, entity: string) =>
     recordUndo(supabase, {
       user_id: userId,
       op: "create",
       entity_type: entity,
-      entity_id: String(id),
+      entity_id: id ? String(id) : null,
       label,
       inverse_tool_xml: null,
-      snapshot: { kind: "delete_by_id", table, id },
+      snapshot: { kind: "delete_by_id", table, id: id ? String(id) : null },
       ...undoMeta,
     });
   const undoDelete = (table: string, row: Record<string, unknown>, label: string, entity: string) =>
@@ -1956,7 +2056,7 @@ async function executeToolsServerSide(
       user_id: userId,
       op: "delete",
       entity_type: entity,
-      entity_id: row?.id ?? null,
+      entity_id: typeof row?.id === "string" ? row.id : null,
       label,
       inverse_tool_xml: null,
       snapshot: { kind: "reinsert", table, row },
@@ -1964,7 +2064,7 @@ async function executeToolsServerSide(
     });
   const undoPatch = (
     table: string,
-    id: string,
+    id: unknown,
     oldPatch: Record<string, unknown>,
     label: string,
     entity: string,
@@ -1973,10 +2073,10 @@ async function executeToolsServerSide(
       user_id: userId,
       op: "update",
       entity_type: entity,
-      entity_id: String(id),
+      entity_id: id ? String(id) : null,
       label,
       inverse_tool_xml: null,
-      snapshot: { kind: "patch", table, id, patch: oldPatch },
+      snapshot: { kind: "patch", table, id: id ? String(id) : null, patch: oldPatch },
       ...undoMeta,
     });
 
@@ -2382,7 +2482,7 @@ async function executeToolsServerSide(
         // not just the (possibly unchanged) title.
         const newStart = upd.start_time || target.start_time;
         const whenStr = newStart
-          ? new Date(newStart).toLocaleString("en-GB", {
+          ? new Date(String(newStart)).toLocaleString("en-GB", {
               weekday: "short",
               day: "2-digit",
               month: "short",
@@ -2407,7 +2507,7 @@ async function executeToolsServerSide(
         out.push({
           tool: "manage_event",
           ok: true,
-          message: `Found: ${target.title} on ${new Date(target.start_time).toLocaleString()}`,
+          message: `Found: ${target.title} on ${new Date(String(target.start_time)).toLocaleString()}`,
           entityId: target.id,
           title: target.title,
           entityKind: "event",
@@ -3617,7 +3717,7 @@ async function executeToolsServerSide(
         tool: "plan_my_week",
         ok: true,
         message: `📅 Drafted a week (${count} block${count === 1 ? "" : "s"}). Open the planner inbox to review and apply.`,
-        entityId: r.body?.proposal?.id,
+        entityId: asRecord(asRecord(r.body).proposal).id,
       });
     } else {
       out.push({ tool: "plan_my_week", ok: false, message: `Failed: ${r.error}` });
@@ -5890,15 +5990,12 @@ async function executeToolsServerSide(
         });
         continue;
       }
-      const choice = candidates[Math.floor(Math.random() * candidates.length)] as Record<
-        string,
-        unknown
-      >;
+      const choice = candidates[Math.floor(Math.random() * candidates.length)] as DbRow;
       const labelMap: Record<string, string> = {
-        task: choice.title,
-        note: choice.title,
-        contact: choice.name,
-        habit: choice.name,
+        task: String(choice.title || ""),
+        note: String(choice.title || ""),
+        contact: String(choice.name || ""),
+        habit: String(choice.name || ""),
       };
       out.push({
         tool: "pick_random",
@@ -6631,7 +6728,7 @@ async function executeToolsServerSide(
       out.push({
         tool: "email_action",
         ok: true,
-        message: r.body?.message || `📧 ${action} done.`,
+        message: String(r.body?.message || `📧 ${action} done.`),
       });
     } catch (e) {
       out.push({ tool: "email_action", ok: false, message: `Failed: ${(e as Error).message}` });
@@ -7143,6 +7240,24 @@ async function executeToolsServerSide(
     }
   }
 
+  if (opts?.traceId) {
+    await Promise.all(
+      out.map((result) =>
+        recordToolCallTrace(supabase, {
+          traceId: opts.traceId,
+          userId,
+          toolName: result.tool,
+          status: result.queued ? "queued" : result.ok ? "success" : "error",
+          resultSummary: result.message,
+          errorMessage: result.ok ? null : result.message,
+          undoId: result.undoId ?? null,
+          riskLevel: result.queued ? "high" : "low",
+          approvalMode: result.queued ? "confirm" : "auto",
+        }),
+      ),
+    );
+  }
+
   return out;
 }
 
@@ -7356,7 +7471,7 @@ serve(async (req) => {
   const userId = auth.userId;
 
   // Create service role client for logging
-  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey) as unknown as SupabaseClient;
 
   try {
     const reqBody = await req.json();
@@ -7480,7 +7595,19 @@ serve(async (req) => {
       const supabaseAdminEarly = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      );
+      ) as unknown as SupabaseClient;
+      const earlyTrace = await startAssistantTrace(supabaseAdminEarly, {
+        userId,
+        surface: actionSource || "api",
+        workspaceId: activeWorkspace?.id ?? null,
+        inputExcerpt: preformedToolText,
+        promptVersion: "preformed-tool-v1",
+        metadata: {
+          execute_server_side: true,
+          skip_approval_gate: skipApprovalGate,
+          source_ref: actionSourceRef ?? null,
+        },
+      });
       // Preformed-tool path runs before we've loaded the profile tz, so look
       // it up once here. Cheap — single row by user id.
       let preformedTz: string | undefined;
@@ -7506,8 +7633,16 @@ serve(async (req) => {
           householdId,
           workspaceMembers: activeWorkspace?.members,
           timezone: preformedTz,
+          traceId: earlyTrace.traceId,
         },
       );
+      await finishAssistantTrace(supabaseAdminEarly, {
+        traceId: earlyTrace.traceId,
+        status: "success",
+        responseExcerpt: execResults.map((r) => r.message).join("\n"),
+        metadata: { tool_results: execResults.length },
+        startedAt: earlyTrace.startedAt,
+      });
       return new Response(JSON.stringify({ reply: "", toolResults: execResults }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -7599,7 +7734,7 @@ serve(async (req) => {
             q: T,
           ): T =>
             wsId ? q.eq("workspace_id", wsId) : q.eq("user_id", userId).is("workspace_id", null);
-          const hydrationCalls: Promise<{ data: unknown }>[] = [];
+          const hydrationCalls: Array<PromiseLike<{ data: unknown }>> = [];
           if (tasksMissing) {
             hydrationCalls.push(
               scoped(
@@ -8401,6 +8536,29 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
     // throttled (Gemini returns 503/5xx). Same family used by every other
     // call in this file, so quality stays consistent.
     const FALLBACK_MODEL = "gemini-2.5-flash";
+    const assistantTrace = await startAssistantTrace(supabaseAdmin, {
+      userId,
+      surface: currentChannel,
+      conversationId: tgChannelRef ?? null,
+      workspaceId: activeWorkspace?.id ?? null,
+      inputExcerpt: lastUserContent,
+      model,
+      promptVersion: "chat-v2",
+      contextSummary: {
+        route: route.effective,
+        route_confidence: route.confidence,
+        triage_complexity: triage?.complexity ?? null,
+        tasks_count: tasks?.length ?? 0,
+        events_count: events?.length ?? 0,
+        has_image: !!imageUrl,
+      },
+      metadata: {
+        execute_server_side: executeServerSide,
+        stream_final_text: streamFinalText,
+        native_tools: req.headers.get("x-dori-native-tools") === "1",
+        message_count: messages.length,
+      },
+    });
 
     // Native function-calling is opt-in per request via a header so we
     // can roll it out one surface at a time. The legacy XML path stays
@@ -8466,7 +8624,9 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
       const content: string = msg?.content || "";
       const toolCalls = Array.isArray(msg?.tool_calls) ? msg.tool_calls : [];
       if (toolCalls.length === 0) return content;
-      const xml = toolCallsToLegacyXml(toolCalls);
+      const xml = toolCallsToLegacyXml(
+        toolCalls as Array<{ id?: string; function: { name: string; arguments: string } }>,
+      );
       return content ? `${content}\n${xml}` : xml;
     }
 
@@ -8677,6 +8837,7 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
                 workspaceMembers: activeWorkspace?.members,
                 timezone: userTimezone,
                 userText: lastUserMsg,
+                traceId: assistantTrace.traceId,
               });
               allExecResults.push(...roundResults);
               for (const r of roundResults) {
@@ -8766,8 +8927,29 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
                 importance: route.specialist === "general" ? 0.3 : 0.55,
               }).catch(() => {});
             }
+            await finishAssistantTrace(supabaseAdmin, {
+              traceId: assistantTrace.traceId,
+              status: "streaming",
+              responseExcerpt: cleanText,
+              riskLevel: allExecResults.some((r) => r.queued) ? "high" : "low",
+              metadata: {
+                streamed: true,
+                tool_results: allExecResults.length,
+                prompt_tokens: promptTokens,
+                completion_tokens: completionTokens,
+              },
+              startedAt: assistantTrace.startedAt,
+            });
           } catch (e) {
             console.error("SSE agent stream failed", e);
+            await finishAssistantTrace(supabaseAdmin, {
+              traceId: assistantTrace.traceId,
+              status: "error",
+              responseExcerpt: (e as Error).message,
+              riskLevel: "medium",
+              metadata: { streamed: true },
+              startedAt: assistantTrace.startedAt,
+            });
             try {
               emit({ type: "error", detail: (e as Error).message });
             } catch {
@@ -8820,6 +9002,14 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
           const t = await fullResp.text();
           console.error(`Gemini (agent round ${round}) error:`, fullResp.status, t);
           if (round === 0) {
+            await finishAssistantTrace(supabaseAdmin, {
+              traceId: assistantTrace.traceId,
+              status: "error",
+              responseExcerpt: t,
+              riskLevel: "medium",
+              metadata: { status: fullResp.status, agent_round: round },
+              startedAt: assistantTrace.startedAt,
+            });
             return new Response(JSON.stringify({ error: "AI service error", detail: t }), {
               status: fullResp.status === 429 ? 429 : fullResp.status === 402 ? 402 : 500,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -8850,6 +9040,7 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
           workspaceMembers: activeWorkspace?.members,
           timezone: userTimezone,
           userText: lastUserMsg,
+          traceId: assistantTrace.traceId,
         });
         allExecResults.push(...roundResults);
 
@@ -8900,6 +9091,7 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
               workspaceMembers: activeWorkspace?.members,
               timezone: userTimezone,
               userText: lastUserMsg,
+              traceId: assistantTrace.traceId,
             });
             if (vResults.length > 0) {
               allExecResults.push(...vResults);
@@ -8947,8 +9139,8 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
           if (!id) continue;
           recentEntities.push({
             kind: (r.entityKind || r.kind || "task") as RecentEntity["kind"],
-            id,
-            label: r.label || r.title,
+            id: String(id),
+            label: r.label || r.title ? String(r.label || r.title) : undefined,
             ref_at: new Date().toISOString(),
           });
         }
@@ -8959,7 +9151,7 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
           channelRef: tgChannelRef,
           workspaceId: activeWorkspace?.id ?? null,
           openIntent: proposedPlan ? "awaiting_plan_approval" : null,
-          pendingPayload: proposedPlan ? (proposedPlan.payload ?? {}) : {},
+          pendingPayload: proposedPlan ? asRecord(proposedPlan.payload ?? {}) : {},
           recentEntities,
           activeSpecialist: effectiveSpecialists[0] ?? route.effective,
         });
@@ -8991,6 +9183,19 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
           ? cleanText.trim() + usageFooter(model, totalPromptTokens, totalCompletionTokens)
           : cleanText.trim();
 
+      await finishAssistantTrace(supabaseAdmin, {
+        traceId: assistantTrace.traceId,
+        status: "success",
+        responseExcerpt: cleanText,
+        riskLevel: allExecResults.some((r) => r.queued) ? "high" : "low",
+        metadata: {
+          tool_results: allExecResults.length,
+          prompt_tokens: totalPromptTokens,
+          completion_tokens: totalCompletionTokens,
+        },
+        startedAt: assistantTrace.startedAt,
+      });
+
       return new Response(
         JSON.stringify({
           reply: replyOut,
@@ -9006,6 +9211,14 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
     if (!streamResponse.ok) {
       const errorText = await streamResponse.text();
       console.error("Gemini error:", streamResponse.status, errorText);
+      await finishAssistantTrace(supabaseAdmin, {
+        traceId: assistantTrace.traceId,
+        status: "error",
+        responseExcerpt: errorText,
+        riskLevel: "medium",
+        metadata: { status: streamResponse.status },
+        startedAt: assistantTrace.startedAt,
+      });
       await logAIUsage(supabaseAdmin, userId, "chat", model, 0, 0, 0, "error", {
         error: errorText,
         personality,
@@ -9128,6 +9341,13 @@ Format: <tool>cancel_subscription</tool><cancel>{"contract_id":"uuid","tone":"fo
                 importance: route.specialist === "general" ? 0.3 : 0.55,
               }).catch(() => {});
             }
+            finishAssistantTrace(supabaseAdmin, {
+              traceId: assistantTrace.traceId,
+              status: "streaming",
+              responseExcerpt: cleaned,
+              metadata: { streamed: true },
+              startedAt: assistantTrace.startedAt,
+            }).catch(() => {});
           } catch (e) {
             console.error("Failed to log assistant turn", e);
           }

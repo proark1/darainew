@@ -19,6 +19,7 @@ const en: Record<string, string> = {
   "nav.family": "Family",
   "nav.settings": "Settings",
   "nav.assistant": "Assistant",
+  "nav.assets": "Properties & Vehicles",
   "nav.chat": "Chat",
   "nav.calls": "Calls",
   "nav.projects": "Projects",

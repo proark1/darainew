@@ -100,6 +100,13 @@ interface LiveSessionRequest {
   memories?: { type: string; key: string; value: string; category?: string }[];
 }
 
+interface TaskCommandDetails {
+  title?: string;
+  taskId?: string;
+  newDateText?: string;
+  newTitle?: string;
+}
+
 const personalityPrompts: Record<string, string> = {
   balanced:
     "You are DarAI, a helpful and balanced AI assistant. Be clear, supportive, and efficient.",
@@ -115,7 +122,7 @@ const personalityPrompts: Record<string, string> = {
 function detectTaskCommand(
   input: string,
   allTasks?: TaskItem[],
-): { command: string | null; details: Record<string, unknown> } {
+): { command: string | null; details: TaskCommandDetails | null } {
   const text = input.toLowerCase().trim();
 
   // Create task patterns
@@ -541,7 +548,8 @@ serve(async (req) => {
           break;
 
         case "reschedule": {
-          const newDate = parseNaturalDate(details.newDateText);
+          const newDateText = details.newDateText || "";
+          const newDate = parseNaturalDate(newDateText);
           if (details.taskId && newDate) {
             voiceAction = {
               type: "reschedule_task",
@@ -558,7 +566,7 @@ serve(async (req) => {
           } else if (!details.taskId) {
             responseText = `I couldn't find a task matching "${details.title}".`;
           } else {
-            responseText = `I didn't understand the date "${details.newDateText}". Try saying "tomorrow" or a specific day like "Monday".`;
+            responseText = `I didn't understand the date "${newDateText}". Try saying "tomorrow" or a specific day like "Monday".`;
           }
           break;
         }

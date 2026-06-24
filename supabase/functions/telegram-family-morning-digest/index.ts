@@ -3,6 +3,7 @@
 // hour matches the group's configured `morning_digest_hour` and we haven't
 // already sent for that local date.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { type DbClient } from "../_shared/supabase-edge.ts";
 import {
   buildSharedFamilyDigest,
   buildSharedFamilyDigestVoiceScript,
@@ -35,7 +36,7 @@ async function tgSend(chatId: number, text: string) {
   if (!res.ok) console.error("tgSend failed", res.status, await res.text());
 }
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = DbClient;
 
 async function getHousehold(supabase: SupabaseClient, ownerId: string, partnerId: string | null) {
   const ids = [ownerId, partnerId].filter(Boolean) as string[];
@@ -76,7 +77,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
+  const supabase = createClient(SUPABASE_URL, SERVICE_KEY) as unknown as SupabaseClient;
   const force = new URL(req.url).searchParams.get("force") === "1";
 
   const { data: groups, error } = await supabase

@@ -3,8 +3,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAtRiskTasks, nudgeMessage } from "../_shared/dori-slip-risk.ts";
 import { strictAppOrigin } from "../_shared/cors.ts";
 import { loadFeedbackStats } from "../_shared/dori-feedback.ts";
+import { db, type DbClient } from "../_shared/supabase-edge.ts";
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = DbClient;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": strictAppOrigin(),
@@ -54,7 +55,7 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = db(createClient(supabaseUrl, supabaseServiceKey));
 
     const { user_id, trigger_type } = await req.json().catch(() => ({}));
 

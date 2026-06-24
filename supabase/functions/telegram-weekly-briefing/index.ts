@@ -8,6 +8,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { strictAppOrigin } from "../_shared/cors.ts";
+import { db, type DbClient } from "../_shared/supabase-edge.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": strictAppOrigin(),
@@ -69,7 +70,7 @@ function localParts(now: Date, tz: string) {
   return { weekday, hour, date };
 }
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = DbClient;
 
 interface TelegramLink {
   user_id: string;
@@ -176,7 +177,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
+  const supabase = db(createClient(SUPABASE_URL, SERVICE_KEY));
   const url = new URL(req.url);
   const force = url.searchParams.get("force") === "1";
   const onlyUserId = url.searchParams.get("user_id");

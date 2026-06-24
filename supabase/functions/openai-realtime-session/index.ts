@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { strictAppOrigin } from "../_shared/cors.ts";
+import { asRecord, asRows } from "../_shared/supabase-edge.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": strictAppOrigin(),
@@ -1378,6 +1379,29 @@ function buildSystemPrompt(
   userProfile: Record<string, unknown>,
   contextData: Record<string, unknown>,
 ): string {
+  const businesses = Array.isArray(userProfile?.businesses)
+    ? userProfile.businesses.map(String).filter(Boolean)
+    : [];
+  const healthData = asRecord(contextData?.healthData);
+  const todaySummary = asRecord(healthData.todaySummary);
+  const weeklyData = asRows<Record<string, unknown>>(healthData.weeklyData);
+  const habitData = asRecord(contextData?.habitData);
+  const habits = asRows<Record<string, unknown>>(habitData.habits);
+  const todayTasks = asRows<Record<string, unknown>>(contextData?.todayTasks);
+  const overdueTasks = asRows<Record<string, unknown>>(contextData?.overdueTasks);
+  const upcomingEvents = asRows<Record<string, unknown>>(contextData?.upcomingEvents);
+  const contactsDue = asRows<Record<string, unknown>>(contextData?.contactsDue);
+  const contractsWithRenewals = asRows<Record<string, unknown>>(
+    contextData?.contractsWithRenewals,
+  );
+  const allProjects = asRows<Record<string, unknown>>(contextData?.allProjects);
+  const unreadEmails = asRows<Record<string, unknown>>(contextData?.unreadEmails);
+  const familyMembers = asRows<Record<string, unknown>>(contextData?.familyMembers);
+  const familySchedule = asRecord(contextData?.familySchedule);
+  const familyTodayEvents = asRows<Record<string, unknown>>(familySchedule.todayEvents);
+  const familyTomorrowEvents = asRows<Record<string, unknown>>(familySchedule.tomorrowEvents);
+  const upcomingBirthdays = asRows<Record<string, unknown>>(familySchedule.upcomingBirthdays);
+  const shoppingLists = asRows<Record<string, unknown>>(contextData?.shoppingLists);
   const now = new Date();
   const timeString = now.toLocaleString("en-US", {
     weekday: "long",
@@ -1507,8 +1531,7 @@ If you know the user's name, include it: "Hey [Name]! What can I help with?"
     prompt += `\n## About the User:\n`;
     if (userProfile.display_name) prompt += `- Name: ${userProfile.display_name}\n`;
     if (userProfile.role) prompt += `- Role: ${userProfile.role}\n`;
-    if (userProfile.businesses?.length)
-      prompt += `- Businesses: ${userProfile.businesses.join(", ")}\n`;
+    if (businesses.length) prompt += `- Businesses: ${businesses.join(", ")}\n`;
     if (userProfile.location_city || userProfile.location_country) {
       prompt += `- Location: ${[userProfile.location_city, userProfile.location_country].filter(Boolean).join(", ")}\n`;
     }
@@ -1525,23 +1548,28 @@ If you know the user's name, include it: "Hey [Name]! What can I help with?"
     prompt += `- Active contracts: ${contextData.totalContracts || 0}\n`;
     prompt += `- Total projects: ${contextData.totalProjects || 0}\n`;
     prompt += `- Habits tracked: ${contextData.totalHabits || 0}\n`;
-    prompt += `- Apple Health connected: ${contextData.healthData?.isConnected ? "Yes" : "No"}\n`;
+    prompt += `- Apple Health connected: ${healthData.isConnected ? "Yes" : "No"}\n`;
 
     // Health data summary
-    if (contextData.healthData?.todaySummary) {
-      const h = contextData.healthData.todaySummary;
+    if (Object.keys(todaySummary).length) {
+      const h = todaySummary;
+      const steps = Number(h.steps || 0);
+      const calories = Number(h.calories || 0);
+      const activeMinutes = Number(h.activeMinutes || 0);
+      const sleepHours = Number(h.sleepHours || 0);
+      const heartRateAvg = Number(h.heartRateAvg || 0);
       prompt += `\n### Today's Health Summary:\n`;
-      if (h.steps > 0) prompt += `- Steps: ${h.steps.toLocaleString()}\n`;
-      if (h.calories > 0) prompt += `- Calories burned: ${h.calories.toLocaleString()}\n`;
-      if (h.activeMinutes > 0) prompt += `- Active minutes: ${h.activeMinutes}\n`;
-      if (h.sleepHours > 0) prompt += `- Sleep: ${h.sleepHours.toFixed(1)} hours\n`;
-      if (h.heartRateAvg > 0) prompt += `- Avg heart rate: ${h.heartRateAvg} bpm\n`;
+      if (steps > 0) prompt += `- Steps: ${steps.toLocaleString()}\n`;
+      if (calories > 0) prompt += `- Calories burned: ${calories.toLocaleString()}\n`;
+      if (activeMinutes > 0) prompt += `- Active minutes: ${activeMinutes}\n`;
+      if (sleepHours > 0) prompt += `- Sleep: ${sleepHours.toFixed(1)} hours\n`;
+      if (heartRateAvg > 0) prompt += `- Avg heart rate: ${heartRateAvg} bpm\n`;
       if (h.weight) prompt += `- Weight: ${h.weight} kg\n`;
     }
 
     // Weekly health trends
-    if (contextData.healthData?.weeklyData?.length > 0) {
-      const weekData = contextData.healthData.weeklyData;
+    if (weeklyData.length > 0) {
+      const weekData = weeklyData;
       const totalSteps = weekData.reduce(
         (sum: number, d: Record<string, unknown>) => sum + ((d.steps as number) || 0),
         0,
@@ -1558,36 +1586,33 @@ If you know the user's name, include it: "Hey [Name]! What can I help with?"
     }
 
     // Habits summary
-    if (contextData.habitData?.habits?.length > 0) {
+    if (habits.length > 0) {
       prompt += `\n### Active Habits:\n`;
-      (contextData.habitData as Record<string, unknown[]>).habits
-        .slice(0, 5)
-        .forEach((h: unknown) => {
-          const habit = h as Record<string, unknown>;
+      habits.slice(0, 5).forEach((habit) => {
           prompt += `- ${habit.icon} ${habit.name} (${habit.frequency})\n`;
         });
     }
 
     // Today's tasks
-    if (contextData.todayTasks?.length > 0) {
+    if (todayTasks.length > 0) {
       prompt += `\n### Today's Tasks:\n`;
-      contextData.todayTasks.forEach((t: Record<string, unknown>) => {
+      todayTasks.forEach((t) => {
         prompt += `- "${t.title}" (${t.priority} priority)\n`;
       });
     }
 
     // Overdue tasks
-    if (contextData.overdueTasks?.length > 0) {
+    if (overdueTasks.length > 0) {
       prompt += `\n### Overdue Tasks:\n`;
-      contextData.overdueTasks.forEach((t: Record<string, unknown>) => {
+      overdueTasks.forEach((t) => {
         prompt += `- "${t.title}" - was due ${(t.dueDate as string | undefined)?.split("T")[0]}\n`;
       });
     }
 
     // Upcoming events
-    if (contextData.upcomingEvents?.length > 0) {
+    if (upcomingEvents.length > 0) {
       prompt += `\n### Upcoming Events:\n`;
-      contextData.upcomingEvents.forEach((e: Record<string, unknown>) => {
+      upcomingEvents.forEach((e) => {
         const date = new Date(e.startTime as string).toLocaleDateString();
         const time = new Date(e.startTime as string).toLocaleTimeString([], {
           hour: "2-digit",
@@ -1598,33 +1623,33 @@ If you know the user's name, include it: "Hey [Name]! What can I help with?"
     }
 
     // Contacts due for follow-up
-    if (contextData.contactsDue?.length > 0) {
+    if (contactsDue.length > 0) {
       prompt += `\n### Contacts Due for Follow-up:\n`;
-      contextData.contactsDue.forEach((c: Record<string, unknown>) => {
+      contactsDue.forEach((c) => {
         prompt += `- ${c.name}${c.company ? ` at ${c.company}` : ""}\n`;
       });
     }
 
     // Contracts with upcoming renewals
-    if (contextData.contractsWithRenewals?.length > 0) {
+    if (contractsWithRenewals.length > 0) {
       prompt += `\n### Contracts Expiring Soon:\n`;
-      contextData.contractsWithRenewals.forEach((c: Record<string, unknown>) => {
+      contractsWithRenewals.forEach((c) => {
         prompt += `- ${c.name} - renews ${(c.renewalDate as string | undefined)?.split("T")[0]}${c.costAmount ? ` ($${c.costAmount}/${c.costFrequency})` : ""}\n`;
       });
     }
 
     // Projects summary (keep short)
-    if (contextData.allProjects?.length > 0) {
+    if (allProjects.length > 0) {
       prompt += `\n### Projects:\n`;
-      contextData.allProjects.slice(0, 10).forEach((p: Record<string, unknown>) => {
+      allProjects.slice(0, 10).forEach((p) => {
         prompt += `- "${p.name}"${p.description ? `: ${p.description}` : ""}\n`;
       });
     }
 
     // Unread emails
-    if (contextData.unreadEmails?.length > 0) {
-      prompt += `\n### Unread Emails (${contextData.totalUnreadEmails || contextData.unreadEmails.length} total):\n`;
-      contextData.unreadEmails.forEach((e: Record<string, unknown>) => {
+    if (unreadEmails.length > 0) {
+      prompt += `\n### Unread Emails (${contextData.totalUnreadEmails || unreadEmails.length} total):\n`;
+      unreadEmails.forEach((e) => {
         const time = new Date(e.receivedAt as string).toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
@@ -1636,9 +1661,9 @@ If you know the user's name, include it: "Hey [Name]! What can I help with?"
     }
 
     // Family members
-    if (contextData.familyMembers?.length > 0) {
+    if (familyMembers.length > 0) {
       prompt += `\n### Family Members:\n`;
-      contextData.familyMembers.forEach((m: Record<string, unknown>) => {
+      familyMembers.forEach((m) => {
         let info = `- **${m.name}** (${m.relationship}${m.age !== null ? `, ${m.age} years old` : ""})`;
         if (m.school) info += ` — School: ${m.school}${m.grade ? `, Grade: ${m.grade}` : ""}`;
         if (m.kindergarten) info += ` — Kindergarten: ${m.kindergarten}`;
@@ -1651,9 +1676,9 @@ If you know the user's name, include it: "Hey [Name]! What can I help with?"
     }
 
     // Family schedule
-    if (contextData.familySchedule?.todayEvents?.length > 0) {
+    if (familyTodayEvents.length > 0) {
       prompt += `\n### Today's Family Schedule:\n`;
-      contextData.familySchedule.todayEvents.forEach((e: Record<string, unknown>) => {
+      familyTodayEvents.forEach((e) => {
         const time = new Date(e.startTime as string).toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
@@ -1661,9 +1686,9 @@ If you know the user's name, include it: "Hey [Name]! What can I help with?"
         prompt += `- ${e.title} at ${time}${e.location ? ` (${e.location})` : ""}\n`;
       });
     }
-    if (contextData.familySchedule?.tomorrowEvents?.length > 0) {
+    if (familyTomorrowEvents.length > 0) {
       prompt += `\n### Tomorrow's Family Schedule:\n`;
-      contextData.familySchedule.tomorrowEvents.forEach((e: Record<string, unknown>) => {
+      familyTomorrowEvents.forEach((e) => {
         const time = new Date(e.startTime as string).toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
@@ -1671,9 +1696,9 @@ If you know the user's name, include it: "Hey [Name]! What can I help with?"
         prompt += `- ${e.title} at ${time}${e.location ? ` (${e.location})` : ""}\n`;
       });
     }
-    if (contextData.familySchedule?.upcomingBirthdays?.length > 0) {
+    if (upcomingBirthdays.length > 0) {
       prompt += `\n### Upcoming Family Birthdays:\n`;
-      contextData.familySchedule.upcomingBirthdays.forEach((b: Record<string, unknown>) => {
+      upcomingBirthdays.forEach((b) => {
         const daysUntil = Math.ceil(
           (new Date(b.date as string).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
         );
@@ -1682,9 +1707,9 @@ If you know the user's name, include it: "Hey [Name]! What can I help with?"
     }
 
     // Shopping lists
-    if (contextData.shoppingLists?.length > 0) {
+    if (shoppingLists.length > 0) {
       prompt += `\n### Active Shopping Lists:\n`;
-      contextData.shoppingLists.forEach((l: Record<string, unknown>) => {
+      shoppingLists.forEach((l) => {
         prompt += `- ${l.name}${l.dueDate ? ` (due ${l.dueDate})` : ""}\n`;
       });
     }

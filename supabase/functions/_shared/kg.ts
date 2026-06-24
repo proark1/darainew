@@ -10,6 +10,8 @@
 // safely on error. Entity extraction is opportunistic; a missed
 // extraction must never block the underlying memory write.
 
+import { db } from "./supabase-edge.ts";
+
 const EXTRACTION_MODEL = "gemini-2.5-flash";
 
 export type EntityKind =
@@ -202,19 +204,11 @@ export interface LinkExtractionResult {
 // Upserts each extracted entity, then links it to the source row via
 // kg_link_mention. Best-effort: a single failure doesn't abort the
 // batch.
-// Minimal Supabase client surface needed by this module.
-type KgClient = {
-  from(table: string): Record<string, (...args: unknown[]) => unknown>;
-  rpc(
-    name: string,
-    args: Record<string, unknown>,
-  ): Promise<{ data: unknown; error: { message: string } | null }>;
-};
-
 export async function linkExtraction(
-  supabase: KgClient,
+  supabaseClient: unknown,
   args: LinkExtractionArgs,
 ): Promise<LinkExtractionResult> {
+  const supabase = db(supabaseClient);
   if (!args.entities?.length) return { linked: 0, entityIds: [] };
   const ids: string[] = [];
   let linked = 0;
@@ -230,14 +224,15 @@ export async function linkExtraction(
         p_importance: clamp01(e.salience ?? 0.5),
         p_description: e.description ?? null,
       });
-      if (upErr || !entityId) {
+      const entityIdString = typeof entityId === "string" ? entityId : null;
+      if (upErr || !entityIdString) {
         console.warn("[kg.linkExtraction] upsert failed", upErr?.message);
         continue;
       }
-      ids.push(entityId);
+      ids.push(entityIdString);
       const { error: linkErr } = await supabase.rpc("kg_link_mention", {
         p_user_id: args.userId,
-        p_entity_id: entityId,
+        p_entity_id: entityIdString,
         p_source_kind: args.sourceKind,
         p_source_id: args.sourceId,
         p_salience: clamp01(e.salience ?? 0.5),
@@ -268,9 +263,10 @@ export interface RecordProvenanceArgs {
 }
 
 export async function recordProvenance(
-  supabase: KgClient,
+  supabaseClient: unknown,
   args: RecordProvenanceArgs,
 ): Promise<boolean> {
+  const supabase = db(supabaseClient);
   try {
     const { error } = await supabase.from("memory_provenance").insert({
       user_id: args.userId,
@@ -314,12 +310,12 @@ export interface AutoKgArgs {
 }
 
 export async function autoKgIngest(
-  supabase: KgClient,
+  supabaseClient: unknown,
   args: AutoKgArgs,
 ): Promise<{ entitiesLinked: number; model: string | null }> {
   try {
     const { entities, model } = await extractEntities(args.text);
-    const { linked } = await linkExtraction(supabase, {
+    const { linked } = await linkExtraction(supabaseClient, {
       userId: args.userId,
       workspaceId: args.workspaceId ?? null,
       sourceKind: args.sourceKind,
@@ -334,7 +330,7 @@ export async function autoKgIngest(
       // own mapping via a follow-up recordProvenance() call.
       // Skip if targetId is not a UUID (e.g. chat:uuid).
       if (/^[0-9a-f-]{36}$/i.test(args.sourceId)) {
-        await recordProvenance(supabase, {
+        await recordProvenance(supabaseClient, {
           userId: args.userId,
           targetKind:
             args.sourceKind === "episodic"

@@ -1,18 +1,32 @@
 // Polls Telegram getUpdates and routes incoming messages.
 // 1:1 chats → Dori chat; group chats linked via /linkfamily → telegram-router.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { db, type DbClient, type DbRow } from "../_shared/supabase-edge.ts";
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = DbClient;
 
 // Minimal shape of a Telegram callback_query object
 interface TgCallback {
   id: string;
   data?: string;
-  message?: {
-    message_id?: number;
-    chat?: { id?: number; type?: string };
+  message: {
+    message_id: number;
+    chat: { id: number; type?: string };
   };
   from?: { id?: number };
+  [key: string]: DbRow;
+}
+
+interface TgMessage {
+  chat: { id: number; type: string; title?: string };
+  [key: string]: DbRow;
+}
+
+interface TgUpdate {
+  update_id: number;
+  message?: TgMessage;
+  callback_query?: TgCallback;
+  [key: string]: DbRow;
 }
 import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 import {
@@ -32,6 +46,7 @@ import {
   tgAnswerCallback,
   tgEditMessageText,
   tgSendWithKeyboard,
+  type PendingAction,
 } from "../_shared/telegram-confirm.ts";
 import {
   buildUndoKeyboard,
@@ -547,6 +562,7 @@ interface ToolResult {
   queued?: boolean;
   actionId?: string;
   summary?: string;
+  undoId?: string;
 }
 
 interface DoriCallResult {
@@ -807,7 +823,7 @@ async function handleTaskCallback(
     entity: "task",
     entityId: task.id,
     label: `${payload.op} task "${task.title}"`,
-    snapshot: undoSnap,
+    snapshot: undoSnap ?? {},
   });
 
   await tgAnswerCallback(cb.id, outcome.slice(0, 180), telegramKey);
@@ -891,7 +907,7 @@ async function handleShopCallback(
     entity: "shopping_item",
     entityId: item.id,
     label: `${payload.op} shopping item "${item.name}"`,
-    snapshot: undoSnap,
+    snapshot: undoSnap ?? {},
   });
 
   await tgAnswerCallback(cb.id, outcome.slice(0, 180), telegramKey);
@@ -1213,7 +1229,7 @@ Deno.serve(async (req) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   const TELEGRAM_API_KEY = Deno.env.get("TELEGRAM_API_KEY")!;
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabase = createClient(supabaseUrl, serviceKey);
+  const supabase = db(createClient(supabaseUrl, serviceKey));
 
   // ── Webhook vs polling ──────────────────────────────────────────────────
   // Telegram delivers updates two ways: it can POST each update to a webhook
@@ -1223,11 +1239,11 @@ Deno.serve(async (req) => {
   // exact same per-update pipeline below for that one update. When a webhook is
   // registered Telegram disables getUpdates, so the poll path is simply never
   // taken — the two never run at once.
-  let webhookUpdate: Record<string, unknown> | null = null;
+  let webhookUpdate: TgUpdate | null = null;
   try {
     const body = await req.json();
     if (body && (body.update_id !== undefined || body.message || body.callback_query)) {
-      webhookUpdate = body;
+      webhookUpdate = body as TgUpdate;
     }
   } catch {
     /* no/invalid JSON body → polling mode */
@@ -1277,10 +1293,10 @@ Deno.serve(async (req) => {
   // and finish the work in the background — see the dispatch logic below.
   const runLoop = async (): Promise<void> => {
     while (isWebhook || Date.now() - startTime < MAX_RUNTIME_MS - MIN_REMAINING_MS) {
-      let updates: Record<string, unknown>[];
+      let updates: TgUpdate[];
       if (isWebhook) {
         // Single pushed update — process it once, then break out below.
-        updates = [webhookUpdate as Record<string, unknown>];
+        updates = [webhookUpdate!];
       } else {
         const remainingMs = MAX_RUNTIME_MS - (Date.now() - startTime);
         const timeout = Math.min(50, Math.floor(remainingMs / 1000) - 5);
@@ -1299,7 +1315,7 @@ Deno.serve(async (req) => {
           break;
         }
 
-        updates = data.result ?? [];
+        updates = Array.isArray(data.result) ? (data.result as TgUpdate[]) : [];
         if (updates.length === 0) continue;
       }
 
@@ -1449,7 +1465,7 @@ Deno.serve(async (req) => {
                   "That action is no longer available.",
                   TELEGRAM_API_KEY,
                 );
-              } else if (!isActionableNow(action as Record<string, unknown>)) {
+              } else if (!isActionableNow(action as PendingAction & { expires_at?: string | null })) {
                 await tgAnswerCallback(cb.id, `This expired.`, TELEGRAM_API_KEY);
                 if (cbMessageId) {
                   await tgEditMessageText(
@@ -3014,7 +3030,7 @@ Deno.serve(async (req) => {
           let preferVoice = wasVoiceMessage;
           let userLocale: string | undefined;
           try {
-            const supabaseForPref = createClient(supabaseUrl, serviceKey);
+            const supabaseForPref = db(createClient(supabaseUrl, serviceKey));
             const [{ data: ps }, { data: prof }] = await Promise.all([
               supabaseForPref
                 .from("proactive_settings")
@@ -3157,7 +3173,8 @@ Deno.serve(async (req) => {
     const work = runLoop().catch((e) =>
       console.error("[telegram-poll] webhook processing error", e),
     );
-    const er = (globalThis as Record<string, unknown>).EdgeRuntime;
+    const er = (globalThis as { EdgeRuntime?: { waitUntil?: (work: Promise<unknown>) => void } })
+      .EdgeRuntime;
     if (er && typeof er.waitUntil === "function") {
       er.waitUntil(work);
     } else {

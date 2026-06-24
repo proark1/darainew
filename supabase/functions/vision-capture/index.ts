@@ -20,6 +20,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { assertWithinQuota } from "../_shared/ai-quota.ts";
 import { strictAppOrigin } from "../_shared/cors.ts";
 import { generateStructured } from "../_shared/geminiStructured.ts";
+import { asRecord } from "../_shared/supabase-edge.ts";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
@@ -279,7 +280,7 @@ serve(async (req) => {
       const imgResp = await fetch(signed.signedUrl, { signal: AbortSignal.timeout(15_000) });
       if (!imgResp.ok) throw new Error(`image fetch ${imgResp.status}`);
       const imgMime = imgResp.headers.get("content-type") || "image/jpeg";
-      const imgB64 = base64Encode(new Uint8Array(await imgResp.arrayBuffer()));
+      const imgB64 = base64Encode(await imgResp.arrayBuffer());
       parsed = await generateStructured({
         system: SYSTEM_PROMPT,
         parts: [{ text: userText }, { inlineData: { mimeType: imgMime, data: imgB64 } }],
@@ -298,7 +299,10 @@ serve(async (req) => {
       return json({ error: "AI extraction failed" }, 502);
     }
 
-    const detectedKind: Kind = ALLOWED_KINDS.includes(parsed?.kind) ? parsed.kind : "unknown";
+    const parsedKind = typeof parsed?.kind === "string" ? parsed.kind : "";
+    const detectedKind: Kind = ALLOWED_KINDS.includes(parsedKind as Kind)
+      ? (parsedKind as Kind)
+      : "unknown";
     const ocrText = typeof parsed?.ocr_text === "string" ? parsed.ocr_text.slice(0, 8000) : "";
     const sourceLanguage =
       typeof parsed?.source_language === "string" ? parsed.source_language.slice(0, 8) : null;
@@ -306,7 +310,7 @@ serve(async (req) => {
     // Pick out the matching per-kind block.
     const extracted =
       parsed?.[detectedKind] && typeof parsed[detectedKind] === "object"
-        ? sanitiseExtracted(detectedKind, parsed[detectedKind])
+        ? sanitiseExtracted(detectedKind, asRecord(parsed[detectedKind]))
         : {};
 
     await admin

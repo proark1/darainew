@@ -385,6 +385,7 @@ export const StandardMode = memo(function StandardMode({
       health: t("nav.health") || "Health",
       email: t("nav.email") || "Email",
       properties: t("nav.properties") || "Properties",
+      assets: t("nav.assets") || "Properties & Vehicles",
       startups: t("nav.startups") || "Startups",
       content: "Content",
       "content-liked": "Content · Liked & Scripts",

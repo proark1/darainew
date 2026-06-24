@@ -1,3 +1,5 @@
+import { db, type DbQuery } from "./supabase-edge.ts";
+
 // Dori context engine.
 //
 // One call, one compact snapshot of "what is this user working on right now",
@@ -121,15 +123,13 @@ export function daysBetweenYmd(earlier: string, later: string): number {
   return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000);
 }
 
-// Minimal Supabase client surface used by this module.
-type DoriContextClient = { from(table: string): Record<string, (...args: unknown[]) => unknown> };
-
 export async function buildDoriContext(
-  supabase: DoriContextClient,
+  supabaseClient: unknown,
   userId: string,
   workspaceId: string | null,
   opts?: { timezone?: string },
 ): Promise<DoriContext> {
+  const supabase = db(supabaseClient);
   const tz = opts?.timezone;
   const now = new Date();
   // Anchor day boundaries to the USER's local calendar day, not the UTC edge
@@ -148,11 +148,7 @@ export async function buildDoriContext(
   // Build the scoped query base. Workspace mode pulls across all members;
   // personal pulls only the caller's own un-workspaced rows.
   const scope: "personal" | "workspace" = workspaceId ? "workspace" : "personal";
-  type ScopedQuery = {
-    eq(col: string, val: unknown): ScopedQuery;
-    is(col: string, val: unknown): ScopedQuery;
-  };
-  const applyScope = <T extends ScopedQuery>(q: T): ScopedQuery =>
+  const applyScope = (q: DbQuery): DbQuery =>
     workspaceId
       ? q.eq("workspace_id", workspaceId)
       : q.eq("user_id", userId).is("workspace_id", null);

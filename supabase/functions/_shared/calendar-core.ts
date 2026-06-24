@@ -14,6 +14,7 @@
 //           other providers (avoids cross-provider duplication loops).
 
 import { decryptTokenIfNeeded, encryptTokenIfConfigured } from "./encryption.ts";
+import { asRecordOrNull, asRows, db } from "./supabase-edge.ts";
 
 export interface CalendarConnection {
   id: string;
@@ -37,16 +38,7 @@ export interface SyncResult {
   errors: string[];
 }
 
-// Minimal Supabase admin client surface used by this module.
-// SupabaseQueryBuilder is a generic fluent interface; typed as a
-// recursive record so the chain (.from.select.eq.maybeSingle) resolves
-// without requiring the full @supabase/supabase-js types.
-type SupabaseQueryBuilder = Promise<{ data: unknown; error: { message: string } | null }> & {
-  [key: string]: (...args: unknown[]) => SupabaseQueryBuilder;
-};
-export interface CalendarAdminClient {
-  from(table: string): SupabaseQueryBuilder;
-}
+export type CalendarAdminClient = unknown;
 
 // How far back/ahead we sync. Matches the previous window so behaviour is
 // unchanged for the pull side.
@@ -113,6 +105,7 @@ async function getValidGoogleToken(
   admin: CalendarAdminClient,
   conn: CalendarConnection,
 ): Promise<string | null> {
+  const supabase = db(admin);
   let accessToken = conn.access_token;
   const expired = conn.token_expires_at && new Date(conn.token_expires_at) < new Date();
   if (!expired) return accessToken;
@@ -135,7 +128,7 @@ async function getValidGoogleToken(
   }
   const tokens = await resp.json();
   accessToken = tokens.access_token;
-  await admin
+  await supabase
     .from("external_calendar_connections")
     .update({
       access_token: await encryptTokenIfConfigured(accessToken),
@@ -174,11 +167,12 @@ export async function syncGoogleConnection(
   admin: CalendarAdminClient,
   conn: CalendarConnection,
 ): Promise<SyncResult> {
+  const supabase = db(admin);
   const result: SyncResult = { imported: 0, updated: 0, pushed: 0, errors: [] };
   const accessToken = await getValidGoogleToken(admin, conn);
   if (!accessToken) {
     result.errors.push("token refresh failed — reconnect required");
-    await admin
+    await supabase
       .from("external_calendar_connections")
       .update({ last_sync_error: "token refresh failed — reconnect required" })
       .eq("id", conn.id);
@@ -214,13 +208,15 @@ export async function syncGoogleConnection(
         try {
           if (g.status === "cancelled") {
             // Remove the linked local event (and the link via cascade).
-            const { data: link } = await admin
+            const { data: linkData } = await supabase
               .from("event_sync_links")
               .select("event_id")
               .eq("connection_id", conn.id)
               .eq("external_id", g.id)
               .maybeSingle();
-            if (link) await admin.from("events").delete().eq("id", link.event_id);
+            const link = asRecordOrNull(linkData);
+            const eventId = typeof link?.event_id === "string" ? link.event_id : null;
+            if (eventId) await supabase.from("events").delete().eq("id", eventId);
             continue;
           }
           const start = g.start?.dateTime || g.start?.date;
@@ -233,7 +229,7 @@ export async function syncGoogleConnection(
             end_time: end,
             location: g.location || null,
           };
-          await reconcilePulledEvent(admin, conn, "google", g.id, g.etag || null, next, result);
+          await reconcilePulledEvent(supabase, conn, "google", g.id, g.etag || null, next, result);
         } catch (e) {
           result.errors.push(`pull item: ${(e as Error)?.message || "unknown"}`);
         }
@@ -243,12 +239,16 @@ export async function syncGoogleConnection(
 
   // ---- PUSH (mirror local events to this calendar) ----
   if (pushAllowed(conn)) {
-    await backfillMirrorLinks(admin, conn);
-    const pending = await loadPendingLinks(admin, conn);
+    await backfillMirrorLinks(supabase, conn);
+    const pending = await loadPendingLinks(supabase, conn);
     for (const { link, event } of pending) {
       try {
-        const isUpdate = !!link.external_id;
-        const url = isUpdate ? `${base}/${encodeURIComponent(link.external_id)}` : base;
+        const externalId =
+          typeof link.external_id === "string" && link.external_id.length > 0
+            ? link.external_id
+            : null;
+        const isUpdate = !!externalId;
+        const url = externalId ? `${base}/${encodeURIComponent(externalId)}` : base;
         const resp = await fetch(url, {
           method: isUpdate ? "PATCH" : "POST",
           headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -256,7 +256,7 @@ export async function syncGoogleConnection(
         });
         if (resp.ok) {
           const remote = await resp.json();
-          await admin
+          await supabase
             .from("event_sync_links")
             .update({
               external_id: remote.id,
@@ -270,14 +270,14 @@ export async function syncGoogleConnection(
           result.pushed++;
         } else if (isUpdate && resp.status === 404) {
           // The remote copy is gone — drop our id so the next run re-creates it.
-          await admin
+          await supabase
             .from("event_sync_links")
             .update({ external_id: null, updated_at: new Date().toISOString() })
             .eq("id", link.id);
           result.errors.push("push update: 404 (will recreate next run)");
         } else {
           const txt = await resp.text();
-          await admin
+          await supabase
             .from("event_sync_links")
             .update({
               sync_status: "error",
@@ -293,7 +293,7 @@ export async function syncGoogleConnection(
     }
   }
 
-  await admin
+  await supabase
     .from("external_calendar_connections")
     .update({
       last_synced_at: new Date().toISOString(),
@@ -385,6 +385,7 @@ export async function syncAppleConnection(
   admin: CalendarAdminClient,
   conn: CalendarConnection,
 ): Promise<SyncResult> {
+  const supabase = db(admin);
   const result: SyncResult = { imported: 0, updated: 0, pushed: 0, errors: [] };
   const auth = btoa(`${conn.caldav_username}:${conn.caldav_password_encrypted}`);
   // Guarantee a single trailing slash so resource URLs build correctly.
@@ -431,7 +432,7 @@ export async function syncAppleConnection(
               end_time: ev.dtend,
               location: ev.location || null,
             };
-            await reconcilePulledEvent(admin, conn, "apple", ev.uid, null, next, result);
+            await reconcilePulledEvent(supabase, conn, "apple", ev.uid, null, next, result);
           }
         } catch (e) {
           result.errors.push(`pull item: ${(e as Error)?.message || "unknown"}`);
@@ -442,8 +443,8 @@ export async function syncAppleConnection(
 
   // ---- PUSH (mirror local events) ----
   if (pushAllowed(conn)) {
-    await backfillMirrorLinks(admin, conn);
-    const pending = await loadPendingLinks(admin, conn);
+    await backfillMirrorLinks(supabase, conn);
+    const pending = await loadPendingLinks(supabase, conn);
     for (const { link, event } of pending) {
       try {
         const uid = link.external_id || `darai-${event.id}`;
@@ -457,7 +458,7 @@ export async function syncAppleConnection(
           body: toICS(event, uid),
         });
         if (resp.ok || resp.status === 201 || resp.status === 204) {
-          await admin
+          await supabase
             .from("event_sync_links")
             .update({
               external_id: uid,
@@ -470,7 +471,7 @@ export async function syncAppleConnection(
           result.pushed++;
         } else {
           const txt = await resp.text();
-          await admin
+          await supabase
             .from("event_sync_links")
             .update({
               sync_status: "error",
@@ -486,7 +487,7 @@ export async function syncAppleConnection(
     }
   }
 
-  await admin
+  await supabase
     .from("external_calendar_connections")
     .update({
       last_synced_at: new Date().toISOString(),
@@ -518,40 +519,53 @@ async function reconcilePulledEvent(
   },
   result: SyncResult,
 ) {
+  const supabase = db(admin);
   // 1. Already linked to this connection?
-  const { data: link } = await admin
+  const { data: linkData } = await supabase
     .from("event_sync_links")
     .select("id, event_id")
     .eq("connection_id", conn.id)
     .eq("external_id", externalId)
     .maybeSingle();
 
-  let eventId: string | null = link?.event_id || null;
+  const link = asRecordOrNull(linkData);
+  let eventId: string | null = typeof link?.event_id === "string" ? link.event_id : null;
 
   // 2. Legacy adopt: a row stored under the old external_source/external_id
   //    model but without a link (e.g. Google events that predate connection_id).
   if (!eventId) {
-    const { data: legacy } = await admin
+    const { data: legacyData } = await supabase
       .from("events")
       .select("id")
       .eq("user_id", conn.user_id)
       .eq("external_source", provider)
       .eq("external_id", externalId)
       .maybeSingle();
-    if (legacy) eventId = legacy.id;
+    const legacy = asRecordOrNull(legacyData);
+    if (typeof legacy?.id === "string") eventId = legacy.id;
   }
 
   if (eventId) {
-    const { data: row } = await admin
+    const { data: rowData } = await supabase
       .from("events")
       .select("title, start_time, end_time, location, description")
       .eq("id", eventId)
       .maybeSingle();
-    if (row && !eventUnchanged(row, next)) {
-      await admin.from("events").update(next).eq("id", eventId);
+    const row = asRecordOrNull(rowData);
+    const eventRow = row
+      ? {
+          title: String(row.title ?? ""),
+          start_time: String(row.start_time ?? ""),
+          end_time: String(row.end_time ?? ""),
+          location: typeof row.location === "string" ? row.location : null,
+          description: typeof row.description === "string" ? row.description : null,
+        }
+      : null;
+    if (eventRow && !eventUnchanged(eventRow, next)) {
+      await supabase.from("events").update(next).eq("id", eventId);
       result.updated++;
     }
-    await admin.from("event_sync_links").upsert(
+    await supabase.from("event_sync_links").upsert(
       {
         event_id: eventId,
         connection_id: conn.id,
@@ -566,7 +580,7 @@ async function reconcilePulledEvent(
   }
 
   // 3. Brand-new provider event.
-  const { data: inserted, error } = await admin
+  const { data: insertedData, error } = await supabase
     .from("events")
     .insert({
       user_id: conn.user_id,
@@ -587,8 +601,14 @@ async function reconcilePulledEvent(
     result.errors.push(`insert: ${error.message}`);
     return;
   }
-  await admin.from("event_sync_links").insert({
-    event_id: inserted.id,
+  const inserted = asRecordOrNull(insertedData);
+  const insertedId = typeof inserted?.id === "string" ? inserted.id : null;
+  if (!insertedId) {
+    result.errors.push("insert: missing inserted event id");
+    return;
+  }
+  await supabase.from("event_sync_links").insert({
+    event_id: insertedId,
     connection_id: conn.id,
     external_id: externalId,
     external_etag: etag,
@@ -602,29 +622,31 @@ async function reconcilePulledEvent(
 // this connection, so it gets mirrored out. Newly-connected calendars pick up
 // existing local events here too.
 async function backfillMirrorLinks(admin: CalendarAdminClient, conn: CalendarConnection) {
+  const supabase = db(admin);
   const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-  const { data: locals } = await admin
+  const { data: locals } = await supabase
     .from("events")
     .select("id")
     .eq("user_id", conn.user_id)
     .is("external_source", null)
     .gte("end_time", cutoff)
     .limit(500);
-  if (!locals?.length) return;
+  const localRows = asRows<{ id: string }>(locals);
+  if (!localRows.length) return;
 
-  const ids = (locals as { id: string }[]).map((e) => e.id);
-  const { data: existing } = await admin
+  const ids = localRows.map((e) => e.id);
+  const { data: existing } = await supabase
     .from("event_sync_links")
     .select("event_id")
     .eq("connection_id", conn.id)
     .in("event_id", ids);
-  const linked = new Set(((existing as { event_id: string }[]) || []).map((l) => l.event_id));
+  const linked = new Set(asRows<{ event_id: string }>(existing).map((l) => l.event_id));
 
   const toInsert = ids
     .filter((id: string) => !linked.has(id))
     .map((event_id: string) => ({ event_id, connection_id: conn.id, sync_status: "pending_push" }));
   if (toInsert.length) {
-    await admin.from("event_sync_links").insert(toInsert);
+    await supabase.from("event_sync_links").insert(toInsert);
   }
 }
 
@@ -640,16 +662,18 @@ async function loadPendingLinks(
   admin: CalendarAdminClient,
   conn: CalendarConnection,
 ): Promise<Array<{ link: SyncLink; event: LocalEvent }>> {
-  const { data: links } = await admin
+  const supabase = db(admin);
+  const { data: linksData } = await supabase
     .from("event_sync_links")
     .select("*")
     .eq("connection_id", conn.id)
     .eq("sync_status", "pending_push")
     .limit(100);
-  if (!links?.length) return [];
-  const eventIds = (links as SyncLink[]).map((l) => l.event_id);
-  const { data: events } = await admin.from("events").select("*").in("id", eventIds);
-  const byId = new Map(((events as LocalEvent[]) || []).map((e) => [e.id, e]));
+  const links = asRows<SyncLink>(linksData);
+  if (!links.length) return [];
+  const eventIds = links.map((l) => l.event_id);
+  const { data: events } = await supabase.from("events").select("*").in("id", eventIds);
+  const byId = new Map(asRows<LocalEvent>(events).map((e) => [e.id, e]));
   const out: Array<{ link: SyncLink; event: LocalEvent }> = [];
   for (const link of links) {
     const event = byId.get(link.event_id);

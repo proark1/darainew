@@ -6,6 +6,7 @@
 // invokes this helper within the 5-minute TTL.
 
 import { mintInternalToken } from "./auth.ts";
+import { asRecord, asRecordOrNull, db } from "./supabase-edge.ts";
 
 // Tables the undo pipeline is allowed to touch. The snapshot.table field is
 // attacker-controlled in theory (it's stored in a DB row), so we always gate
@@ -49,15 +50,13 @@ export interface UndoEntry {
   consumed_at: string | null;
 }
 
-// Minimal Supabase client surface needed by this module.
-type UndoClient = { from(table: string): Record<string, (...args: unknown[]) => unknown> };
-
 export async function recordUndo(
-  supabase: UndoClient,
+  supabaseClient: unknown,
   row: Omit<UndoEntry, "id" | "created_at" | "consumed_at" | "expires_at"> & {
     expiresInSeconds?: number;
   },
 ): Promise<string | null> {
+  const supabase = db(supabaseClient);
   try {
     const expiresAt = new Date(Date.now() + (row.expiresInSeconds ?? 300) * 1000).toISOString();
     const { data, error } = await supabase
@@ -77,7 +76,8 @@ export async function recordUndo(
       .select("id")
       .single();
     if (error) throw error;
-    return data?.id || null;
+    const inserted = asRecordOrNull(data);
+    return typeof inserted?.id === "string" ? inserted.id : null;
   } catch (e) {
     console.error("recordUndo failed", e);
     return null;
@@ -85,9 +85,10 @@ export async function recordUndo(
 }
 
 export async function fetchUndoable(
-  supabase: UndoClient,
+  supabaseClient: unknown,
   undoId: string,
 ): Promise<UndoEntry | null> {
+  const supabase = db(supabaseClient);
   const { data } = await supabase
     .from("dori_undo_log")
     .select("*")
@@ -99,9 +100,10 @@ export async function fetchUndoable(
 }
 
 export async function fetchLatestUndoableForUser(
-  supabase: UndoClient,
+  supabaseClient: unknown,
   userId: string,
 ): Promise<UndoEntry | null> {
+  const supabase = db(supabaseClient);
   const { data } = await supabase
     .from("dori_undo_log")
     .select("*")
@@ -118,11 +120,12 @@ export async function fetchLatestUndoableForUser(
 // skipApprovalGate so it runs immediately) OR restore a snapshot row.
 // Marks the row consumed so it can't be used twice.
 export async function runUndo(
-  supabase: UndoClient,
+  supabaseClient: unknown,
   entry: UndoEntry,
   supabaseUrl: string,
   serviceKey: string,
 ): Promise<{ ok: boolean; message: string }> {
+  const supabase = db(supabaseClient);
   // Best-effort single-consumer: stamp consumed_at first; if another request
   // beat us to it, bail out.
   const { data: claim, error: claimErr } = await supabase
@@ -174,28 +177,29 @@ export async function runUndo(
     // through an allow-list for defense-in-depth — a misconfigured RLS policy
     // or anyone who finds a way to write into `dori_undo_log` shouldn't be
     // able to pick an arbitrary table to mutate.
-    const snap = entry.snapshot;
-    if (snap?.table && !ALLOWED_UNDO_TABLES.has(String(snap.table))) {
-      console.warn("runUndo: refusing disallowed table", snap.table);
+    const snap = asRecord(entry.snapshot);
+    const table = typeof snap.table === "string" ? snap.table : null;
+    if (table && !ALLOWED_UNDO_TABLES.has(table)) {
+      console.warn("runUndo: refusing disallowed table", table);
       return { ok: false, message: `⚠️ Undo refused for safety.` };
     }
-    if (snap?.kind === "delete_by_id" && snap.table && snap.id) {
+    if (snap.kind === "delete_by_id" && table && snap.id) {
       const { error } = await supabase
-        .from(snap.table)
+        .from(table)
         .delete()
         .eq("id", snap.id)
         .eq("user_id", entry.user_id);
       if (error) throw error;
       return { ok: true, message: `↩️ Reverted — ${entry.label}.` };
     }
-    if (snap?.kind === "reinsert" && snap.table && snap.row) {
-      const { error } = await supabase.from(snap.table).insert(snap.row);
+    if (snap.kind === "reinsert" && table && snap.row) {
+      const { error } = await supabase.from(table).insert(snap.row);
       if (error) throw error;
       return { ok: true, message: `↩️ Restored — ${entry.label}.` };
     }
-    if (snap?.kind === "patch" && snap.table && snap.id && snap.patch) {
+    if (snap.kind === "patch" && table && snap.id && snap.patch) {
       const { error } = await supabase
-        .from(snap.table)
+        .from(table)
         .update(snap.patch)
         .eq("id", snap.id)
         .eq("user_id", entry.user_id);

@@ -39,6 +39,24 @@ interface DayRow {
   summary: string | null;
 }
 
+function numberOrNull(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function toDayRow(r: Record<string, unknown>, fallbackDate = ""): DayRow {
+  return {
+    date: String(r.date || fallbackDate),
+    temp_min_c: numberOrNull(r.temp_min_c),
+    temp_max_c: numberOrNull(r.temp_max_c),
+    precipitation_mm: numberOrNull(r.precipitation_mm),
+    precipitation_probability: numberOrNull(r.precipitation_probability),
+    wind_speed_max_kmh: numberOrNull(r.wind_speed_max_kmh),
+    weather_code: numberOrNull(r.weather_code),
+    summary: typeof r.summary === "string" ? r.summary : null,
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -91,12 +109,13 @@ serve(async (req) => {
       .eq("lon_grid", lonGrid)
       .in("date", allDates);
 
-    const cacheMap = new Map<string, Record<string, unknown>>();
+    const cacheMap = new Map<string, DayRow>();
     const now = Date.now();
     for (const r of (cached ?? []) as Array<Record<string, unknown>>) {
-      const fetchedAt = r.fetched_at ? new Date(r.fetched_at).getTime() : 0;
+      const fetchedAt = r.fetched_at ? new Date(String(r.fetched_at)).getTime() : 0;
       if (now - fetchedAt < CACHE_TTL_MS) {
-        cacheMap.set(r.date, r);
+        const row = toDayRow(r);
+        if (row.date) cacheMap.set(row.date, row);
       }
     }
 
@@ -161,7 +180,10 @@ serve(async (req) => {
                   upstreamErr = `cache upsert failed: ${upErr.message}`;
                 } else {
                   fetchedCount = rows.length;
-                  for (const r of rows) cacheMap.set(r.date, r);
+                  for (const r of rows) {
+                    const row = toDayRow(r);
+                    if (row.date) cacheMap.set(row.date, row);
+                  }
                 }
               }
             }

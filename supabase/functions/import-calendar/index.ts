@@ -226,7 +226,13 @@ function parseICS(content: string): ICSEvent[] {
           start.setHours(start.getHours() + 1);
           currentEvent.endTime = start.toISOString();
         }
-        events.push(currentEvent);
+        events.push({
+          title: currentEvent.title,
+          startTime: currentEvent.startTime,
+          endTime: currentEvent.endTime,
+          description: currentEvent.description,
+          location: currentEvent.location,
+        });
       }
       currentEvent = null;
       currentField = "";

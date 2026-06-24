@@ -9,6 +9,8 @@
 // migration's check_ai_quota() RPC. Override per-user via the
 // ai_quotas table.
 
+import { db } from "./supabase-edge.ts";
+
 export interface QuotaCheck {
   allowed: boolean;
   used_cents: number;
@@ -17,6 +19,8 @@ export interface QuotaCheck {
   used_pct: number;
   over_cap: boolean;
 }
+
+export type SupabaseQuotaClient = unknown;
 
 // In-memory cache of the last successful quota check, keyed by user_id.
 // Used as fail-soft fallback when the RPC is temporarily unavailable: we
@@ -40,21 +44,8 @@ function cacheSet(userId: string, value: QuotaCheck) {
   quotaCache.set(userId, { value, expiresAt: Date.now() + QUOTA_CACHE_TTL_MS });
 }
 
-// Minimal Supabase client surface these functions use.
-export interface SupabaseQuotaClient {
-  rpc(
-    name: string,
-    args: Record<string, unknown>,
-  ): Promise<{ data: unknown; error: { message: string } | null }>;
-  from(table: string): {
-    insert(row: Record<string, unknown>): Promise<{ error: { message: string } | null }>;
-  };
-}
-
-export async function checkQuota(
-  supabase: SupabaseQuotaClient,
-  userId: string,
-): Promise<QuotaCheck> {
+export async function checkQuota(supabaseClient: unknown, userId: string): Promise<QuotaCheck> {
+  const supabase = db(supabaseClient);
   try {
     const { data, error } = await supabase.rpc("check_ai_quota", { p_user_id: userId });
     if (error) throw error;
@@ -93,10 +84,11 @@ export async function checkQuota(
 // Convenience: throw if over cap. Edge functions can wrap their AI
 // section in try/catch and surface the message.
 export async function assertWithinQuota(
-  supabase: SupabaseQuotaClient,
+  supabaseClient: unknown,
   userId: string,
 ): Promise<QuotaCheck> {
-  const q = await checkQuota(supabase, userId);
+  const supabase = db(supabaseClient);
+  const q = await checkQuota(supabaseClient, userId);
   if (!q.allowed) {
     // Best-effort: log the rejection so it shows up in the usage feed.
     try {

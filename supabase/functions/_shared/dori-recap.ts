@@ -6,6 +6,7 @@
 // on demand via /recap.
 
 import { daysBetweenYmd, ymdIn, fmtDate } from "./dori-context.ts";
+import { asRows, db } from "./supabase-edge.ts";
 
 export interface WorkspaceRecap {
   workspaceId: string;
@@ -17,9 +18,6 @@ export interface WorkspaceRecap {
   upcoming: { title: string; start_time: string }[];
   perMember: { display_name: string; user_id: string; shipped: number; open: number }[];
 }
-
-// Minimal Supabase client surface needed by this module.
-type RecapClient = { from(table: string): Record<string, (...args: unknown[]) => unknown> };
 
 interface RecapMember {
   user_id: string;
@@ -37,10 +35,11 @@ interface RecapEvent {
 }
 
 export async function buildWorkspaceWeeklyRecap(
-  supabase: RecapClient,
+  supabaseClient: unknown,
   workspaceId: string,
   opts?: { days?: number; timezone?: string },
 ): Promise<WorkspaceRecap> {
+  const supabase = db(supabaseClient);
   const days = opts?.days ?? 7;
   const tz = opts?.timezone;
   const now = new Date();
@@ -78,24 +77,24 @@ export async function buildWorkspaceWeeklyRecap(
 
   const nameFor = (uid: string | null | undefined) => {
     if (!uid) return null;
-    return ((members as RecapMember[]) || []).find((m) => m.user_id === uid)?.display_name || null;
+    return asRows<RecapMember>(members).find((m) => m.user_id === uid)?.display_name || null;
   };
 
-  const shipped = ((shippedRows as RecapTask[]) || []).map((t) => ({
+  const shipped = asRows<RecapTask>(shippedRows).map((t) => ({
     title: t.title,
     assignee: nameFor(t.assignee_id || t.user_id),
   }));
 
-  const inProgress = ((openRows as RecapTask[]) || []).slice(0, 15).map((t) => ({
+  const inProgress = asRows<RecapTask>(openRows).slice(0, 15).map((t) => ({
     title: t.title,
     assignee: nameFor(t.assignee_id || t.user_id),
-    due_date: t.due_date,
+    due_date: t.due_date ?? null,
   }));
 
   // Use calendar-day math in the target timezone so "due late yesterday /
   // now early today" reports 1 day overdue (not 0 via millisecond division).
   const todayYmd = ymdIn(now, tz);
-  const blockers = ((openRows as RecapTask[]) || [])
+  const blockers = asRows<RecapTask>(openRows)
     .filter((t) => t.due_date && new Date(t.due_date) < now)
     .map((t) => ({
       title: t.title,
@@ -104,16 +103,16 @@ export async function buildWorkspaceWeeklyRecap(
     }))
     .slice(0, 5);
 
-  const upcoming = ((upcomingRows as RecapEvent[]) || []).map((e) => ({
+  const upcoming = asRows<RecapEvent>(upcomingRows).map((e) => ({
     title: e.title,
     start_time: e.start_time,
   }));
 
-  const perMember = ((members as RecapMember[]) || []).map((m) => {
-    const shippedCount = ((shippedRows as RecapTask[]) || []).filter(
+  const perMember = asRows<RecapMember>(members).map((m) => {
+    const shippedCount = asRows<RecapTask>(shippedRows).filter(
       (t) => (t.assignee_id || t.user_id) === m.user_id,
     ).length;
-    const openCount = ((openRows as RecapTask[]) || []).filter(
+    const openCount = asRows<RecapTask>(openRows).filter(
       (t) => (t.assignee_id || t.user_id) === m.user_id,
     ).length;
     return {

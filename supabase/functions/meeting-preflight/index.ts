@@ -154,8 +154,8 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const chatId = (profileRes.data as Record<string, unknown>)?.telegram_chat_id;
-      if (chatId) await sendTelegramBrief(chatId, ev.title, brief);
+      const chatId = Number((profileRes.data as Record<string, unknown>)?.telegram_chat_id);
+      if (Number.isFinite(chatId)) await sendTelegramBrief(chatId, ev.title, brief);
       generated++;
     }
 

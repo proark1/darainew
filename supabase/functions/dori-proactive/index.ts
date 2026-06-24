@@ -93,6 +93,21 @@ function firstName(name: string): string {
   return (name || "").trim().split(/\s+/)[0] || name;
 }
 
+function stringSetting(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function numberSetting(value: unknown, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function numberArraySetting(value: unknown, fallback: number[]): number[] {
+  if (!Array.isArray(value)) return fallback;
+  const numbers = value.map(Number).filter(Number.isFinite);
+  return numbers.length ? numbers : fallback;
+}
+
 function localNow(tz: string): {
   date: Date;
   hour: number;
@@ -127,8 +142,8 @@ function localNow(tz: string): {
 
 function _inQuietHours(now: { hour: number }, settings: Record<string, unknown>): boolean {
   if (!settings.quiet_hours_enabled) return false;
-  const start = parseInt((settings.quiet_hours_start || "22:00").split(":")[0]);
-  const end = parseInt((settings.quiet_hours_end || "07:00").split(":")[0]);
+  const start = parseInt(stringSetting(settings.quiet_hours_start, "22:00").split(":")[0]);
+  const end = parseInt(stringSetting(settings.quiet_hours_end, "07:00").split(":")[0]);
   const h = now.hour;
   if (start < end) return h >= start && h < end;
   return h >= start || h < end;
@@ -166,6 +181,38 @@ async function logSent(
     channel_ref: String(ctx.chatId),
     message,
   });
+  try {
+    const { error } = await supabase.from("assistant_opportunities").upsert(
+      {
+        user_id: ctx.userId,
+        candidate_key: `${type}:${key}`,
+        type,
+        title: message.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180),
+        summary: message,
+        preferred_channels: ["tg_private"],
+        selected_channel: "tg_private",
+        urgency: 0.65,
+        impact: 0.65,
+        actionability: 0.75,
+        confidence: 0.75,
+        novelty: 0.8,
+        score: 65,
+        gates: [],
+        risk_level: "low",
+        sensitivity: type.includes("email") ? "private" : "personal",
+        status: "sent",
+        delivered_at: new Date().toISOString(),
+        metadata: {
+          source: "dori-proactive",
+          trigger_key: key,
+        },
+      },
+      { onConflict: "user_id,candidate_key" },
+    );
+    if (error) console.warn("[assistant_opportunities] log failed", error.message);
+  } catch (e) {
+    console.warn("[assistant_opportunities] log failed", (e as Error).message);
+  }
 }
 
 // Triggers call send() to QUEUE a nudge; nothing leaves until flushOutbox()
@@ -264,7 +311,7 @@ async function composeSmartBrief(
 async function morningBrief(supabase: SupabaseClient, ctx: UserCtx) {
   if (ctx.suppressed.has("morning_brief")) return;
   if (!ctx.settings.daily_review_enabled && !ctx.settings.weekly_planning_enabled) return;
-  const target = ctx.settings.morning_briefing_time || "07:30:00";
+  const target = stringSetting(ctx.settings.morning_briefing_time, "07:30:00");
   const [th, tm] = target.split(":").map((n: string) => parseInt(n));
   // Fire if within ±15 min of target
   const nowMin = ctx.nowLocal.getHours() * 60 + ctx.nowLocal.getMinutes();
@@ -333,7 +380,7 @@ async function morningBrief(supabase: SupabaseClient, ctx: UserCtx) {
 
 async function meetingPrep(supabase: SupabaseClient, ctx: UserCtx) {
   if (!ctx.settings.meeting_briefing_enabled) return;
-  const minutesAhead = (ctx.settings.meeting_briefing_minutes || [15])[0] || 15;
+  const minutesAhead = numberArraySetting(ctx.settings.meeting_briefing_minutes, [15])[0] || 15;
   const now = new Date();
   const winStart = new Date(now.getTime() + (minutesAhead - 5) * 60_000);
   const winEnd = new Date(now.getTime() + (minutesAhead + 5) * 60_000);
@@ -364,7 +411,7 @@ async function meetingPrep(supabase: SupabaseClient, ctx: UserCtx) {
 
 async function contractRenewals(supabase: SupabaseClient, ctx: UserCtx) {
   if (!ctx.settings.contract_renewals_enabled) return;
-  const days = ctx.settings.contract_reminder_days || [30, 14, 7, 3, 1];
+  const days = numberArraySetting(ctx.settings.contract_reminder_days, [30, 14, 7, 3, 1]);
   const now = new Date();
 
   const { data: contracts } = await supabase
@@ -396,7 +443,7 @@ async function birthdayReminders(supabase: SupabaseClient, ctx: UserCtx) {
   // Fire once per day in late morning window
   if (ctx.nowLocal.getHours() < 9 || ctx.nowLocal.getHours() > 11) return;
 
-  const days: number[] = ctx.settings.birthday_reminder_days || [7, 1];
+  const days = numberArraySetting(ctx.settings.birthday_reminder_days, [7, 1]);
   const isShared = ctx.household.length >= 2;
   const ownerLabel = isShared ? ` (${firstName(ctx.displayName)}'s contact)` : "";
 
@@ -461,7 +508,7 @@ function estimatePrayerTimes(date: Date): Record<string, { h: number; m: number 
 
 async function prayerReminders(supabase: SupabaseClient, ctx: UserCtx) {
   if (!ctx.settings.prayer_reminders_enabled && !ctx.settings.evening_dua_enabled) return;
-  const minutesBefore = ctx.settings.prayer_reminder_minutes || 10;
+  const minutesBefore = numberSetting(ctx.settings.prayer_reminder_minutes, 10);
   const times = estimatePrayerTimes(ctx.nowLocal);
   const nowMin = ctx.nowLocal.getHours() * 60 + ctx.nowLocal.getMinutes();
 
@@ -610,7 +657,7 @@ async function staleContacts(supabase: SupabaseClient, ctx: UserCtx) {
   const key = `stale-contacts-${ctx.todayKey}`;
   if (await alreadySent(supabase, ctx.userId, "stale_contact", key)) return;
 
-  const days = ctx.settings.stale_contact_days || 60;
+  const days = numberSetting(ctx.settings.stale_contact_days, 60);
   const cutoff = new Date(Date.now() - days * 24 * 3600_000).toISOString();
 
   const { data: contacts } = await supabase

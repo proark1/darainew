@@ -130,6 +130,61 @@ const QUICK_REPLIES = [
   "Let me check and follow up.",
 ];
 
+function sanitizeEmailHtml(html: string): string {
+  const sanitized = DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: [
+      "p",
+      "br",
+      "strong",
+      "em",
+      "u",
+      "a",
+      "ul",
+      "ol",
+      "li",
+      "blockquote",
+      "div",
+      "span",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "table",
+      "thead",
+      "tbody",
+      "tr",
+      "td",
+      "th",
+      "hr",
+      "pre",
+      "code",
+      "b",
+      "i",
+      "sub",
+      "sup",
+      "dl",
+      "dt",
+      "dd",
+    ],
+    ALLOWED_ATTR: ["href", "class", "alt", "target", "rel", "colspan", "rowspan"],
+    FORBID_TAGS: ["img", "style", "iframe", "object", "embed", "form", "input", "button", "meta", "link", "script"],
+    FORBID_ATTR: ["style", "src", "srcset", "background", "formaction"],
+    ALLOW_DATA_ATTR: false,
+  });
+
+  if (typeof DOMParser === "undefined") return sanitized;
+
+  const doc = new DOMParser().parseFromString(sanitized, "text/html");
+  doc.querySelectorAll("a[href]").forEach((link) => {
+    link.setAttribute("target", "_blank");
+    link.setAttribute("rel", "noopener noreferrer nofollow");
+  });
+
+  return doc.body.innerHTML;
+}
+
 function EmailBodySkeleton() {
   return (
     <div className="space-y-3 p-4">
@@ -174,59 +229,7 @@ function ThreadMessage({
           <div
             className="email-body-scoped text-sm text-foreground leading-relaxed"
             dangerouslySetInnerHTML={{
-              __html: DOMPurify.sanitize(body, {
-                ALLOWED_TAGS: [
-                  "p",
-                  "br",
-                  "strong",
-                  "em",
-                  "u",
-                  "a",
-                  "ul",
-                  "ol",
-                  "li",
-                  "blockquote",
-                  "div",
-                  "span",
-                  "h1",
-                  "h2",
-                  "h3",
-                  "h4",
-                  "h5",
-                  "h6",
-                  "table",
-                  "thead",
-                  "tbody",
-                  "tr",
-                  "td",
-                  "th",
-                  "img",
-                  "hr",
-                  "pre",
-                  "code",
-                  "b",
-                  "i",
-                  "sub",
-                  "sup",
-                  "dl",
-                  "dt",
-                  "dd",
-                ],
-                ALLOWED_ATTR: [
-                  "href",
-                  "class",
-                  "style",
-                  "src",
-                  "alt",
-                  "width",
-                  "height",
-                  "target",
-                  "rel",
-                  "colspan",
-                  "rowspan",
-                ],
-                ALLOW_DATA_ATTR: false,
-              }),
+              __html: sanitizeEmailHtml(body),
             }}
           />
         ) : (
@@ -705,59 +708,7 @@ export function EmailDetailSheet({
                 <div
                   className="email-body-scoped text-sm text-foreground leading-relaxed"
                   dangerouslySetInnerHTML={{
-                    __html: DOMPurify.sanitize(fullBodies[email.gmail_message_id]!, {
-                      ALLOWED_TAGS: [
-                        "p",
-                        "br",
-                        "strong",
-                        "em",
-                        "u",
-                        "a",
-                        "ul",
-                        "ol",
-                        "li",
-                        "blockquote",
-                        "div",
-                        "span",
-                        "h1",
-                        "h2",
-                        "h3",
-                        "h4",
-                        "h5",
-                        "h6",
-                        "table",
-                        "thead",
-                        "tbody",
-                        "tr",
-                        "td",
-                        "th",
-                        "img",
-                        "hr",
-                        "pre",
-                        "code",
-                        "b",
-                        "i",
-                        "sub",
-                        "sup",
-                        "dl",
-                        "dt",
-                        "dd",
-                      ],
-                      ALLOWED_ATTR: [
-                        "href",
-                        "class",
-                        "style",
-                        "src",
-                        "alt",
-                        "width",
-                        "height",
-                        "target",
-                        "rel",
-                        "colspan",
-                        "rowspan",
-                      ],
-                      ALLOW_DATA_ATTR: false,
-                    }),
+                    __html: sanitizeEmailHtml(fullBodies[email.gmail_message_id]!),
                   }}
                 />
               ) : (

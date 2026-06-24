@@ -72,7 +72,7 @@ serve(async (req) => {
     const accounts = accRes.data ?? [];
     const balances: Record<string, number> = {};
     for (const a of accounts as Array<Record<string, unknown>>) {
-      const cur = a.currency || "USD";
+      const cur = String(a.currency || "USD");
       balances[cur] = (balances[cur] || 0) + Number(a.current_balance || 0);
     }
 

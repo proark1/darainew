@@ -208,14 +208,16 @@ serve(async (req) => {
 
     // Filter out existing contracts
     const newPayments = (parsed.payments || []).filter((p: Record<string, unknown>) => {
-      const key = `${(p.name || "").toLowerCase()}|${(p.provider || "").toLowerCase()}`;
+      const name = String(p.name || "").toLowerCase();
+      const provider = String(p.provider || "").toLowerCase();
+      const key = `${name}|${provider}`;
       return !existingNames.some((existing: string) => {
         const [eName, eProvider] = existing.split("|");
         return (
-          key.includes(eName) ||
-          key.includes(eProvider) ||
-          eName.includes(p.name.toLowerCase()) ||
-          eProvider.includes(p.provider.toLowerCase())
+          (!!eName && key.includes(eName)) ||
+          (!!eProvider && key.includes(eProvider)) ||
+          (!!name && eName.includes(name)) ||
+          (!!provider && eProvider.includes(provider))
         );
       });
     });

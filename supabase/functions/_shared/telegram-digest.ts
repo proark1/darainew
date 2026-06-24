@@ -2,6 +2,8 @@
 // group. Used by /digest in telegram-router and the daily morning cron in
 // telegram-family-morning-digest.
 
+import { asRows, db } from "./supabase-edge.ts";
+
 function escapeHtml(s: string): string {
   return String(s ?? "")
     .replace(/&/g, "&amp;")
@@ -22,15 +24,13 @@ export interface DigestOpts {
   greeting?: boolean;
 }
 
-// Minimal Supabase client surface needed by this module.
-type DigestClient = { from(table: string): Record<string, (...args: unknown[]) => unknown> };
-
 export async function buildSharedFamilyDigest(
-  supabase: DigestClient,
+  supabaseClient: unknown,
   ids: string[],
   household: DigestHousehold,
   opts: DigestOpts = {},
 ): Promise<string> {
+  const supabase = db(supabaseClient);
   const limit = opts.limit ?? 7;
   const tz = opts.tz;
   const horizonDays = opts.horizonDays ?? 14;
@@ -82,7 +82,7 @@ export async function buildSharedFamilyDigest(
     priority?: string | null;
   }
   const items: Item[] = [];
-  ((events as DigestEvent[]) || []).forEach((e) =>
+  asRows<DigestEvent>(events).forEach((e) =>
     items.push({
       when: new Date(e.start_time),
       kind: "event",
@@ -91,7 +91,7 @@ export async function buildSharedFamilyDigest(
       user_id: e.user_id,
     }),
   );
-  ((tasks as DigestTask[]) || []).forEach((t) =>
+  asRows<DigestTask>(tasks).forEach((t) =>
     items.push({
       when: new Date(t.due_date),
       kind: "task",

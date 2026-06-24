@@ -190,11 +190,12 @@ Deno.serve(async (req) => {
     }
     const items = parsed?.items ?? [];
 
-    const rows = items
-      .map((it: Record<string, unknown>) => {
-        const email = todo[it.index];
-        if (!email) return null;
-        return {
+    const rows = items.flatMap((it: Record<string, unknown>) => {
+      const index = Number(it.index);
+      const email = Number.isInteger(index) ? todo[index] : null;
+      if (!email) return [];
+      return [
+        {
           user_id,
           email_id: email.id,
           category: it.category,
@@ -209,9 +210,9 @@ Deno.serve(async (req) => {
             ...(it.payload || {}),
           },
           status: "pending",
-        };
-      })
-      .filter(Boolean);
+        },
+      ];
+    });
 
     if (rows.length) {
       const { error } = await supabase
