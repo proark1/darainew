@@ -28,6 +28,15 @@ interface TgUpdate {
   callback_query?: TgCallback;
   [key: string]: DbRow;
 }
+
+interface CallbackActor {
+  chatId: number | null;
+  chatType: string;
+  userId: string | null;
+  workspaceId: string | null;
+  groupId: string | null;
+  groupOwnerUserId: string | null;
+}
 import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 import {
   defaultBriefingVoiceLimit,
@@ -109,6 +118,212 @@ async function sendMessage(chatId: number, text: string, tgKey: string) {
   }
 }
 
+function shouldStoreRawTelegramUpdates(): boolean {
+  return (Deno.env.get("DORI_STORE_RAW_TELEGRAM_UPDATES") || "").toLowerCase() === "true";
+}
+
+function sanitizedTelegramUpdate(rawUpdate: unknown): Record<string, unknown> | null {
+  if (!rawUpdate || typeof rawUpdate !== "object") return null;
+  const update = rawUpdate as TgUpdate;
+  const msg = update.message;
+  const cb = update.callback_query;
+  const chat = msg?.chat ?? cb?.message?.chat;
+  const chatTitle =
+    chat && typeof (chat as Record<string, unknown>).title === "string"
+      ? ((chat as Record<string, unknown>).title as string)
+      : null;
+  const sender = msg?.from ?? cb?.from;
+  const doc = msg?.document;
+  const callbackData = typeof cb?.data === "string" ? cb.data : "";
+
+  return {
+    update_id: update.update_id,
+    message_id: msg?.message_id ?? cb?.message?.message_id ?? null,
+    chat: chat
+      ? {
+          id: chat.id,
+          type: chat.type,
+          title: chatTitle,
+        }
+      : null,
+    from: sender
+      ? {
+          id: sender.id,
+          username: sender.username ?? null,
+          first_name: sender.first_name ?? null,
+          language_code: sender.language_code ?? null,
+        }
+      : null,
+    media: {
+      voice: Boolean(msg?.voice),
+      audio: Boolean(msg?.audio),
+      photo: Array.isArray(msg?.photo) && msg.photo.length > 0,
+      document: doc
+        ? {
+            mime_type: doc.mime_type ?? null,
+            file_name: doc.file_name ?? null,
+            file_size: doc.file_size ?? null,
+          }
+        : null,
+    },
+    callback_query: cb
+      ? {
+          id: cb.id,
+          data_kind: callbackData.split(":")[0] || null,
+        }
+      : null,
+  };
+}
+
+function telegramMessageStorageRow(
+  updateId: number,
+  chatId: number,
+  text: string | null,
+  rawUpdate: unknown,
+  processed = true,
+): Record<string, unknown> {
+  const storeRaw = shouldStoreRawTelegramUpdates();
+  return {
+    update_id: updateId,
+    chat_id: chatId,
+    text,
+    raw_update: storeRaw ? rawUpdate : null,
+    sanitized_update: sanitizedTelegramUpdate(rawUpdate),
+    raw_update_expires_at: storeRaw
+      ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+      : null,
+    processed,
+  };
+}
+
+async function purgeExpiredTelegramRawUpdates(supabase: SupabaseClient): Promise<void> {
+  try {
+    await supabase
+      .from("telegram_messages")
+      .update({ raw_update: null, raw_update_expires_at: null })
+      .not("raw_update_expires_at", "is", null)
+      .lte("raw_update_expires_at", new Date().toISOString());
+  } catch (e) {
+    console.warn("[telegram-poll] raw update purge failed", e);
+  }
+}
+
+function isTelegramGroupType(chatType?: string | null): boolean {
+  return chatType === "group" || chatType === "supergroup";
+}
+
+async function resolveCallbackActor(
+  supabase: SupabaseClient,
+  cb: TgCallback,
+  mappedUserId?: string | null,
+): Promise<CallbackActor> {
+  const chatId = cb.message?.chat?.id ?? null;
+  const chatType = cb.message?.chat?.type ?? "";
+  let userId = mappedUserId ?? null;
+  let workspaceId: string | null = null;
+  let groupId: string | null = null;
+  let groupOwnerUserId: string | null = null;
+
+  if (!userId && chatId && chatType === "private") {
+    const { data: linked } = await supabase
+      .from("telegram_links")
+      .select("user_id")
+      .eq("chat_id", chatId)
+      .eq("is_active", true)
+      .maybeSingle();
+    userId = (linked?.user_id as string | undefined) ?? null;
+  }
+
+  if (chatId && isTelegramGroupType(chatType)) {
+    const [{ data: wsLink }, { data: groupLink }] = await Promise.all([
+      supabase
+        .from("workspace_telegram_links")
+        .select("workspace_id")
+        .eq("chat_id", chatId)
+        .eq("is_active", true)
+        .maybeSingle(),
+      supabase
+        .from("telegram_group_links")
+        .select("id, owner_user_id")
+        .eq("chat_id", chatId)
+        .eq("is_active", true)
+        .maybeSingle(),
+    ]);
+    workspaceId = (wsLink?.workspace_id as string | undefined) ?? null;
+    groupId = (groupLink?.id as string | undefined) ?? null;
+    groupOwnerUserId = (groupLink?.owner_user_id as string | undefined) ?? null;
+  }
+
+  return { chatId, chatType, userId, workspaceId, groupId, groupOwnerUserId };
+}
+
+function callbackNeedsLinkedUserMessage(actor: CallbackActor): string {
+  if (isTelegramGroupType(actor.chatType)) {
+    return "Link your Telegram account with /linkme first, then tap again.";
+  }
+  return "Link this Telegram chat to your Dori account first.";
+}
+
+async function isWorkspaceMember(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  userId: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("workspace_members")
+    .select("user_id")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  return !!data;
+}
+
+async function isActiveFamilyGroupMember(
+  supabase: SupabaseClient,
+  groupId: string,
+  userId: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("telegram_group_members")
+    .select("id")
+    .eq("group_link_id", groupId)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .maybeSingle();
+  return !!data;
+}
+
+async function canCallbackActorMutateRow(
+  supabase: SupabaseClient,
+  actor: CallbackActor,
+  rowOwnerUserId: string,
+  rowWorkspaceId?: string | null,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!actor.userId) return { ok: false, message: callbackNeedsLinkedUserMessage(actor) };
+  if (actor.userId === rowOwnerUserId) return { ok: true };
+
+  if (rowWorkspaceId && actor.workspaceId === rowWorkspaceId) {
+    const actorIsMember = await isWorkspaceMember(supabase, rowWorkspaceId, actor.userId);
+    if (actorIsMember) return { ok: true };
+  }
+
+  if (actor.groupId) {
+    const actorIsOwner = actor.userId === actor.groupOwnerUserId;
+    const ownerIsGroupOwner = rowOwnerUserId === actor.groupOwnerUserId;
+    const [actorIsMember, ownerIsMember] = await Promise.all([
+      actorIsOwner
+        ? Promise.resolve(true)
+        : isActiveFamilyGroupMember(supabase, actor.groupId, actor.userId),
+      ownerIsGroupOwner
+        ? Promise.resolve(true)
+        : isActiveFamilyGroupMember(supabase, actor.groupId, rowOwnerUserId),
+    ]);
+    if (actorIsMember && ownerIsMember) return { ok: true };
+  }
+
+  return { ok: false, message: "Only an authorized linked member can use this button." };
+}
+
 async function markTelegramProcessed(
   supabase: SupabaseClient,
   updateId: number,
@@ -116,16 +331,75 @@ async function markTelegramProcessed(
   text: string,
   rawUpdate: unknown,
 ): Promise<void> {
-  await supabase.from("telegram_messages").upsert(
-    {
-      update_id: updateId,
-      chat_id: chatId,
-      text,
-      raw_update: rawUpdate,
-      processed: true,
-    },
-    { onConflict: "update_id" },
-  );
+  await supabase
+    .from("telegram_messages")
+    .upsert(telegramMessageStorageRow(updateId, chatId, text, rawUpdate), {
+      onConflict: "update_id",
+    });
+}
+
+function voiceTranscriptEcho(text: string, confidence?: number | null): string {
+  const clipped = text.length > 260 ? `${text.slice(0, 257)}...` : text;
+  const label =
+    confidence !== null && confidence !== undefined && confidence < 0.55
+      ? "Heard, low confidence"
+      : "Heard";
+  return `🎙️ <b>${label}:</b> <i>${escapeTelegramHtml(clipped)}</i>`;
+}
+
+async function resolveTelegramMessageUserId(
+  supabase: SupabaseClient,
+  chatId: number,
+  telegramUserId?: number | null,
+): Promise<string | null> {
+  if (telegramUserId) {
+    const { data: mapped } = await supabase
+      .from("telegram_user_map")
+      .select("user_id")
+      .eq("telegram_user_id", telegramUserId)
+      .maybeSingle();
+    if (mapped?.user_id) return mapped.user_id as string;
+  }
+  const { data: link } = await supabase
+    .from("telegram_links")
+    .select("user_id")
+    .eq("chat_id", chatId)
+    .eq("is_active", true)
+    .maybeSingle();
+  return (link?.user_id as string | undefined) ?? null;
+}
+
+async function persistTelegramVoiceTranscript(
+  supabase: SupabaseClient,
+  args: {
+    updateId: number;
+    chatId: number;
+    telegramUserId?: number | null;
+    transcript: string;
+    language?: string | null;
+    confidence?: number | null;
+    provider?: string | null;
+    durationSeconds?: number | null;
+    fileSize?: number | null;
+  },
+): Promise<void> {
+  try {
+    const userId = await resolveTelegramMessageUserId(supabase, args.chatId, args.telegramUserId);
+    await supabase.from("telegram_voice_transcripts").insert({
+      update_id: args.updateId,
+      chat_id: args.chatId,
+      telegram_user_id: args.telegramUserId ?? null,
+      user_id: userId,
+      transcript: args.transcript,
+      language: args.language ?? null,
+      confidence: args.confidence ?? null,
+      provider: args.provider ?? null,
+      duration_seconds: args.durationSeconds ?? null,
+      file_size: args.fileSize ?? null,
+    });
+  } catch (e) {
+    console.warn("[telegram-poll] voice transcript persist failed", e);
+  }
 }
 
 async function loadUserTimezone(
@@ -606,6 +880,9 @@ async function callDori(
         "x-internal-token": await mintInternalToken(userId),
         "x-dori-channel": channel,
         "x-dori-channel-ref": String(chatId),
+        ...(Deno.env.get("DORI_TELEGRAM_NATIVE_TOOLS") === "false"
+          ? {}
+          : { "x-dori-native-tools": "1" }),
         ...(opts?.householdId ? { "x-dori-household": opts.householdId } : {}),
       },
       body: JSON.stringify({
@@ -735,6 +1012,7 @@ async function recordCallbackUndo(
     entityId: string | null;
     label: string;
     snapshot: Record<string, unknown>;
+    source?: string;
   },
 ): Promise<string | null> {
   try {
@@ -748,7 +1026,8 @@ async function recordCallbackUndo(
         label: args.label,
         inverse_tool_xml: null,
         snapshot: args.snapshot,
-        source: args.cb.message?.chat?.type === "private" ? "tg_private" : "tg_family",
+        source:
+          args.source || (args.cb.message?.chat?.type === "private" ? "tg_private" : "tg_family"),
         source_ref: args.cb.message?.chat?.id ? String(args.cb.message.chat.id) : null,
         expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
       })
@@ -781,8 +1060,15 @@ async function handleTaskCallback(
       await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, telegramKey);
     return;
   }
-  if (tappingUserId && tappingUserId !== task.user_id) {
-    await tgAnswerCallback(cb.id, "Only the owner can touch this task.", telegramKey);
+  const actor = await resolveCallbackActor(supabase, cb, tappingUserId);
+  const auth = await canCallbackActorMutateRow(
+    supabase,
+    actor,
+    task.user_id,
+    (task as Record<string, unknown>).workspace_id as string | null,
+  );
+  if (!auth.ok) {
+    await tgAnswerCallback(cb.id, auth.message, telegramKey);
     return;
   }
 
@@ -824,6 +1110,11 @@ async function handleTaskCallback(
     entityId: task.id,
     label: `${payload.op} task "${task.title}"`,
     snapshot: undoSnap ?? {},
+    source: actor.workspaceId
+      ? "tg_workspace"
+      : actor.chatType === "private"
+        ? "tg_private"
+        : "tg_family",
   });
 
   await tgAnswerCallback(cb.id, outcome.slice(0, 180), telegramKey);
@@ -863,8 +1154,10 @@ async function handleShopCallback(
       await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, telegramKey);
     return;
   }
-  if (tappingUserId && tappingUserId !== item.user_id) {
-    await tgAnswerCallback(cb.id, "Only the owner can touch this item.", telegramKey);
+  const actor = await resolveCallbackActor(supabase, cb, tappingUserId);
+  const auth = await canCallbackActorMutateRow(supabase, actor, item.user_id);
+  if (!auth.ok) {
+    await tgAnswerCallback(cb.id, auth.message, telegramKey);
     return;
   }
 
@@ -908,6 +1201,11 @@ async function handleShopCallback(
     entityId: item.id,
     label: `${payload.op} shopping item "${item.name}"`,
     snapshot: undoSnap ?? {},
+    source: actor.workspaceId
+      ? "tg_workspace"
+      : actor.chatType === "private"
+        ? "tg_private"
+        : "tg_family",
   });
 
   await tgAnswerCallback(cb.id, outcome.slice(0, 180), telegramKey);
@@ -944,8 +1242,15 @@ async function handleEventCallback(
       await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, telegramKey);
     return;
   }
-  if (tappingUserId && tappingUserId !== ev.user_id) {
-    await tgAnswerCallback(cb.id, "Only the owner can touch this event.", telegramKey);
+  const actor = await resolveCallbackActor(supabase, cb, tappingUserId);
+  const auth = await canCallbackActorMutateRow(
+    supabase,
+    actor,
+    ev.user_id,
+    (ev as Record<string, unknown>).workspace_id as string | null,
+  );
+  if (!auth.ok) {
+    await tgAnswerCallback(cb.id, auth.message, telegramKey);
     return;
   }
 
@@ -972,6 +1277,11 @@ async function handleEventCallback(
       entityId: ev.id,
       label: `cancelled event "${ev.title}"`,
       snapshot: { kind: "reinsert", table: "events", row: ev },
+      source: actor.workspaceId
+        ? "tg_workspace"
+        : actor.chatType === "private"
+          ? "tg_private"
+          : "tg_family",
     });
     await tgAnswerCallback(cb.id, "❌ Cancelled", telegramKey);
     if (cb.message?.message_id) {
@@ -1013,8 +1323,10 @@ async function handleContractCallback(
       await tgEditReplyMarkup(cb.message.chat.id, cb.message.message_id, null, telegramKey);
     return;
   }
-  if (tappingUserId && tappingUserId !== c.user_id) {
-    await tgAnswerCallback(cb.id, "Only the owner can touch this contract.", telegramKey);
+  const actor = await resolveCallbackActor(supabase, cb, tappingUserId);
+  const auth = await canCallbackActorMutateRow(supabase, actor, c.user_id);
+  if (!auth.ok) {
+    await tgAnswerCallback(cb.id, auth.message, telegramKey);
     return;
   }
 
@@ -1051,6 +1363,11 @@ async function handleContractCallback(
         id: c.id,
         patch: { last_reminded_at: c.last_reminded_at ?? null },
       },
+      source: actor.workspaceId
+        ? "tg_workspace"
+        : actor.chatType === "private"
+          ? "tg_private"
+          : "tg_family",
     });
     const text =
       payload.op === "handled"
@@ -1102,7 +1419,12 @@ async function handlePlanCallback(
     }
     return;
   }
-  if (tappingUserId && tappingUserId !== plan.user_id) {
+  const actor = await resolveCallbackActor(supabase, cb, tappingUserId);
+  if (!actor.userId) {
+    await tgAnswerCallback(cb.id, callbackNeedsLinkedUserMessage(actor), telegramKey);
+    return;
+  }
+  if (actor.userId !== plan.user_id) {
     await tgAnswerCallback(cb.id, "Only the owner can drive this plan.", telegramKey);
     return;
   }
@@ -1287,6 +1609,7 @@ Deno.serve(async (req) => {
   let currentOffset = state?.update_offset ?? 0;
   let processed = 0;
   console.log(`[telegram-poll] tick: offset=${currentOffset}`);
+  await purgeExpiredTelegramRawUpdates(supabase);
 
   // The per-update pipeline (AI round-trip, tools, voice/photo) can take many
   // seconds. We wrap the loop so a webhook delivery can ACK Telegram instantly
@@ -1342,6 +1665,8 @@ Deno.serve(async (req) => {
               .maybeSingle();
             tappingUserId = mapped?.user_id as string | undefined;
           }
+          const callbackActor = await resolveCallbackActor(supabase, cb, tappingUserId);
+          tappingUserId = callbackActor.userId ?? undefined;
 
           try {
             if (!cbChatId) {
@@ -1477,7 +1802,13 @@ Deno.serve(async (req) => {
                     TELEGRAM_API_KEY,
                   );
                 }
-              } else if (tappingUserId && tappingUserId !== action.user_id) {
+              } else if (!callbackActor.userId) {
+                await tgAnswerCallback(
+                  cb.id,
+                  callbackNeedsLinkedUserMessage(callbackActor),
+                  TELEGRAM_API_KEY,
+                );
+              } else if (callbackActor.userId !== action.user_id) {
                 await tgAnswerCallback(
                   cb.id,
                   "Only the person who asked Dori can confirm this.",
@@ -1510,7 +1841,13 @@ Deno.serve(async (req) => {
                 await tgAnswerCallback(cb.id, "⏰ Undo window expired.", TELEGRAM_API_KEY);
                 if (cbMessageId)
                   await tgEditReplyMarkup(cbChatId, cbMessageId, null, TELEGRAM_API_KEY);
-              } else if (tappingUserId && tappingUserId !== entry.user_id) {
+              } else if (!callbackActor.userId) {
+                await tgAnswerCallback(
+                  cb.id,
+                  callbackNeedsLinkedUserMessage(callbackActor),
+                  TELEGRAM_API_KEY,
+                );
+              } else if (callbackActor.userId !== entry.user_id) {
                 await tgAnswerCallback(cb.id, "Only the owner can undo this.", TELEGRAM_API_KEY);
               } else {
                 const res = await runUndo(supabase, entry, supabaseUrl, serviceKey);
@@ -1615,6 +1952,24 @@ Deno.serve(async (req) => {
               duration_seconds: transcript.durationSeconds,
               file_size: transcript.fileSize,
             };
+            await persistTelegramVoiceTranscript(supabase, {
+              updateId: u.update_id,
+              chatId,
+              telegramUserId: msg.from?.id ?? null,
+              transcript: textFromVoice,
+              language: transcript.language,
+              confidence: transcript.confidence,
+              provider: transcript.provider,
+              durationSeconds: transcript.durationSeconds,
+              fileSize: transcript.fileSize,
+            });
+            if (Deno.env.get("DORI_TELEGRAM_ECHO_VOICE_TRANSCRIPTS") !== "false") {
+              await sendMessage(
+                chatId,
+                voiceTranscriptEcho(textFromVoice, transcript.confidence),
+                TELEGRAM_API_KEY,
+              );
+            }
             // Inject transcript so the rest of the pipeline treats it as a text message
             msg.text = textFromVoice;
           }
@@ -1963,70 +2318,88 @@ Deno.serve(async (req) => {
             if (!code) {
               await sendMessage(
                 chatId,
-                "⚠️ Usage: /linkworkspace <invite-code>. Generate a code in the app at Settings → Workspaces.",
+                "⚠️ Usage: /linkworkspace <telegram-code>. Generate a Telegram group code in Settings → Telegram → Workspace Groups.",
                 TELEGRAM_API_KEY,
               );
               continue;
             }
-            const { data: invite } = await supabase
-              .from("workspace_invite_codes")
-              .select("workspace_id, revoked_at, expires_at")
-              .eq("code", code)
+            const { data: pendingLink } = await supabase
+              .from("workspace_telegram_links")
+              .select("id, workspace_id, link_code_expires_at")
+              .eq("link_code", code)
               .maybeSingle();
-            if (
-              !invite ||
-              invite.revoked_at ||
-              (invite.expires_at && new Date(invite.expires_at) < new Date())
-            ) {
-              await sendMessage(chatId, "❌ Invalid or expired workspace code.", TELEGRAM_API_KEY);
+            const isExpired =
+              pendingLink?.link_code_expires_at &&
+              new Date(pendingLink.link_code_expires_at) <= new Date();
+            if (!pendingLink || isExpired) {
+              await sendMessage(
+                chatId,
+                "❌ Invalid or expired workspace Telegram code.",
+                TELEGRAM_API_KEY,
+              );
               continue;
             }
-            // Upsert the link. chat_id is UNIQUE so re-linking just rebinds.
-            await supabase.from("workspace_telegram_links").upsert(
-              {
-                workspace_id: invite.workspace_id,
+            await supabase
+              .from("workspace_telegram_links")
+              .update({
+                chat_id: null,
+                is_active: false,
+                linked_at: null,
+                link_code: null,
+                link_code_expires_at: null,
+              })
+              .eq("chat_id", chatId)
+              .neq("id", pendingLink.id);
+            const { error: workspaceLinkErr } = await supabase
+              .from("workspace_telegram_links")
+              .update({
+                workspace_id: pendingLink.workspace_id,
                 chat_id: chatId,
                 title: msg.chat.title ?? "Workspace Group",
                 is_active: true,
                 linked_at: new Date().toISOString(),
-              },
-              { onConflict: "chat_id" },
-            );
-            // Also map the linker so the chat function can resolve the sender.
+                link_code: null,
+                link_code_expires_at: null,
+              })
+              .eq("id", pendingLink.id);
+            if (workspaceLinkErr) {
+              console.error("[telegram-poll] /linkworkspace bind failed", workspaceLinkErr);
+              await sendMessage(
+                chatId,
+                "⚠️ Could not link this workspace group. Generate a fresh code in Settings → Telegram and try again.",
+                TELEGRAM_API_KEY,
+              );
+              continue;
+            }
+
+            let linkedSenderIsMember = false;
             if (fromId) {
-              // Find the user_id the Telegram user maps to (if previously linked personally).
               const { data: userMap } = await supabase
                 .from("telegram_user_map")
                 .select("user_id")
                 .eq("telegram_user_id", fromId)
                 .maybeSingle();
               if (userMap?.user_id) {
-                // Ensure they're a member (honor invite role if not).
                 const { data: existing } = await supabase
                   .from("workspace_members")
                   .select("user_id")
-                  .eq("workspace_id", invite.workspace_id)
+                  .eq("workspace_id", pendingLink.workspace_id)
                   .eq("user_id", userMap.user_id)
                   .maybeSingle();
-                if (!existing) {
-                  await supabase.from("workspace_members").insert({
-                    workspace_id: invite.workspace_id,
-                    user_id: userMap.user_id,
-                    role: "member",
-                    invited_at: new Date().toISOString(),
-                    joined_at: new Date().toISOString(),
-                  });
-                }
+                linkedSenderIsMember = !!existing;
               }
             }
             const { data: ws } = await supabase
               .from("workspaces")
               .select("name")
-              .eq("id", invite.workspace_id)
+              .eq("id", pendingLink.workspace_id)
               .maybeSingle();
+            const identityHint = linkedSenderIsMember
+              ? "You're recognized as a workspace member."
+              : "Teammates must send <code>/linkme &lt;their-personal-code&gt;</code> here before I accept workspace actions from them.";
             await sendMessage(
               chatId,
-              `✅ <b>Workspace linked!</b>\n\nThis group is now bound to <b>${ws?.name || "the workspace"}</b>. Everything we add here will live inside that space.\n\nTeammates can send <code>/linkme &lt;their-code&gt;</code> so I know who's who.`,
+              `✅ <b>Workspace linked!</b>\n\nThis group is now bound to <b>${ws?.name || "the workspace"}</b>. Everything we add here will live inside that space.\n\n${identityHint}`,
               TELEGRAM_API_KEY,
             );
             continue;
@@ -2137,16 +2510,11 @@ Deno.serve(async (req) => {
               isPhoto;
 
             if (!shouldRespond) {
-              await supabase.from("telegram_messages").upsert(
-                {
-                  update_id: u.update_id,
-                  chat_id: chatId,
-                  text,
-                  raw_update: u,
-                  processed: true,
-                },
-                { onConflict: "update_id" },
-              );
+              await supabase
+                .from("telegram_messages")
+                .upsert(telegramMessageStorageRow(u.update_id, chatId, text, u), {
+                  onConflict: "update_id",
+                });
               processed++;
               continue;
             }
@@ -2183,18 +2551,19 @@ Deno.serve(async (req) => {
                 if (!member) actingUserId = null;
               }
               if (!actingUserId && wsLink?.workspace_id) {
-                const { data: members } = await supabase
-                  .from("workspace_members")
-                  .select("user_id, role")
-                  .eq("workspace_id", wsLink.workspace_id)
-                  .order("role", { ascending: false })
-                  .limit(10);
-                const rows = (members || []) as Array<{ user_id: string; role?: string | null }>;
-                actingUserId =
-                  rows.find((m) => m.role === "owner")?.user_id ||
-                  rows.find((m) => m.role === "admin")?.user_id ||
-                  rows[0]?.user_id ||
-                  null;
+                await sendMessage(
+                  chatId,
+                  "🔒 Link your Telegram account with <code>/linkme &lt;personal-code&gt;</code> before sending photos to this workspace group.",
+                  TELEGRAM_API_KEY,
+                );
+                await supabase
+                  .from("telegram_messages")
+                  .upsert(
+                    telegramMessageStorageRow(u.update_id, chatId, photoUserText ?? text, u),
+                    { onConflict: "update_id" },
+                  );
+                processed++;
+                continue;
               }
               if (!actingUserId) actingUserId = glink?.owner_user_id ?? null;
               if (!actingUserId) {
@@ -2203,16 +2572,12 @@ Deno.serve(async (req) => {
                   "📸 I can read photos here, but I couldn't find a linked Dori user for this group. Link a member via Settings → Telegram, then try again.",
                   TELEGRAM_API_KEY,
                 );
-                await supabase.from("telegram_messages").upsert(
-                  {
-                    update_id: u.update_id,
-                    chat_id: chatId,
-                    text: photoUserText ?? text,
-                    raw_update: u,
-                    processed: true,
-                  },
-                  { onConflict: "update_id" },
-                );
+                await supabase
+                  .from("telegram_messages")
+                  .upsert(
+                    telegramMessageStorageRow(u.update_id, chatId, photoUserText ?? text, u),
+                    { onConflict: "update_id" },
+                  );
                 processed++;
                 continue;
               }
@@ -2359,16 +2724,11 @@ Deno.serve(async (req) => {
               // Save the user-visible text (caption or "[Photo]") rather than the
               // long auto-generated AI prompt — keeps conversation history sensible
               // for any later text follow-ups in this group.
-              await supabase.from("telegram_messages").upsert(
-                {
-                  update_id: u.update_id,
-                  chat_id: chatId,
-                  text: photoUserText ?? text,
-                  raw_update: u,
-                  processed: true,
-                },
-                { onConflict: "update_id" },
-              );
+              await supabase
+                .from("telegram_messages")
+                .upsert(telegramMessageStorageRow(u.update_id, chatId, photoUserText ?? text, u), {
+                  onConflict: "update_id",
+                });
               processed++;
               continue;
             }
@@ -2398,16 +2758,11 @@ Deno.serve(async (req) => {
               );
             }
 
-            await supabase.from("telegram_messages").upsert(
-              {
-                update_id: u.update_id,
-                chat_id: chatId,
-                text,
-                raw_update: u,
-                processed: true,
-              },
-              { onConflict: "update_id" },
-            );
+            await supabase
+              .from("telegram_messages")
+              .upsert(telegramMessageStorageRow(u.update_id, chatId, text, u), {
+                onConflict: "update_id",
+              });
             processed++;
             continue;
           }
@@ -2537,16 +2892,11 @@ Deno.serve(async (req) => {
                   });
                 }
               }
-              await supabase.from("telegram_messages").upsert(
-                {
-                  update_id: u.update_id,
-                  chat_id: chatId,
-                  text,
-                  raw_update: u,
-                  processed: true,
-                },
-                { onConflict: "update_id" },
-              );
+              await supabase
+                .from("telegram_messages")
+                .upsert(telegramMessageStorageRow(u.update_id, chatId, text, u), {
+                  onConflict: "update_id",
+                });
               processed++;
               continue;
             }
@@ -2608,16 +2958,11 @@ Deno.serve(async (req) => {
                 preferVoice: wasVoiceMessage,
                 telegramKey: TELEGRAM_API_KEY,
               });
-              await supabase.from("telegram_messages").upsert(
-                {
-                  update_id: u.update_id,
-                  chat_id: chatId,
-                  text,
-                  raw_update: u,
-                  processed: true,
-                },
-                { onConflict: "update_id" },
-              );
+              await supabase
+                .from("telegram_messages")
+                .upsert(telegramMessageStorageRow(u.update_id, chatId, text, u), {
+                  onConflict: "update_id",
+                });
               processed++;
               continue;
             }
@@ -2641,16 +2986,11 @@ Deno.serve(async (req) => {
                 : `✅ Voice replies ${enabled ? "enabled" : "disabled"}.`,
               TELEGRAM_API_KEY,
             );
-            await supabase.from("telegram_messages").upsert(
-              {
-                update_id: u.update_id,
-                chat_id: chatId,
-                text,
-                raw_update: u,
-                processed: true,
-              },
-              { onConflict: "update_id" },
-            );
+            await supabase
+              .from("telegram_messages")
+              .upsert(telegramMessageStorageRow(u.update_id, chatId, text, u), {
+                onConflict: "update_id",
+              });
             processed++;
             continue;
           }
@@ -2688,16 +3028,11 @@ Deno.serve(async (req) => {
               sendFallbackText: false,
             });
             await sendMessage(chatId, textMessage, TELEGRAM_API_KEY);
-            await supabase.from("telegram_messages").upsert(
-              {
-                update_id: u.update_id,
-                chat_id: chatId,
-                text,
-                raw_update: u,
-                processed: true,
-              },
-              { onConflict: "update_id" },
-            );
+            await supabase
+              .from("telegram_messages")
+              .upsert(telegramMessageStorageRow(u.update_id, chatId, text, u), {
+                onConflict: "update_id",
+              });
             processed++;
             continue;
           }
@@ -2861,16 +3196,11 @@ Deno.serve(async (req) => {
                 TELEGRAM_API_KEY,
               );
             }
-            await supabase.from("telegram_messages").upsert(
-              {
-                update_id: u.update_id,
-                chat_id: chatId,
-                text,
-                raw_update: u,
-                processed: true,
-              },
-              { onConflict: "update_id" },
-            );
+            await supabase
+              .from("telegram_messages")
+              .upsert(telegramMessageStorageRow(u.update_id, chatId, text, u), {
+                onConflict: "update_id",
+              });
             processed++;
             continue;
           }
@@ -2897,16 +3227,11 @@ Deno.serve(async (req) => {
                 telegramKey: TELEGRAM_API_KEY,
               });
             }
-            await supabase.from("telegram_messages").upsert(
-              {
-                update_id: u.update_id,
-                chat_id: chatId,
-                text,
-                raw_update: u,
-                processed: true,
-              },
-              { onConflict: "update_id" },
-            );
+            await supabase
+              .from("telegram_messages")
+              .upsert(telegramMessageStorageRow(u.update_id, chatId, text, u), {
+                onConflict: "update_id",
+              });
             processed++;
             continue;
           }
@@ -2932,16 +3257,11 @@ Deno.serve(async (req) => {
                 preferVoice: wasVoiceMessage,
                 telegramKey: TELEGRAM_API_KEY,
               });
-              await supabase.from("telegram_messages").upsert(
-                {
-                  update_id: u.update_id,
-                  chat_id: chatId,
-                  text,
-                  raw_update: u,
-                  processed: true,
-                },
-                { onConflict: "update_id" },
-              );
+              await supabase
+                .from("telegram_messages")
+                .upsert(telegramMessageStorageRow(u.update_id, chatId, text, u), {
+                  onConflict: "update_id",
+                });
               processed++;
               continue;
             }
@@ -3128,16 +3448,11 @@ Deno.serve(async (req) => {
             );
           }
 
-          await supabase.from("telegram_messages").upsert(
-            {
-              update_id: u.update_id,
-              chat_id: chatId,
-              text: photoUserText ?? text,
-              raw_update: u,
-              processed: true,
-            },
-            { onConflict: "update_id" },
-          );
+          await supabase
+            .from("telegram_messages")
+            .upsert(telegramMessageStorageRow(u.update_id, chatId, photoUserText ?? text, u), {
+              onConflict: "update_id",
+            });
           processed++;
         } finally {
           // Even if the try-block above threw, advance the offset past this

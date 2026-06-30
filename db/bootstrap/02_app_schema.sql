@@ -3187,7 +3187,9 @@ CREATE TABLE public.telegram_messages (
   update_id bigint PRIMARY KEY,
   chat_id bigint NOT NULL,
   text text,
-  raw_update jsonb NOT NULL,
+  raw_update jsonb,
+  sanitized_update jsonb,
+  raw_update_expires_at timestamptz,
   processed boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now()
 );
@@ -3195,6 +3197,32 @@ CREATE TABLE public.telegram_messages (
 CREATE INDEX idx_telegram_messages_chat_id ON public.telegram_messages(chat_id);
 
 CREATE INDEX idx_telegram_messages_processed ON public.telegram_messages(processed) WHERE processed = false;
+
+CREATE INDEX IF NOT EXISTS telegram_messages_raw_expiry_idx
+  ON public.telegram_messages (raw_update_expires_at)
+  WHERE raw_update IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS public.telegram_voice_transcripts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  update_id bigint,
+  chat_id bigint NOT NULL,
+  telegram_user_id bigint,
+  user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  transcript text NOT NULL,
+  language text,
+  confidence numeric,
+  provider text,
+  duration_seconds integer,
+  file_size integer,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS telegram_voice_transcripts_user_idx
+  ON public.telegram_voice_transcripts (user_id, created_at DESC)
+  WHERE user_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS telegram_voice_transcripts_chat_idx
+  ON public.telegram_voice_transcripts (chat_id, created_at DESC);
 
 -- No policies = service role only
 
@@ -4818,16 +4846,32 @@ CREATE INDEX IF NOT EXISTS workspace_invite_codes_ws_idx ON public.workspace_inv
 CREATE TABLE IF NOT EXISTS public.workspace_telegram_links (
   id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   workspace_id uuid NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE,
-  chat_id bigint NOT NULL UNIQUE,
+  chat_id bigint UNIQUE,
   title text,
   link_code text,
   link_code_expires_at timestamptz,
   is_active boolean NOT NULL DEFAULT false,
   linked_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now()
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS workspace_telegram_links_ws_idx ON public.workspace_telegram_links (workspace_id);
+CREATE UNIQUE INDEX IF NOT EXISTS workspace_telegram_links_chat_id_active_idx
+  ON public.workspace_telegram_links (chat_id)
+  WHERE chat_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS workspace_telegram_links_link_code_idx
+  ON public.workspace_telegram_links (link_code)
+  WHERE link_code IS NOT NULL;
+CREATE INDEX IF NOT EXISTS workspace_telegram_links_pending_idx
+  ON public.workspace_telegram_links (workspace_id, link_code_expires_at)
+  WHERE is_active = false AND link_code IS NOT NULL;
+
+DROP TRIGGER IF EXISTS update_workspace_telegram_links_updated_at
+  ON public.workspace_telegram_links;
+CREATE TRIGGER update_workspace_telegram_links_updated_at
+  BEFORE UPDATE ON public.workspace_telegram_links
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 -- ── Add workspace_id / assignee_id to the core collaborative tables. ───────
 -- Keeping columns nullable means existing "personal" data continues to work

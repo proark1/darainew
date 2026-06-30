@@ -1634,8 +1634,21 @@ Deno.serve(async (req) => {
   let userForChat: string | null = null;
   if (workspace_id) {
     const workspaceMembers = await getWorkspaceMembers(supabase, workspace_id);
-    if (senderUserId && !workspaceMembers.ids.includes(senderUserId)) senderUserId = null;
-    userForChat = senderUserId || workspaceMembers.fallbackUserId;
+    if (!senderUserId) {
+      await tgSend(
+        chat_id,
+        "🔒 Link your Telegram account with /linkme <personal-code> before using this workspace group.",
+      );
+      return new Response('{"ok":true}', { headers: corsHeaders });
+    }
+    if (!workspaceMembers.ids.includes(senderUserId)) {
+      await tgSend(
+        chat_id,
+        "🔒 Your Telegram account is linked, but that Dori account is not a member of this workspace.",
+      );
+      return new Response('{"ok":true}', { headers: corsHeaders });
+    }
+    userForChat = senderUserId;
     household = workspaceMembers;
   } else {
     // Auto-accept by @username: if this Telegram user isn't mapped yet but their
@@ -2760,6 +2773,9 @@ Deno.serve(async (req) => {
         "x-internal-token": await mintInternalToken(userForChat),
         "x-dori-channel": channel,
         "x-dori-channel-ref": String(chat_id),
+        ...(Deno.env.get("DORI_TELEGRAM_NATIVE_TOOLS") === "false"
+          ? {}
+          : { "x-dori-native-tools": "1" }),
         // Tag new calendar events with the family household so every member's
         // individual calendar shows them. Personal/workspace chats omit this.
         ...(workspace_id || !group ? {} : { "x-dori-household": String(group.id) }),

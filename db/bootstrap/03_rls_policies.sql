@@ -1918,6 +1918,7 @@ CREATE POLICY "Users delete their own telegram link"
   USING (auth.uid() = user_id);
 ALTER TABLE public.telegram_bot_state ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.telegram_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.telegram_voice_transcripts ENABLE ROW LEVEL SECURITY;
 
 -- 20260417071105_340c6cc0-e54e-4054-8784-b0a2d684d1db.sql
 ALTER TABLE public.meeting_reminders_sent ENABLE ROW LEVEL SECURITY;
@@ -2480,6 +2481,9 @@ CREATE POLICY "service_only_telegram_bot_state" ON public.telegram_bot_state
 DROP POLICY IF EXISTS "service_only_telegram_messages" ON public.telegram_messages;
 DROP POLICY IF EXISTS "service_only_telegram_messages" ON public.telegram_messages;
 CREATE POLICY "service_only_telegram_messages" ON public.telegram_messages
+  FOR ALL TO authenticated USING (false) WITH CHECK (false);
+DROP POLICY IF EXISTS "service_only_telegram_voice_transcripts" ON public.telegram_voice_transcripts;
+CREATE POLICY "service_only_telegram_voice_transcripts" ON public.telegram_voice_transcripts
   FOR ALL TO authenticated USING (false) WITH CHECK (false);
 -- 2. Replace permissive INSERT policies (anyone-authenticated could insert) with self-only
 DROP POLICY IF EXISTS "System can insert notifications for any user" ON public.user_notifications;

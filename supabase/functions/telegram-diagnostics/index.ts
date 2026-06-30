@@ -161,8 +161,9 @@ Deno.serve(async (req) => {
       userWorkspaceIds.length
         ? admin
             .from("workspace_telegram_links")
-            .select("is_active, chat_id, title, linked_at, workspace_id, workspaces(name)")
-            .eq("is_active", true)
+            .select(
+              "id, is_active, chat_id, title, linked_at, link_code_expires_at, workspace_id, workspaces(name)",
+            )
             .in("workspace_id", userWorkspaceIds)
             .limit(20)
         : Promise.resolve({ data: [] }),
@@ -193,6 +194,7 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
+        version: "telegram-diagnostics-v3",
         envVars,
         botInfo,
         webhookInfo,

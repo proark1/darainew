@@ -19,6 +19,7 @@ import {
   Activity,
   XCircle,
   RefreshCw,
+  Building2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,14 +53,54 @@ interface GroupLink {
   voice_digest_enabled: boolean;
 }
 
+interface WorkspaceSummary {
+  id: string;
+  name: string;
+  icon: string | null;
+  archived?: boolean;
+}
+
+interface WorkspaceMembership {
+  workspace_id: string;
+  role: string;
+}
+
+interface WorkspaceTelegramLink {
+  id: string;
+  workspace_id: string;
+  chat_id: number | null;
+  title: string | null;
+  is_active: boolean;
+  linked_at: string | null;
+  link_code_expires_at?: string | null;
+  created_at?: string | null;
+}
+
+interface WorkspaceCode {
+  code: string;
+  addToGroupUrl: string | null;
+  expiresAt: string;
+}
+
 // Fallback only — real username is fetched from telegram-link (getMe) so the
 // app stays correct if the bot is renamed.
 const DEFAULT_BOT_USERNAME = "daraibot_bot";
 
 interface DiagnosticsResult {
   version?: string;
-  envVars: { GEMINI_API_KEY: boolean; TELEGRAM_API_KEY: boolean };
+  envVars: {
+    GEMINI_API_KEY: boolean;
+    TELEGRAM_API_KEY: boolean;
+    TELEGRAM_WEBHOOK_SECRET?: boolean;
+  };
   botInfo: { ok: boolean; username?: string; first_name?: string; id?: number; error?: string };
+  webhookInfo?: {
+    ok: boolean;
+    url?: string;
+    pending_update_count?: number;
+    last_error_message?: string;
+    error?: string;
+  };
   botState: { update_offset: number; updated_at: string; lastTickSeconds: number | null } | null;
   link: {
     is_active: boolean;
@@ -73,6 +114,14 @@ interface DiagnosticsResult {
     title: string | null;
     linked_at: string | null;
   } | null;
+  workspaceLinks?: Array<{
+    is_active: boolean;
+    chat_id: number | null;
+    title: string | null;
+    linked_at: string | null;
+    workspace_id: string;
+    workspaces?: { name?: string | null } | null;
+  }>;
   pollResult: { ok: boolean; status?: number; body?: unknown; error?: string } | null;
   timestamp: string;
 }
@@ -112,6 +161,12 @@ export function TelegramHubPanel() {
   const [code, setCode] = useState<string | null>(null);
   const [groupCode, setGroupCode] = useState<string | null>(null);
   const [groupAddUrl, setGroupAddUrl] = useState<string | null>(null);
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
+  const [workspaceMemberships, setWorkspaceMemberships] = useState<WorkspaceMembership[]>([]);
+  const [workspaceLinks, setWorkspaceLinks] = useState<WorkspaceTelegramLink[]>([]);
+  const [workspaceCodes, setWorkspaceCodes] = useState<Record<string, WorkspaceCode>>({});
+  const [generatingWorkspaceId, setGeneratingWorkspaceId] = useState<string | null>(null);
+  const [unlinkingWorkspaceLinkId, setUnlinkingWorkspaceLinkId] = useState<string | null>(null);
   const [botUsername, setBotUsername] = useState<string>(DEFAULT_BOT_USERNAME);
   const [error, setError] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<DiagnosticsResult | null>(null);
@@ -122,7 +177,7 @@ export function TelegramHubPanel() {
 
   const fetchLink = useCallback(async () => {
     if (!user) return;
-    const [{ data: l }, { data: g }, { data: ps }] = await Promise.all([
+    const [{ data: l }, { data: g }, { data: ps }, workspaceStatus] = await Promise.all([
       supabase
         .from("telegram_links")
         .select("is_active, telegram_username, telegram_first_name, linked_at")
@@ -140,10 +195,21 @@ export function TelegramHubPanel() {
         .select("prefer_voice_replies")
         .eq("user_id", user.id)
         .maybeSingle(),
+      supabase.functions.invoke("telegram-link", { body: { action: "workspace_links" } }),
     ]);
     setLink(l);
     setGroup(g);
     setPersonalVoiceReplies(!!ps?.prefer_voice_replies);
+    if (!workspaceStatus.error && workspaceStatus.data) {
+      const data = workspaceStatus.data as {
+        workspaces?: WorkspaceSummary[];
+        memberships?: WorkspaceMembership[];
+        workspaceLinks?: WorkspaceTelegramLink[];
+      };
+      setWorkspaces(data.workspaces || []);
+      setWorkspaceMemberships(data.memberships || []);
+      setWorkspaceLinks(data.workspaceLinks || []);
+    }
     setLoading(false);
   }, [user]);
 
@@ -152,14 +218,19 @@ export function TelegramHubPanel() {
   }, [fetchLink]);
 
   useEffect(() => {
-    if ((!code && !groupCode) || (link?.is_active && group?.is_active)) return;
+    const hasWorkspaceCode = Object.keys(workspaceCodes).length > 0;
+    if (
+      (!code && !groupCode && !hasWorkspaceCode) ||
+      (link?.is_active && group?.is_active && !hasWorkspaceCode)
+    )
+      return;
     // Poll less aggressively and pause while the tab is hidden.
     const id = setInterval(() => {
       if (document.hidden) return;
       fetchLink();
     }, 8000);
     return () => clearInterval(id);
-  }, [code, groupCode, link?.is_active, group?.is_active, fetchLink]);
+  }, [code, groupCode, workspaceCodes, link?.is_active, group?.is_active, fetchLink]);
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -206,6 +277,59 @@ export function TelegramHubPanel() {
       });
     } finally {
       setGeneratingGroup(false);
+    }
+  };
+
+  const handleGenerateWorkspace = async (workspaceId: string) => {
+    setGeneratingWorkspaceId(workspaceId);
+    try {
+      const { data, error } = await supabase.functions.invoke("telegram-link", {
+        body: { action: "workspace_generate", workspaceId },
+      });
+      if (error) throw error;
+      const payload = data as {
+        code: string;
+        expiresAt: string;
+        botUsername?: string;
+        addToGroupUrl?: string | null;
+      };
+      setWorkspaceCodes((prev) => ({
+        ...prev,
+        [workspaceId]: {
+          code: payload.code,
+          expiresAt: payload.expiresAt,
+          addToGroupUrl: payload.addToGroupUrl ?? null,
+        },
+      }));
+      if (payload.botUsername) setBotUsername(payload.botUsername);
+    } catch (e) {
+      toast({
+        title: "Could not generate workspace code",
+        description: await describeEdgeError(e, "Could not generate workspace Telegram code"),
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingWorkspaceId(null);
+    }
+  };
+
+  const handleUnlinkWorkspace = async (linkId: string) => {
+    setUnlinkingWorkspaceLinkId(linkId);
+    try {
+      const { error } = await supabase.functions.invoke("telegram-link", {
+        body: { action: "workspace_unlink", workspaceTelegramLinkId: linkId },
+      });
+      if (error) throw error;
+      setWorkspaceLinks((prev) => prev.filter((link) => link.id !== linkId));
+      toast({ title: "Workspace group disconnected" });
+    } catch (e) {
+      toast({
+        title: "Could not disconnect workspace group",
+        description: await describeEdgeError(e, "Could not disconnect workspace group"),
+        variant: "destructive",
+      });
+    } finally {
+      setUnlinkingWorkspaceLinkId(null);
     }
   };
 
@@ -279,6 +403,17 @@ export function TelegramHubPanel() {
     toast({ title: `${label} copied` });
   };
 
+  const workspaceRole = (workspaceId: string) =>
+    workspaceMemberships.find((membership) => membership.workspace_id === workspaceId)?.role ||
+    "member";
+
+  const canManageWorkspaceTelegram = (workspaceId: string) => {
+    const role = workspaceRole(workspaceId);
+    return role === "owner" || role === "admin";
+  };
+
+  const activeWorkspaceLinks = workspaceLinks.filter((link) => link.is_active);
+
   const checkDbStatus = async () => {
     setDbChecking(true);
     try {
@@ -302,16 +437,14 @@ export function TelegramHubPanel() {
   const runDiagnostics = async (runPoll: boolean) => {
     setDiagnosing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("telegram-link", {
-        body: { action: "diagnose", runPoll },
+      const { data, error } = await supabase.functions.invoke("telegram-diagnostics", {
+        body: { runPoll },
       });
       // Always stash the raw response so we can see what came back even when
       // the shape is wrong.
       setRawDiagnostics(error ? { supabaseError: String(error) } : data);
-      console.log("[telegram-link diagnose] response:", data, "error:", error);
+      console.log("[telegram-diagnostics] response:", data, "error:", error);
       if (error) throw error;
-      // If the deployed function doesn't yet have the 'diagnose' branch, it
-      // will fall through to the generate path and return {code, deepLink}.
       if (!data || !data.botInfo || !data.envVars) {
         const keys = data && typeof data === "object" ? Object.keys(data).join(", ") : typeof data;
         toast({
@@ -355,14 +488,15 @@ export function TelegramHubPanel() {
             <h2 className="text-base font-semibold">Use Dori from Telegram</h2>
             <p className="text-sm text-muted-foreground leading-relaxed">
               Capture tasks, schedule meetings, get reminders and chat with your AI assistant —
-              straight from your Telegram app, on any device. Works 1:1 and in your family group.
+              straight from your Telegram app, on any device. Works 1:1 and in family or workspace
+              groups.
             </p>
           </div>
         </div>
       </div>
 
       {/* Status overview */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div
           className={`rounded-lg border p-3 ${link?.is_active ? "border-primary/40 bg-primary/5" : "border-border"}`}
         >
@@ -389,6 +523,23 @@ export function TelegramHubPanel() {
             {group?.is_active ? (
               <>
                 <CheckCircle2 className="w-4 h-4 text-primary" /> Linked
+              </>
+            ) : (
+              "Not linked"
+            )}
+          </div>
+        </div>
+        <div
+          className={`rounded-lg border p-3 ${activeWorkspaceLinks.length ? "border-primary/40 bg-primary/5" : "border-border"}`}
+        >
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+            <Building2 className="w-3.5 h-3.5" /> Workspace groups
+          </div>
+          <div className="text-sm font-medium flex items-center gap-1.5">
+            {activeWorkspaceLinks.length ? (
+              <>
+                <CheckCircle2 className="w-4 h-4 text-primary" />
+                {activeWorkspaceLinks.length} linked
               </>
             ) : (
               "Not linked"
@@ -679,6 +830,179 @@ export function TelegramHubPanel() {
         </CardContent>
       </Card>
 
+      {/* Workspace groups */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Building2 className="w-4 h-4 text-primary" />
+            </div>
+            Workspace Groups
+            {activeWorkspaceLinks.length > 0 && (
+              <Badge variant="secondary" className="ml-auto">
+                <Check className="w-3 h-3 mr-1" />
+                {activeWorkspaceLinks.length} linked
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Connect a Telegram group to a workspace so team tasks, events, notes and quick questions
+            stay scoped to that workspace.
+          </p>
+
+          {workspaces.length === 0 ? (
+            <div className="rounded-md border border-border p-3 text-sm text-muted-foreground">
+              Create or join a workspace first, then return here to link its Telegram group.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {workspaces.map((workspace) => {
+                const links = workspaceLinks.filter(
+                  (linkRow) => linkRow.workspace_id === workspace.id && linkRow.is_active,
+                );
+                const pending = workspaceCodes[workspace.id];
+                const canManage = canManageWorkspaceTelegram(workspace.id);
+                return (
+                  <div key={workspace.id} className="rounded-lg border border-border p-3 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium truncate">
+                          {workspace.icon ? `${workspace.icon} ` : ""}
+                          {workspace.name}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Your role: {workspaceRole(workspace.id)}
+                        </div>
+                      </div>
+                      {links.length > 0 ? (
+                        <Badge variant="secondary" className="shrink-0">
+                          <CheckCircle2 className="w-3 h-3 mr-1" />
+                          Linked
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="shrink-0">
+                          Not linked
+                        </Badge>
+                      )}
+                    </div>
+
+                    {links.length > 0 && (
+                      <div className="space-y-2">
+                        {links.map((linkRow) => (
+                          <div
+                            key={linkRow.id}
+                            className="flex items-center justify-between gap-3 rounded-md bg-muted/40 border border-border px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <div className="text-xs font-medium truncate">
+                                {linkRow.title || "Workspace Telegram group"}
+                              </div>
+                              <div className="text-[11px] text-muted-foreground">
+                                chat_id {linkRow.chat_id ?? "pending"}
+                              </div>
+                            </div>
+                            {canManage && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleUnlinkWorkspace(linkRow.id)}
+                                disabled={unlinkingWorkspaceLinkId === linkRow.id}
+                              >
+                                {unlinkingWorkspaceLinkId === linkRow.id ? (
+                                  <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                                ) : (
+                                  <Unlink className="w-3 h-3 mr-2" />
+                                )}
+                                Disconnect
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                        <p className="text-xs text-muted-foreground">
+                          Each teammate must send{" "}
+                          <code className="text-[11px] bg-muted px-1 py-0.5 rounded">
+                            /linkme &lt;personal-code&gt;
+                          </code>{" "}
+                          in the group before Dori accepts workspace actions from them.
+                        </p>
+                      </div>
+                    )}
+
+                    {pending ? (
+                      <div className="rounded-md bg-muted/40 border border-border p-3 space-y-3">
+                        <ol className="space-y-3 text-sm">
+                          <li className="flex gap-3">
+                            <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center shrink-0">
+                              1
+                            </span>
+                            <div className="space-y-2">
+                              <p>Add the bot to the workspace Telegram group.</p>
+                              {pending.addToGroupUrl && (
+                                <a
+                                  href={pending.addToGroupUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90"
+                                >
+                                  <ExternalLink className="w-3 h-3" /> Add @{botUsername} to group
+                                </a>
+                              )}
+                            </div>
+                          </li>
+                          <li className="flex gap-3">
+                            <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center shrink-0">
+                              2
+                            </span>
+                            <div className="flex-1 space-y-2">
+                              <p>In that group, send this command:</p>
+                              <div className="flex items-center gap-2">
+                                <code className="flex-1 text-xs bg-background px-2 py-1.5 rounded font-mono overflow-x-auto">
+                                  /linkworkspace {pending.code}
+                                </code>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => copy(`/linkworkspace ${pending.code}`, "Command")}
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          </li>
+                        </ol>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1 border-t border-border">
+                          <Loader2 className="w-3 h-3 animate-spin" /> Waiting for /linkworkspace…
+                        </div>
+                      </div>
+                    ) : canManage ? (
+                      <Button
+                        size="sm"
+                        variant={links.length > 0 ? "outline" : "default"}
+                        onClick={() => handleGenerateWorkspace(workspace.id)}
+                        disabled={generatingWorkspaceId === workspace.id}
+                      >
+                        {generatingWorkspaceId === workspace.id ? (
+                          <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                        ) : (
+                          <Building2 className="w-3 h-3 mr-2" />
+                        )}
+                        {links.length > 0 ? "Link another group" : "Connect Workspace Group"}
+                      </Button>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Ask a workspace owner or admin to generate the Telegram group code.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* What you can do */}
       <Card>
         <CardHeader>
@@ -731,7 +1055,7 @@ export function TelegramHubPanel() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p>To avoid spamming your family chat, Dori only replies in groups when:</p>
+          <p>To avoid spamming your group chat, Dori only replies in groups when:</p>
           <ul className="list-disc pl-5 space-y-1">
             <li>
               You <strong className="text-foreground">@mention the bot</strong> — e.g. "@
@@ -750,7 +1074,7 @@ export function TelegramHubPanel() {
               <code className="text-xs bg-muted px-1 rounded">/linkme</code>
             </li>
           </ul>
-          <p className="pt-1">Normal family conversation is left alone.</p>
+          <p className="pt-1">Normal group conversation is left alone.</p>
         </CardContent>
       </Card>
 
@@ -767,14 +1091,16 @@ export function TelegramHubPanel() {
             { cmd: "/start", desc: "Greet Dori and see your linking status" },
             { cmd: "/linkme <code>", desc: "Link your personal Telegram to your account" },
             { cmd: "/linkfamily <code>", desc: "Link the current group as your family group" },
+            { cmd: "/linkworkspace <code>", desc: "Link the current group to a workspace" },
+            { cmd: "/workspace <name>", desc: "Switch 1:1 Telegram actions into a workspace" },
             { cmd: "/today", desc: "Get today's tasks and events" },
             { cmd: "/help", desc: "See everything Dori can do" },
           ].map(({ cmd, desc }) => (
             <div
               key={cmd}
-              className="flex items-center gap-3 py-1.5 border-b border-border/50 last:border-0"
+              className="flex flex-wrap items-center gap-3 py-1.5 border-b border-border/50 last:border-0"
             >
-              <code className="text-xs bg-muted px-2 py-1 rounded font-mono shrink-0 min-w-[140px]">
+              <code className="text-xs bg-muted px-2 py-1 rounded font-mono shrink-0 min-w-[150px] max-w-full overflow-x-auto">
                 {cmd}
               </code>
               <span className="text-muted-foreground text-xs">{desc}</span>
@@ -793,8 +1119,8 @@ export function TelegramHubPanel() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Not getting a reply from the bot? Run diagnostics to see what's broken, or force a poll
-            cycle to process any queued messages.
+            Not getting a reply from the bot? Run diagnostics to check the bot token, webhook,
+            polling fallback and your personal, family and workspace links.
           </p>
           <div className="flex gap-2 flex-wrap">
             <Button
@@ -821,7 +1147,7 @@ export function TelegramHubPanel() {
               ) : (
                 <RefreshCw className="w-3 h-3 mr-2" />
               )}
-              Poll now
+              Poll fallback now
             </Button>
             <Button size="sm" variant="outline" onClick={checkDbStatus} disabled={dbChecking}>
               {dbChecking ? (
@@ -907,6 +1233,30 @@ export function TelegramHubPanel() {
                     : "missing — set in Edge Function secrets"
                 }
               />
+              {diagnostics.envVars.TELEGRAM_WEBHOOK_SECRET !== undefined && (
+                <DiagnosticRow
+                  label="Webhook secret set"
+                  ok={diagnostics.envVars.TELEGRAM_WEBHOOK_SECRET}
+                  detail={
+                    diagnostics.envVars.TELEGRAM_WEBHOOK_SECRET
+                      ? "yes"
+                      : "missing — webhook requests should use a secret token"
+                  }
+                />
+              )}
+              {diagnostics.webhookInfo && (
+                <DiagnosticRow
+                  label="Telegram webhook"
+                  ok={diagnostics.webhookInfo.ok && !diagnostics.webhookInfo.last_error_message}
+                  detail={
+                    diagnostics.webhookInfo.ok
+                      ? diagnostics.webhookInfo.url
+                        ? `configured, ${diagnostics.webhookInfo.pending_update_count ?? 0} pending${diagnostics.webhookInfo.last_error_message ? `, last error: ${diagnostics.webhookInfo.last_error_message}` : ""}`
+                        : "not configured — polling fallback must be running"
+                      : (diagnostics.webhookInfo.error ?? "failed")
+                  }
+                />
+              )}
               <DiagnosticRow
                 label="Cron is running"
                 ok={
@@ -939,6 +1289,22 @@ export function TelegramHubPanel() {
                     diagnostics.group.is_active
                       ? `chat_id ${diagnostics.group.chat_id} (${diagnostics.group.title ?? "untitled"})`
                       : "row exists but is_active=false"
+                  }
+                />
+              )}
+              {diagnostics.workspaceLinks && (
+                <DiagnosticRow
+                  label="Workspace groups"
+                  ok={diagnostics.workspaceLinks.length > 0}
+                  detail={
+                    diagnostics.workspaceLinks.length > 0
+                      ? diagnostics.workspaceLinks
+                          .map(
+                            (workspaceLink) =>
+                              `${workspaceLink.workspaces?.name ?? "Workspace"}: ${workspaceLink.title ?? workspaceLink.chat_id ?? "linked"}`,
+                          )
+                          .join("; ")
+                      : "no active workspace Telegram groups for your workspaces"
                   }
                 />
               )}
@@ -991,8 +1357,11 @@ export function TelegramHubPanel() {
               </AccordionTrigger>
               <AccordionContent className="text-sm text-muted-foreground space-y-2">
                 <p>
-                  1. Make sure the group is linked — generate a fresh code above and send{" "}
-                  <code className="text-xs bg-muted px-1 rounded">/linkfamily &lt;code&gt;</code>.
+                  1. Make sure the group is linked — use{" "}
+                  <code className="text-xs bg-muted px-1 rounded">/linkfamily &lt;code&gt;</code>{" "}
+                  for family groups or{" "}
+                  <code className="text-xs bg-muted px-1 rounded">/linkworkspace &lt;code&gt;</code>{" "}
+                  for workspace groups.
                 </p>
                 <p>
                   2. @mention the bot or start your message with "Hey Dori" so it knows you're
@@ -1011,8 +1380,8 @@ export function TelegramHubPanel() {
               </AccordionTrigger>
               <AccordionContent className="text-sm text-muted-foreground">
                 Your code may have expired (10 min lifetime). Generate a fresh one in this panel and
-                try again. Each user must link their <em>personal</em> code separately, even inside
-                a group.
+                try again. Each teammate must link their <em>personal</em> code separately, even
+                inside a group, before they can use action buttons.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="lost-code">
@@ -1026,11 +1395,14 @@ export function TelegramHubPanel() {
               <AccordionTrigger className="text-sm">Is my data safe?</AccordionTrigger>
               <AccordionContent className="text-sm text-muted-foreground space-y-2">
                 <p>
-                  Yes. Messages are processed only to fulfil your request — tasks, reminders and
-                  shared family items are stored in your private space with strict row-level
-                  security.
+                  Yes. Messages are processed only to fulfil your request — tasks, reminders, family
+                  items and workspace items are stored with row-level security.
                 </p>
-                <p>You can disconnect either Telegram link at any time using the buttons above.</p>
+                <p>
+                  Raw Telegram payloads are not stored by default; Dori keeps a sanitized event and,
+                  for voice notes, the transcript needed to show what it heard.
+                </p>
+                <p>You can disconnect Telegram links at any time using the buttons above.</p>
               </AccordionContent>
             </AccordionItem>
           </Accordion>
