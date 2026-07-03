@@ -18,6 +18,7 @@ import {
   rejectPending,
   tgSendWithKeyboard,
 } from "../_shared/telegram-confirm.ts";
+import { buildTelegramMainReply, splitTelegramToolResults } from "../_shared/telegram-reply.ts";
 import {
   buildContractRowKeyboard,
   buildEventRowKeyboard,
@@ -2808,18 +2809,29 @@ Deno.serve(async (req) => {
       undoId?: string;
     }[];
 
-    // Queued actions are rendered separately, each with its own inline keyboard
-    // so the user can tap ✅ / ❌. Non-queued results are concatenated as a single reply.
-    const queued = toolResults.filter((t) => t.queued && t.actionId);
-    const executed = toolResults.filter((t) => !t.queued);
-
-    const parts: string[] = [];
-    if (reply) parts.push(reply);
-    if (executed.length > 0) parts.push(executed.map((t) => t.message).join("\n"));
-    const finalMsg = parts.join("\n\n").trim();
+    // Queued actions are rendered separately, each with its own inline keyboard.
+    // When any action needs confirmation, do not echo the model's prose first:
+    // it may claim that a queued action already happened.
+    const { queued, executed } = splitTelegramToolResults(toolResults);
+    const finalMsg = buildTelegramMainReply(reply, executed, queued.length > 0);
 
     const undoableIds = executed.map((t) => t.undoId).filter(Boolean) as string[];
     const latestUndoId = undoableIds.length > 0 ? undoableIds[undoableIds.length - 1] : null;
+
+    for (const q of queued) {
+      const prompt = `🤔 <b>Please confirm</b>\n${q.summary || q.message}\n\nReply <b>yes</b> or tap a button below.`;
+      await tgSendWithKeyboard(
+        chat_id,
+        prompt,
+        buildConfirmKeyboard(q.actionId!),
+        TELEGRAM_API_KEY,
+      );
+      try {
+        await supabase.from("telegram_assistant_replies").insert({ chat_id, reply: prompt });
+      } catch {
+        /* ignore */
+      }
+    }
 
     if (finalMsg) {
       try {
@@ -2868,21 +2880,6 @@ Deno.serve(async (req) => {
             TELEGRAM_API_KEY,
           );
         }
-      }
-    }
-
-    for (const q of queued) {
-      const prompt = `🤔 <b>Please confirm</b>\n${q.summary || q.message}\n\nReply <b>yes</b> or tap a button below.`;
-      await tgSendWithKeyboard(
-        chat_id,
-        prompt,
-        buildConfirmKeyboard(q.actionId!),
-        TELEGRAM_API_KEY,
-      );
-      try {
-        await supabase.from("telegram_assistant_replies").insert({ chat_id, reply: prompt });
-      } catch {
-        /* ignore */
       }
     }
 

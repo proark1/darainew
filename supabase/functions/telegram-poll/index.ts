@@ -57,6 +57,7 @@ import {
   tgSendWithKeyboard,
   type PendingAction,
 } from "../_shared/telegram-confirm.ts";
+import { buildTelegramMainReply, splitTelegramToolResults } from "../_shared/telegram-reply.ts";
 import {
   buildUndoKeyboard,
   chunkForTelegram,
@@ -648,23 +649,28 @@ async function runSteeringCommand(
     undefined,
     workspaceId,
   );
-  const queued = dori.toolResults.filter((t) => t.queued && t.actionId);
-  const executed = dori.toolResults.filter((t) => !t.queued);
-  const bodyParts: string[] = [];
-  if (dori.reply) bodyParts.push(dori.reply);
-  if (executed.length > 0) bodyParts.push(executed.map((t) => t.message).join("\n"));
-  const replyText = bodyParts.join("\n\n").trim() || `I prepared the /${command} request.`;
-
-  await sendDoriReply({ chatId, text: replyText, preferVoice, telegramKey: tgKey });
+  const { queued, executed } = splitTelegramToolResults(dori.toolResults);
+  const replyText = buildTelegramMainReply(
+    dori.reply,
+    executed,
+    queued.length > 0,
+    `I prepared the /${command} request.`,
+  );
 
   for (const action of queued) {
     await tgSendWithKeyboard(
       chatId,
-      `🤔 <b>Approve Dori action?</b>
-${escapeTelegramHtml(action.summary || action.message || "Queued action")}`,
+      `🤔 <b>Please confirm</b>
+${escapeTelegramHtml(action.summary || action.message || "Queued action")}
+
+Reply <b>yes</b> or tap a button below.`,
       buildConfirmKeyboard(action.actionId as string),
       tgKey,
     );
+  }
+
+  if (replyText) {
+    await sendDoriReply({ chatId, text: replyText, preferVoice, telegramKey: tgKey });
   }
 }
 
@@ -2616,12 +2622,8 @@ Deno.serve(async (req) => {
               // Mirror the private-chat photo flow: combine the AI's prose with
               // executed tool messages, surface queued confirmations as separate
               // tappable prompts, and offer Undo for the latest reversible action.
-              const queued = dori.toolResults.filter((t) => t.queued && t.actionId);
-              const executed = dori.toolResults.filter((t) => !t.queued);
-              const bodyParts: string[] = [];
-              if (dori.reply) bodyParts.push(dori.reply);
-              if (executed.length > 0) bodyParts.push(executed.map((t) => t.message).join("\n"));
-              const replyText = bodyParts.join("\n\n").trim();
+              const { queued, executed } = splitTelegramToolResults(dori.toolResults);
+              const replyText = buildTelegramMainReply(dori.reply, executed, queued.length > 0);
               const undoableIds = executed.map((t) => t.undoId).filter(Boolean) as string[];
               const latestUndoId =
                 undoableIds.length > 0 ? undoableIds[undoableIds.length - 1] : null;
@@ -2636,7 +2638,48 @@ Deno.serve(async (req) => {
                   ? "📸 I looked at the picture but couldn't find anything actionable. Tell me what you'd like me to do with it."
                   : null);
 
-              if (placeholderMessageId && outgoingText) {
+              if (queued.length > 0) {
+                if (placeholderMessageId) {
+                  try {
+                    await tg(
+                      "deleteMessage",
+                      { chat_id: chatId, message_id: placeholderMessageId },
+                      TELEGRAM_API_KEY,
+                    );
+                  } catch {
+                    /* ignore */
+                  }
+                }
+
+                for (const q of queued) {
+                  const prompt = `🤔 <b>Please confirm</b>\n${q.summary || q.message}\n\nReply <b>yes</b> or tap a button below.`;
+                  await tgSendWithKeyboard(
+                    chatId,
+                    prompt,
+                    buildConfirmKeyboard(q.actionId!),
+                    TELEGRAM_API_KEY,
+                  );
+                  try {
+                    await supabase
+                      .from("telegram_assistant_replies")
+                      .insert({ chat_id: chatId, reply: prompt });
+                  } catch {
+                    /* ignore */
+                  }
+                }
+
+                if (outgoingText) {
+                  await sendMessage(chatId, outgoingText, TELEGRAM_API_KEY);
+                  if (latestUndoId) {
+                    await tgSendWithKeyboard(
+                      chatId,
+                      "↩️ Tap to undo the last action.",
+                      buildUndoKeyboard(latestUndoId),
+                      TELEGRAM_API_KEY,
+                    );
+                  }
+                }
+              } else if (placeholderMessageId && outgoingText) {
                 try {
                   const chunks = chunkForTelegram(outgoingText);
                   await tgEditMessageText(
@@ -2686,23 +2729,6 @@ Deno.serve(async (req) => {
                     { chat_id: chatId, message_id: placeholderMessageId },
                     TELEGRAM_API_KEY,
                   );
-                } catch {
-                  /* ignore */
-                }
-              }
-
-              for (const q of queued) {
-                const prompt = `🤔 <b>Please confirm</b>\n${q.summary || q.message}\n\nReply <b>yes</b> or tap a button below.`;
-                await tgSendWithKeyboard(
-                  chatId,
-                  prompt,
-                  buildConfirmKeyboard(q.actionId!),
-                  TELEGRAM_API_KEY,
-                );
-                try {
-                  await supabase
-                    .from("telegram_assistant_replies")
-                    .insert({ chat_id: chatId, reply: prompt });
                 } catch {
                   /* ignore */
                 }
@@ -3372,13 +3398,8 @@ Deno.serve(async (req) => {
             /* ignore */
           }
 
-          const queued = dori.toolResults.filter((t) => t.queued && t.actionId);
-          const executed = dori.toolResults.filter((t) => !t.queued);
-
-          const bodyParts: string[] = [];
-          if (dori.reply) bodyParts.push(dori.reply);
-          if (executed.length > 0) bodyParts.push(executed.map((t) => t.message).join("\n"));
-          const replyText = bodyParts.join("\n\n").trim();
+          const { queued, executed } = splitTelegramToolResults(dori.toolResults);
+          const replyText = buildTelegramMainReply(dori.reply, executed, queued.length > 0);
 
           // If any executed tool was reversible, grab the most recent undo id so
           // we can offer the user a one-tap ↩️ Undo button on the outgoing reply.
@@ -3390,7 +3411,47 @@ Deno.serve(async (req) => {
             replyText ||
             (queued.length === 0 ? "I processed that but didn't have anything to add." : null);
 
-          if (placeholderMessageId && outgoingText && !preferVoice) {
+          if (queued.length > 0) {
+            if (placeholderMessageId) {
+              try {
+                await tg(
+                  "deleteMessage",
+                  { chat_id: chatId, message_id: placeholderMessageId },
+                  TELEGRAM_API_KEY,
+                );
+              } catch {
+                /* ignore */
+              }
+            }
+
+            for (const q of queued) {
+              const prompt = `🤔 <b>Please confirm</b>\n${q.summary || q.message}\n\nReply <b>yes</b> or tap a button below.`;
+              await tgSendWithKeyboard(
+                chatId,
+                prompt,
+                buildConfirmKeyboard(q.actionId!),
+                TELEGRAM_API_KEY,
+              );
+            }
+
+            if (outgoingText) {
+              await sendDoriReply({
+                chatId,
+                text: outgoingText,
+                preferVoice,
+                locale: userLocale,
+                telegramKey: TELEGRAM_API_KEY,
+              });
+              if (latestUndoId) {
+                await tgSendWithKeyboard(
+                  chatId,
+                  "↩️ Tap to undo the last action.",
+                  buildUndoKeyboard(latestUndoId),
+                  TELEGRAM_API_KEY,
+                );
+              }
+            }
+          } else if (placeholderMessageId && outgoingText && !preferVoice) {
             // Update the placeholder in place → the user sees the same message
             // transform from "🤔 Thinking…" into the real answer. Feels instant.
             const chunks = chunkForTelegram(outgoingText);
@@ -3437,16 +3498,6 @@ Deno.serve(async (req) => {
                 );
               }
             }
-          }
-
-          for (const q of queued) {
-            const prompt = `🤔 <b>Please confirm</b>\n${q.summary || q.message}\n\nReply <b>yes</b> or tap a button below.`;
-            await tgSendWithKeyboard(
-              chatId,
-              prompt,
-              buildConfirmKeyboard(q.actionId!),
-              TELEGRAM_API_KEY,
-            );
           }
 
           await supabase
