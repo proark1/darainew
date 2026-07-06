@@ -91,7 +91,7 @@ intelligence, an agentic assistant ("Dori"), and voice-first interactions.
 
 | Layer          | Technology                                                                                                   |
 | -------------- | ------------------------------------------------------------------------------------------------------------ |
-| Frontend       | React 18, TypeScript 5.8, Vite 5                                                                             |
+| Frontend       | React 18, TypeScript 5.8, Vite 8                                                                             |
 | UI             | Tailwind CSS 3, shadcn/ui, Radix UI, Framer Motion                                                           |
 | State          | TanStack React Query, React Context                                                                          |
 | Backend        | Supabase-compatible stack, self-hosted on Railway (Auth/GoTrue, Postgres, Realtime, Storage, Edge Functions) |
@@ -110,8 +110,11 @@ intelligence, an agentic assistant ("Dori"), and voice-first interactions.
 
 ### Prerequisites
 
-- [Bun](https://bun.sh) (the repo is locked with `bun.lock`; CI uses Bun). Node.js 18+
-  also works with the same `package.json` scripts.
+- [Bun](https://bun.sh) 1.3.14 (the repo is locked with `bun.lock`; CI reads
+  `.bun-version`). If Bun is not on PATH yet, most commands can be run as
+  `npx bun@1.3.14 run <script>`.
+- [Deno](https://deno.com/) 2.8.x is required for local edge-function parity with CI.
+- Node.js 18+ is useful for scripts that run with `node`, including the build-budget check.
 
 ### Development
 
@@ -136,6 +139,7 @@ The app runs at `http://localhost:8080`.
 | `bun run dev`          | Start development server                |
 | `bun run build`        | Production build                        |
 | `bun run build:dev`    | Development build                       |
+| `bun run budget`       | Check generated `dist` bundle budgets   |
 | `bun run analyze`      | Production build with bundle visualizer |
 | `bun run lint`         | Run ESLint                              |
 | `bun run format`       | Format with Prettier                    |
@@ -157,6 +161,11 @@ VITE_SUPABASE_PUBLISHABLE_KEY=your_anon_jwt
 
 Anything `VITE_*` is bundled into the client. Point `VITE_SUPABASE_URL` at the Caddy
 gateway, which routes to the right backend service.
+
+Production builds fail early when `VITE_SUPABASE_URL` or
+`VITE_SUPABASE_PUBLISHABLE_KEY` is missing. CI is allowed to use the placeholder values
+from the workflow because it only verifies that the app compiles; local placeholder builds
+must opt in explicitly with `VITE_ALLOW_PLACEHOLDER_CLIENT_ENV=true`.
 
 Server-side secrets live on the Railway services (edge-runtime, gateway), **not** in the
 frontend `.env`. The full list is in [`edge-runtime/README.md`](./edge-runtime/README.md);
@@ -383,7 +392,7 @@ Built with Capacitor for native iOS and Android deployment (`com.darai.app`).
 **PWA support:**
 
 - Service worker with offline caching
-- Font and asset caching (1-year expiration)
+- Font and shell-asset precaching, with JavaScript chunks cached at runtime on first use
 - App manifest with shortcuts and icons
 
 ## Continuous Integration

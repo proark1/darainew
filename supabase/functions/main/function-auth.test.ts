@@ -39,8 +39,15 @@ function req(headers: HeadersInit = {}) {
 
 Deno.test("allows public functions without authorization", async () => {
   await withEnv(async () => {
-    const res = await authorizeFunctionRequest(req(), "chat");
+    const res = await authorizeFunctionRequest(req(), "calendar-oauth-callback");
     assertEquals(res, null);
+  });
+});
+
+Deno.test("rejects chat without a bearer token", async () => {
+  await withEnv(async () => {
+    const res = await authorizeFunctionRequest(req(), "chat");
+    assertEquals(res?.status, 401);
   });
 });
 

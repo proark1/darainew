@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Sparkles, Zap } from "lucide-react";
 
@@ -22,35 +21,24 @@ export function XPBadge({ amount, className, onComplete }: XPBadgeProps) {
   }, [onComplete]);
 
   return (
-    <AnimatePresence>
-      {isVisible && (
-        <motion.div
-          className={cn(
-            "fixed pointer-events-none z-[100] flex items-center gap-1.5",
-            "bg-gradient-to-r from-yellow-400 to-orange-500 text-white",
-            "px-3 py-1.5 rounded-full font-bold text-sm shadow-lg",
-            className,
-          )}
-          initial={{ opacity: 0, scale: 0.5, y: 0 }}
-          animate={{ opacity: 1, scale: 1, y: -20 }}
-          exit={{ opacity: 0, scale: 0.8, y: -60 }}
-          transition={{
-            duration: 0.5,
-            ease: [0.4, 0, 0.2, 1],
-          }}
-        >
-          <Zap className="w-4 h-4" />
-          <span>+{amount} XP</span>
-          <Sparkles className="w-3 h-3" />
-        </motion.div>
-      )}
-    </AnimatePresence>
+    isVisible && (
+      <div
+        className={cn(
+          "fixed pointer-events-none z-[100] flex items-center gap-1.5",
+          "bg-gradient-to-r from-yellow-400 to-orange-500 text-white",
+          "px-3 py-1.5 rounded-full font-bold text-sm shadow-lg xp-badge-pop",
+          className,
+        )}
+      >
+        <Zap className="w-4 h-4" />
+        <span>+{amount} XP</span>
+        <Sparkles className="w-3 h-3" />
+      </div>
+    )
   );
 }
 
 // Provider component to show XP badges globally
-import { createContext, useContext, useCallback, ReactNode } from "react";
-
 interface XPBadgeContextType {
   showXP: (amount: number, x?: number, y?: number) => void;
 }

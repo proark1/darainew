@@ -5,7 +5,6 @@ import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-qu
 import { toast } from "sonner";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { AnimatePresence, motion, MotionConfig } from "framer-motion";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { WorkspaceProvider } from "@/contexts/WorkspaceContext";
@@ -22,11 +21,10 @@ import { installGlobalErrorTelemetry } from "@/lib/telemetry";
 
 // Capture uncaught errors + unhandled rejections app-wide (once).
 installGlobalErrorTelemetry();
-import Landing from "@/pages/Landing";
-import CalendarCallback from "@/pages/CalendarCallback";
 import { lazy } from "react";
 import {
   LazyAuth,
+  LazyCalendarCallback,
   LazyForgotPassword,
   LazyResetPassword,
   LazyDashboard,
@@ -36,6 +34,7 @@ import {
   LazyTravelPage,
   LazyNotFound,
   LazyOnboarding,
+  LazyLanding,
   LazyIndex,
   PageFallback,
 } from "@/components/lazy";
@@ -148,130 +147,124 @@ function AppContent() {
       </a>
       <TopLoader />
       <NetworkStatusBanner />
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={location.pathname}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.15, ease: "easeOut" }}
-          className="min-h-screen"
-          id="main-content"
-          role="main"
-          tabIndex={-1}
-        >
-          <Suspense fallback={<PageFallback />}>
-            <Routes location={location}>
-              <Route
-                path="/"
-                element={
-                  <ProtectedRoute>
-                    <LazyIndex />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute>
-                    <LazyDashboard />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/contacts"
-                element={
-                  <ProtectedRoute>
-                    <LazyContactsPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/contracts"
-                element={
-                  <ProtectedRoute>
-                    <LazyContractsPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/finance"
-                element={
-                  <ProtectedRoute>
-                    <LazyFinancePage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/travel"
-                element={
-                  <ProtectedRoute>
-                    <LazyTravelPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/workspaces"
-                element={
-                  <ProtectedRoute>
-                    <LazyWorkspaces />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/activity"
-                element={
-                  <ProtectedRoute>
-                    <LazyActivity />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/landing"
-                element={
-                  <PublicRoute renderWhileLoading>
-                    <Landing />
-                  </PublicRoute>
-                }
-              />
-              <Route
-                path="/auth"
-                element={
-                  <PublicRoute>
-                    <LazyAuth />
-                  </PublicRoute>
-                }
-              />
-              <Route
-                path="/forgot-password"
-                element={
-                  <PublicRoute>
-                    <LazyForgotPassword />
-                  </PublicRoute>
-                }
-              />
-              <Route path="/reset-password" element={<LazyResetPassword />} />
-              <Route
-                path="/auth/calendar-callback"
-                element={
-                  <ProtectedRoute>
-                    <CalendarCallback />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/onboarding"
-                element={
-                  <ProtectedRoute requireOnboarding={false}>
-                    <LazyOnboarding />
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="*" element={<LazyNotFound />} />
-            </Routes>
-          </Suspense>
-        </motion.div>
-      </AnimatePresence>
+      <div
+        key={location.pathname}
+        className="min-h-screen route-fade"
+        id="main-content"
+        role="main"
+        tabIndex={-1}
+      >
+        <Suspense fallback={<PageFallback />}>
+          <Routes location={location}>
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <LazyIndex />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <LazyDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/contacts"
+              element={
+                <ProtectedRoute>
+                  <LazyContactsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/contracts"
+              element={
+                <ProtectedRoute>
+                  <LazyContractsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/finance"
+              element={
+                <ProtectedRoute>
+                  <LazyFinancePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/travel"
+              element={
+                <ProtectedRoute>
+                  <LazyTravelPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/workspaces"
+              element={
+                <ProtectedRoute>
+                  <LazyWorkspaces />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/activity"
+              element={
+                <ProtectedRoute>
+                  <LazyActivity />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/landing"
+              element={
+                <PublicRoute renderWhileLoading>
+                  <LazyLanding />
+                </PublicRoute>
+              }
+            />
+            <Route
+              path="/auth"
+              element={
+                <PublicRoute>
+                  <LazyAuth />
+                </PublicRoute>
+              }
+            />
+            <Route
+              path="/forgot-password"
+              element={
+                <PublicRoute>
+                  <LazyForgotPassword />
+                </PublicRoute>
+              }
+            />
+            <Route path="/reset-password" element={<LazyResetPassword />} />
+            <Route
+              path="/auth/calendar-callback"
+              element={
+                <ProtectedRoute>
+                  <LazyCalendarCallback />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/onboarding"
+              element={
+                <ProtectedRoute requireOnboarding={false}>
+                  <LazyOnboarding />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<LazyNotFound />} />
+          </Routes>
+        </Suspense>
+      </div>
     </>
   );
 }
@@ -287,11 +280,9 @@ const App = () => (
                 <DoriConversationProvider>
                   <Sonner position="top-center" />
                   <ErrorBoundary fallbackTitle="DarAI couldn't load">
-                    <MotionConfig reducedMotion="user">
-                      <BrowserRouter>
-                        <AppContent />
-                      </BrowserRouter>
-                    </MotionConfig>
+                    <BrowserRouter>
+                      <AppContent />
+                    </BrowserRouter>
                   </ErrorBoundary>
                 </DoriConversationProvider>
               </XPBadgeProvider>

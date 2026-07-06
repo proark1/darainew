@@ -19,7 +19,7 @@ export const FUNCTION_AUTH_MODES = {
   "calendar-sync-all": "service",
   "call-push-notification": "user",
   "cancel-subscription": "user",
-  chat: "public",
+  chat: "user",
   "chat-ai": "user",
   "conflict-detector": "public",
   "contact-insights": "user",
