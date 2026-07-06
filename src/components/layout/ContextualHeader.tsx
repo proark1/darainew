@@ -72,7 +72,7 @@ export function ContextualHeader({
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden h-9 w-9"
+              className="h-11 w-11 md:hidden"
               onClick={onOpenSearch}
               aria-label="Open command palette"
             >
@@ -98,7 +98,7 @@ export function ContextualHeader({
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 shrink-0"
+            className="h-11 w-11 shrink-0"
             onClick={onOpenMenu}
             aria-label="Open menu"
           >

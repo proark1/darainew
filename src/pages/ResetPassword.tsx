@@ -65,11 +65,11 @@ export default function ResetPassword() {
       return;
     }
 
-    if (password.length < 6) {
+    if (password.length < 8) {
       toast({
         variant: "destructive",
         title: t("auth.error") || "Error",
-        description: t("auth.passwordTooShort") || "Password must be at least 6 characters",
+        description: t("auth.passwordTooShort") || "Password must be at least 8 characters",
       });
       return;
     }
@@ -100,14 +100,6 @@ export default function ResetPassword() {
 
   return (
     <main className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Floating orbs */}
-      <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-primary/5 rounded-full blur-3xl animate-pulse" />
-      <div
-        className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-primary/8 rounded-full blur-3xl animate-pulse"
-        style={{ animationDelay: "1s" }}
-      />
-
-      <h1 className="sr-only">Set new password</h1>
       <motion.div
         className="w-full max-w-md relative z-10"
         initial={{ opacity: 0, y: 20 }}
@@ -138,9 +130,9 @@ export default function ResetPassword() {
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mx-auto">
                 <CheckCircle className="w-8 h-8 text-primary" />
               </div>
-              <h2 className="text-xl font-semibold text-foreground">
+              <h1 className="text-xl font-semibold text-foreground">
                 {t("auth.passwordReset") || "Password reset!"}
-              </h2>
+              </h1>
               <p className="text-muted-foreground text-sm">
                 {t("auth.redirectingToLogin") || "Redirecting you to login..."}
               </p>
@@ -148,9 +140,9 @@ export default function ResetPassword() {
           ) : (
             <>
               <div className="text-center mb-6">
-                <h2 className="text-xl font-semibold text-foreground mb-2">
+                <h1 className="text-xl font-semibold text-foreground mb-2">
                   {t("auth.setNewPassword") || "Set new password"}
-                </h2>
+                </h1>
                 <p className="text-muted-foreground text-sm">
                   {t("auth.enterNewPassword") || "Enter your new password below"}
                 </p>
@@ -158,26 +150,27 @@ export default function ResetPassword() {
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="space-y-3">
-                  <label className="text-sm font-medium text-foreground">
+                  <label htmlFor="new-password" className="text-sm font-medium text-foreground">
                     {t("auth.newPassword") || "New password"}
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                     <Input
+                      id="new-password"
                       type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="pl-12 pr-12 h-12 text-base"
+                      className="h-12 pl-12 pr-12 text-base sm:h-12"
                       autoComplete="new-password"
                       required
-                      minLength={6}
+                      minLength={8}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       aria-label={showPassword ? "Hide password" : "Show password"}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
                       {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
@@ -202,22 +195,23 @@ export default function ResetPassword() {
                 </div>
 
                 <div className="space-y-3">
-                  <label className="text-sm font-medium text-foreground">
+                  <label htmlFor="confirm-password" className="text-sm font-medium text-foreground">
                     {t("auth.confirmPassword") || "Confirm password"}
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                     <Input
+                      id="confirm-password"
                       type={showPassword ? "text" : "password"}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="••••••••"
-                      className={`pl-12 pr-12 h-12 text-base ${
+                      className={`h-12 pl-12 pr-12 text-base sm:h-12 ${
                         passwordsMatch === false ? "border-red-500 focus-visible:ring-red-500" : ""
                       }`}
                       autoComplete="new-password"
                       required
-                      minLength={6}
+                      minLength={8}
                     />
                     {passwordsMatch !== null && (
                       <div className="absolute right-4 top-1/2 -translate-y-1/2">

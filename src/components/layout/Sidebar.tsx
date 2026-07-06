@@ -109,6 +109,7 @@ function NavItem({
   const btn = (
     <Button
       variant={isActive ? "secondary" : "ghost"}
+      aria-label={collapsed ? label : undefined}
       className={cn(
         "w-full h-9 gap-3 relative",
         collapsed ? "justify-center px-0" : "justify-start",
@@ -218,9 +219,8 @@ export function Sidebar({
   }, [user]);
 
   const handlePanelClick = (panel: ActivePanel) => {
-    if (onPanelChange) {
-      onPanelChange(activePanel === panel ? "tasks" : panel);
-    }
+    if (!onPanelChange || activePanel === panel) return;
+    onPanelChange(panel);
   };
 
   const label = (item: NavConfigItem) => resolveNavLabel(item, t);
@@ -259,6 +259,7 @@ export function Sidebar({
           <div className="px-2 pt-2">
             <Button
               variant="default"
+              aria-label={t("nav.todayFocus")}
               className={cn("w-full gap-2", collapsed ? "justify-center px-0" : "justify-start")}
               onClick={onOpenTodayFocus}
             >
@@ -364,6 +365,8 @@ export function Sidebar({
           {onSignOut && (
             <Button
               variant="ghost"
+              aria-label={t("nav.signOut")}
+              title={collapsed ? t("nav.signOut") : undefined}
               className={cn(
                 "w-full h-9 gap-3 text-muted-foreground hover:text-destructive",
                 collapsed ? "justify-center px-0" : "justify-start",

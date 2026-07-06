@@ -213,8 +213,8 @@ export const MOBILE_PRIMARY_TABS: {
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
   { id: "calendar", label: "Plan", icon: Calendar },
   { id: "dori", label: "Dori", icon: null, isCenter: true },
-  { id: "contacts", label: "People", icon: Users },
-  { id: "health", label: "Life", icon: Heart },
+  { id: "contacts", label: "Contacts", icon: Users },
+  { id: "health", label: "Health", icon: Heart },
 ];
 
 /** Flat list of every leaf nav item (excludes Settings). */

@@ -128,7 +128,7 @@ export const DoriBar = memo(function DoriBar({ onVoiceMode, hidden }: DoriBarPro
                 type="button"
                 onClick={onVoiceMode}
                 aria-label="Full voice mode"
-                className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <Headphones className="w-3.5 h-3.5" />
               </button>
@@ -136,7 +136,7 @@ export const DoriBar = memo(function DoriBar({ onVoiceMode, hidden }: DoriBarPro
                 type="button"
                 onClick={expand}
                 aria-label="Open full assistant"
-                className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <Maximize2 className="w-3.5 h-3.5" />
               </button>
@@ -144,7 +144,7 @@ export const DoriBar = memo(function DoriBar({ onVoiceMode, hidden }: DoriBarPro
                 type="button"
                 onClick={close}
                 aria-label="Close Dori conversation"
-                className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -199,7 +199,7 @@ export const DoriBar = memo(function DoriBar({ onVoiceMode, hidden }: DoriBarPro
           type="button"
           onClick={() => (isOpen ? close() : open())}
           aria-label={isOpen ? "Hide Dori conversation" : "Show Dori conversation"}
-          className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center shrink-0 overflow-hidden"
+          className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-primary to-accent"
         >
           {isProcessing ? (
             <Loader2 className="w-4 h-4 text-primary-foreground animate-spin" />
@@ -242,7 +242,7 @@ export const DoriBar = memo(function DoriBar({ onVoiceMode, hidden }: DoriBarPro
           aria-label={isListening ? "Stop listening" : "Talk to Dori"}
           aria-pressed={isListening}
           className={cn(
-            "shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors",
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors",
             isListening
               ? "bg-destructive/15 text-destructive animate-pulse"
               : "text-muted-foreground hover:text-foreground hover:bg-muted",
@@ -256,7 +256,7 @@ export const DoriBar = memo(function DoriBar({ onVoiceMode, hidden }: DoriBarPro
             type="button"
             onClick={() => ask(text)}
             aria-label="Send to Dori"
-            className="shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:opacity-90 transition-opacity"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"
           >
             <Send className="w-4 h-4" />
           </button>

@@ -161,7 +161,11 @@ function LogoMark({ className = "h-9 w-9" }: { className?: string }) {
 
 function ProductPreview() {
   return (
-    <div className="relative mx-auto w-full max-w-6xl" aria-label="DarAI product preview">
+    <Link
+      to="/auth?mode=signup"
+      className="relative mx-auto block w-full max-w-6xl rounded-[8px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      aria-label="Create your DarAI account from the product preview"
+    >
       <div className="relative max-h-[520px] overflow-hidden rounded-[8px] border border-border bg-card shadow-2xl shadow-foreground/10">
         <div className="flex h-10 items-center justify-between border-b border-border bg-muted/40 px-4">
           <div className="flex items-center gap-2">
@@ -175,7 +179,7 @@ function ProductPreview() {
         </div>
 
         <div className="grid min-h-[480px] grid-cols-1 bg-background lg:grid-cols-[172px_1fr] 2xl:grid-cols-[188px_1fr_300px]">
-          <aside className="hidden border-r border-border bg-muted/25 p-4 lg:block">
+          <div className="hidden border-r border-border bg-muted/25 p-4 lg:block">
             <div className="mb-8 flex items-center gap-2">
               <LogoMark className="h-8 w-8" />
               <div>
@@ -205,9 +209,9 @@ function ProductPreview() {
                 </div>
               ))}
             </div>
-          </aside>
+          </div>
 
-          <main className="p-4 sm:p-6">
+          <div className="p-4 sm:p-6">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="mb-1 text-sm text-muted-foreground">Today</p>
@@ -298,9 +302,9 @@ function ProductPreview() {
                 </div>
               </div>
             </div>
-          </main>
+          </div>
 
-          <aside className="hidden border-l border-border bg-muted/20 p-6 2xl:block">
+          <div className="hidden border-l border-border bg-muted/20 p-6 2xl:block">
             <div className="mb-5 flex items-center gap-3">
               <div className="h-12 w-12 overflow-hidden rounded-full border border-border bg-background">
                 <img
@@ -339,20 +343,24 @@ function ProductPreview() {
                 </div>
               ))}
             </div>
-          </aside>
+          </div>
         </div>
         <div
           className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-card to-transparent"
           aria-hidden="true"
         />
       </div>
-    </div>
+    </Link>
   );
 }
 
 function MobileAssistantPreview() {
   return (
-    <div className="mx-auto w-full max-w-sm rounded-[8px] border border-border bg-card p-4 text-left shadow-xl shadow-foreground/10">
+    <Link
+      to="/auth?mode=signup"
+      className="mx-auto block w-full max-w-sm rounded-[8px] border border-border bg-card p-4 text-left shadow-xl shadow-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      aria-label="Create your DarAI account from the mobile assistant preview"
+    >
       <div className="mb-4 flex items-center gap-3">
         <img
           src={doriFish}
@@ -377,7 +385,7 @@ function MobileAssistantPreview() {
           ),
         )}
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -386,7 +394,7 @@ export default function Landing() {
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <header className="fixed inset-x-0 top-0 z-50 border-b border-border/70 bg-background/90 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
-          <Link to="/landing" className="flex items-center gap-3" aria-label="DarAI home">
+          <Link to="/landing" className="flex h-11 items-center gap-3" aria-label="DarAI home">
             <LogoMark />
             <span className="text-lg font-semibold">DarAI</span>
           </Link>
@@ -396,7 +404,7 @@ export default function Landing() {
               <a
                 key={item.href}
                 href={item.href}
-                className="transition-colors hover:text-foreground"
+                className="inline-flex h-11 items-center transition-colors hover:text-foreground"
               >
                 {item.label}
               </a>
@@ -404,12 +412,12 @@ export default function Landing() {
           </nav>
 
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" asChild>
+            <Button variant="ghost" size="sm" className="h-11 min-h-[44px] text-sm" asChild>
               <Link to="/auth">Log in</Link>
             </Button>
-            <Button size="sm" className="gap-1" asChild>
-              <Link to="/auth">
-                Start <ArrowRight className="h-3.5 w-3.5" />
+            <Button size="sm" className="h-11 min-h-[44px] gap-1 text-sm" asChild>
+              <Link to="/auth?mode=signup">
+                Sign up <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </Button>
           </div>
@@ -454,7 +462,7 @@ export default function Landing() {
 
               <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row lg:justify-start">
                 <Button size="lg" className="w-full gap-2 sm:w-auto" asChild>
-                  <Link to="/auth">
+                  <Link to="/auth?mode=signup">
                     <Sparkles className="h-4 w-4" />
                     Start with Dori
                   </Link>
@@ -471,13 +479,11 @@ export default function Landing() {
                 </Button>
               </div>
 
-              <div className="mt-5 hidden flex-wrap items-center justify-center gap-2 text-sm text-muted-foreground sm:flex lg:justify-start">
+              <div className="mt-5 hidden flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-muted-foreground sm:flex lg:justify-start">
                 {["Start free", "Private workspace", "Built for daily follow-through"].map(
                   (item) => (
-                    <span
-                      key={item}
-                      className="rounded-full border border-border bg-background px-3 py-1 shadow-sm"
-                    >
+                    <span key={item} className="inline-flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
                       {item}
                     </span>
                   ),
@@ -536,23 +542,25 @@ export default function Landing() {
             viewport={{ once: true, margin: "-80px" }}
           >
             {features.map((feature) => (
-              <motion.div
-                key={feature.title}
-                variants={stagger.item}
-                className="rounded-[8px] border border-border bg-card p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg"
-              >
-                <div
-                  className={`mb-5 inline-flex h-11 w-11 items-center justify-center rounded-[8px] border ${feature.className}`}
+              <motion.div key={feature.title} variants={stagger.item}>
+                <Link
+                  to="/auth?mode=signup"
+                  className="block h-full rounded-[8px] border border-border bg-card p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  aria-label={`Start with Dori: ${feature.title}`}
                 >
-                  <feature.icon className="h-5 w-5" />
-                </div>
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="font-semibold">{feature.title}</h3>
-                  <span className="rounded-full border border-border bg-muted px-2 py-1 text-xs text-muted-foreground">
-                    {feature.detail}
-                  </span>
-                </div>
-                <p className="text-sm leading-6 text-muted-foreground">{feature.description}</p>
+                  <div
+                    className={`mb-5 inline-flex h-11 w-11 items-center justify-center rounded-[8px] border ${feature.className}`}
+                  >
+                    <feature.icon className="h-5 w-5" />
+                  </div>
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h3 className="font-semibold">{feature.title}</h3>
+                    <span className="rounded-full border border-border bg-muted px-2 py-1 text-xs text-muted-foreground">
+                      {feature.detail}
+                    </span>
+                  </div>
+                  <p className="text-sm leading-6 text-muted-foreground">{feature.description}</p>
+                </Link>
               </motion.div>
             ))}
           </motion.div>
@@ -622,8 +630,8 @@ export default function Landing() {
               },
               {
                 icon: Shield,
-                title: "Secure gateway pattern",
-                desc: "API traffic routes through a controlled service layer.",
+                title: "Protected app access",
+                desc: "Your account gates access before personal modules can load.",
               },
               {
                 icon: Mail,
@@ -632,8 +640,8 @@ export default function Landing() {
               },
               {
                 icon: Clock,
-                title: "Operational checks",
-                desc: "Schedulers, health endpoints, and CI checks keep releases visible.",
+                title: "Release checks",
+                desc: "Health checks and CI keep issues visible before they reach daily use.",
               },
             ].map((item) => (
               <div
@@ -663,7 +671,7 @@ export default function Landing() {
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <Button size="lg" className="w-full gap-2 sm:w-auto" asChild>
-                  <Link to="/auth">
+                  <Link to="/auth?mode=signup">
                     <Sparkles className="h-4 w-4" />
                     Start with Dori
                   </Link>
@@ -711,10 +719,10 @@ export default function Landing() {
             <span>&copy; {new Date().getFullYear()} DarAI. Built for busy minds.</span>
           </div>
           <div className="flex gap-4">
-            <Link to="/auth" className="hover:text-foreground">
+            <Link to="/auth" className="inline-flex min-h-[44px] items-center hover:text-foreground">
               Log in
             </Link>
-            <a href="#trust" className="hover:text-foreground">
+            <a href="#trust" className="inline-flex min-h-[44px] items-center hover:text-foreground">
               Trust
             </a>
           </div>

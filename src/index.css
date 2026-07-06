@@ -27,7 +27,7 @@ body::before {
     /* Quran font variable - can be changed dynamically */
     --quran-font: "Amiri";
 
-    /* Light theme — Emerald on clean cool-neutral */
+    /* Light theme — contrast-safe emerald on clean cool-neutral */
     --background: 0 0% 98%;
     --foreground: 215 28% 14%;
 
@@ -37,7 +37,7 @@ body::before {
     --popover: 0 0% 100%;
     --popover-foreground: 215 28% 14%;
 
-    --primary: 160 84% 39%;
+    --primary: 163 94% 24%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 160 16% 95%;
@@ -46,7 +46,7 @@ body::before {
     --muted: 210 16% 96%;
     --muted-foreground: 215 14% 45%;
 
-    --accent: 173 80% 40%;
+    --accent: 173 80% 28%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 51%;
@@ -54,14 +54,14 @@ body::before {
 
     --border: 214 20% 90%;
     --input: 214 20% 90%;
-    --ring: 160 84% 39%;
+    --ring: 163 94% 24%;
 
     --radius: 1rem;
 
     --glass: 0 0% 100%;
     --glass-border: 214 20% 90%;
-    --glow-primary: 160 84% 39%;
-    --glow-accent: 173 80% 40%;
+    --glow-primary: 163 94% 24%;
+    --glow-accent: 173 80% 28%;
 
     --ghost-bg: 200 45% 5%;
     --ghost-primary: 160 84% 45%;
@@ -73,12 +73,12 @@ body::before {
 
     --sidebar-background: 180 14% 98%;
     --sidebar-foreground: 215 28% 14%;
-    --sidebar-primary: 160 84% 39%;
+    --sidebar-primary: 163 94% 24%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 160 25% 94%;
     --sidebar-accent-foreground: 160 60% 20%;
     --sidebar-border: 214 20% 90%;
-    --sidebar-ring: 160 84% 39%;
+    --sidebar-ring: 163 94% 24%;
 
     /* WhatsApp-style chat colors */
     --chat-bg: 210 16% 96%;
@@ -432,6 +432,54 @@ body::before {
   opacity: 1;
 }
 
+.route-fade {
+  animation: route-fade 0.15s ease-out;
+}
+
+@keyframes route-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.route-top-loader {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 9999;
+  height: 2px;
+  overflow: hidden;
+  animation: route-top-loader-fade 0.4s ease-out forwards;
+}
+
+.route-top-loader__bar {
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)), hsl(var(--primary)));
+  animation: route-top-loader-fill 0.35s ease-out forwards;
+}
+
+@keyframes route-top-loader-fill {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes route-top-loader-fade {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 /* Shimmer Loading Effect */
 .shimmer {
   background: linear-gradient(
@@ -566,6 +614,29 @@ body::before {
 /* XP Floating Badge */
 .xp-float {
   animation: xp-float 1.5s ease-out forwards;
+}
+
+.xp-badge-pop {
+  animation: xp-badge-pop 1.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes xp-badge-pop {
+  0% {
+    transform: translateY(0) scale(0.5);
+    opacity: 0;
+  }
+  18% {
+    transform: translateY(-20px) scale(1);
+    opacity: 1;
+  }
+  70% {
+    transform: translateY(-20px) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-60px) scale(0.8);
+    opacity: 0;
+  }
 }
 
 @keyframes xp-float {

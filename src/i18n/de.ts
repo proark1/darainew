@@ -114,6 +114,7 @@ const de: Record<string, string> = {
   "common.create": "Erstellen",
   "common.update": "Aktualisieren",
   "common.remove": "Entfernen",
+  "common.optional": "optional",
 
   // Recipe Dialog
   "recipe.name": "Rezeptname",
@@ -623,6 +624,9 @@ const de: Record<string, string> = {
   "auth.yourName": "Dein Name",
   "auth.email": "E-Mail",
   "auth.password": "Passwort",
+  "auth.welcomeTitle": "Willkommen zurück",
+  "auth.createAccountTitle": "Erstelle dein DarAI-Konto",
+  "auth.authSubtitle": "Dein KI-gestütztes Life-Dashboard",
   "auth.signIn": "Anmelden",
   "auth.createAccount": "Konto erstellen",
   "auth.dontHaveAccount": "Noch kein Konto? Registrieren",
@@ -638,6 +642,8 @@ const de: Record<string, string> = {
   "auth.forgotPassword": "Passwort vergessen?",
   "auth.resetInstructions": "Gib deine E-Mail ein und wir senden dir einen Link zum Zurücksetzen",
   "auth.sendResetLink": "Link zum Zurücksetzen senden",
+  "auth.emailSent": "E-Mail gesendet",
+  "auth.checkInbox": "Überprüfe dein Postfach auf den Link zum Zurücksetzen",
   "auth.checkYourEmail": "Überprüfe deine E-Mails",
   "auth.resetLinkSent": "Wir haben dir einen Link zum Zurücksetzen des Passworts gesendet",
   "auth.backToLogin": "Zurück zur Anmeldung",
@@ -646,6 +652,16 @@ const de: Record<string, string> = {
   "auth.confirmPassword": "Passwort bestätigen",
   "auth.passwordUpdated": "Passwort aktualisiert",
   "auth.passwordUpdatedDesc": "Dein Passwort wurde erfolgreich aktualisiert.",
+  "auth.error": "Fehler",
+  "auth.passwordsDontMatch": "Passwörter stimmen nicht überein",
+  "auth.passwordTooShort": "Das Passwort muss mindestens 8 Zeichen lang sein",
+  "auth.passwordRequirement": "Mindestens 8 Zeichen",
+  "auth.canNowLogin": "Du kannst dich jetzt mit deinem neuen Passwort anmelden",
+  "auth.passwordReset": "Passwort zurückgesetzt!",
+  "auth.redirectingToLogin": "Du wirst zur Anmeldung weitergeleitet...",
+  "auth.setNewPassword": "Neues Passwort festlegen",
+  "auth.enterNewPassword": "Gib unten dein neues Passwort ein",
+  "auth.updatePassword": "Passwort aktualisieren",
 
   // Life Score
   "lifeScore.title": "Lebens-Score",

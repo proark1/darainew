@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,20 +7,28 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Sparkles, Mail, Lock, User, ArrowRight, Eye, EyeOff } from "lucide-react";
-import { useMemo } from "react";
 
 export default function Auth() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const authMode = searchParams.get("mode");
   const { toast } = useToast();
   const { signIn, signUp } = useAuth();
   const { t } = useLanguage();
 
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] = useState(authMode !== "signup");
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const displayNameId = "auth-display-name";
+  const emailId = "auth-email";
+  const passwordId = "auth-password";
+
+  useEffect(() => {
+    setIsLogin(authMode !== "signup");
+  }, [authMode]);
 
   const passwordStrength = useMemo(() => {
     if (isLogin || !password) return null;
@@ -94,27 +102,14 @@ export default function Auth() {
     }
   };
 
+  const handleModeToggle = () => {
+    const nextIsLogin = !isLogin;
+    setIsLogin(nextIsLogin);
+    setSearchParams(nextIsLogin ? {} : { mode: "signup" }, { replace: true });
+  };
+
   return (
     <main className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Floating gradient orbs */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <motion.div
-          className="absolute w-72 h-72 rounded-full opacity-20 blur-3xl"
-          style={{ background: "radial-gradient(circle, hsl(var(--primary)), transparent)" }}
-          animate={{ x: [0, 30, -20, 0], y: [0, -40, 20, 0] }}
-          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-          initial={{ top: "10%", left: "15%" }}
-        />
-        <motion.div
-          className="absolute w-64 h-64 rounded-full opacity-15 blur-3xl"
-          style={{ background: "radial-gradient(circle, hsl(var(--accent)), transparent)" }}
-          animate={{ x: [0, -25, 35, 0], y: [0, 30, -25, 0] }}
-          transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
-          initial={{ bottom: "15%", right: "10%" }}
-        />
-      </div>
-
-      <h1 className="sr-only">Sign in to DarAI</h1>
       <motion.div
         className="w-full max-w-md relative z-10"
         initial={{ opacity: 0, y: 20 }}
@@ -137,8 +132,16 @@ export default function Auth() {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.3 }}
           >
-            Your AI-powered life dashboard
+            {t("auth.authSubtitle")}
           </motion.p>
+          <motion.h1
+            className="mt-3 text-center text-2xl font-semibold text-foreground"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.35 }}
+          >
+            {isLogin ? t("auth.welcomeTitle") : t("auth.createAccountTitle")}
+          </motion.h1>
         </div>
 
         {/* Auth Card */}
@@ -151,17 +154,19 @@ export default function Auth() {
           <form onSubmit={handleSubmit} className="space-y-6">
             {!isLogin && (
               <div className="space-y-3">
-                <label className="text-sm font-medium text-foreground">
-                  {t("auth.displayName")}
+                <label htmlFor={displayNameId} className="text-sm font-medium text-foreground">
+                  {t("auth.displayName")}{" "}
+                  <span className="text-muted-foreground">({t("common.optional")})</span>
                 </label>
                 <div className="relative">
                   <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
+                    id={displayNameId}
                     type="text"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
                     placeholder={t("auth.yourName")}
-                    className="pl-12 h-12 text-base"
+                    className="h-12 pl-12 text-base sm:h-12"
                     autoComplete="name"
                   />
                 </div>
@@ -169,15 +174,18 @@ export default function Auth() {
             )}
 
             <div className="space-y-3">
-              <label className="text-sm font-medium text-foreground">{t("auth.email")}</label>
+              <label htmlFor={emailId} className="text-sm font-medium text-foreground">
+                {t("auth.email")}
+              </label>
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                 <Input
+                  id={emailId}
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
-                  className="pl-12 h-12 text-base"
+                  className="h-12 pl-12 text-base sm:h-12"
                   autoComplete="email"
                   required
                 />
@@ -186,9 +194,14 @@ export default function Auth() {
 
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-foreground">{t("auth.password")}</label>
+                <label htmlFor={passwordId} className="text-sm font-medium text-foreground">
+                  {t("auth.password")}
+                </label>
                 {isLogin && (
-                  <Link to="/forgot-password" className="text-xs text-primary hover:underline">
+                  <Link
+                    to="/forgot-password"
+                    className="inline-flex min-h-[44px] items-center text-xs text-primary hover:underline"
+                  >
                     {t("auth.forgotPassword") || "Forgot password?"}
                   </Link>
                 )}
@@ -196,20 +209,21 @@ export default function Auth() {
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                 <Input
+                  id={passwordId}
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="pl-12 pr-12 h-12 text-base"
+                  className="h-12 pl-12 pr-12 text-base sm:h-12"
                   autoComplete={isLogin ? "current-password" : "new-password"}
                   required
-                  minLength={6}
+                  minLength={8}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -231,6 +245,9 @@ export default function Auth() {
                   </span>
                 </div>
               )}
+              {!isLogin && !passwordStrength && (
+                <p className="text-xs text-muted-foreground">{t("auth.passwordRequirement")}</p>
+              )}
             </div>
 
             <Button type="submit" className="w-full gap-2 h-12 text-base mt-2" loading={loading}>
@@ -242,8 +259,8 @@ export default function Auth() {
           <div className="mt-6 text-center">
             <button
               type="button"
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-sm text-muted-foreground hover:text-primary transition-colors"
+              onClick={handleModeToggle}
+              className="inline-flex min-h-[44px] items-center text-sm text-muted-foreground transition-colors hover:text-primary"
             >
               {isLogin ? t("auth.dontHaveAccount") : t("auth.alreadyHaveAccount")}
             </button>

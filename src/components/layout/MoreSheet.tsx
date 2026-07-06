@@ -165,7 +165,7 @@ export function MoreSheet({ open, onOpenChange, onNavigate, activePanel }: MoreS
                       )}
                     >
                       <item.icon className="w-5 h-5" />
-                      <span className="text-xs font-medium truncate w-full text-center">
+                      <span className="w-full text-center text-xs font-medium leading-tight">
                         {labelOf(item)}
                       </span>
                     </motion.button>

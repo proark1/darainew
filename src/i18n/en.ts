@@ -117,6 +117,7 @@ const en: Record<string, string> = {
   "common.create": "Create",
   "common.update": "Update",
   "common.remove": "Remove",
+  "common.optional": "optional",
 
   // Recipe Dialog
   "recipe.name": "Recipe Name",
@@ -625,6 +626,9 @@ const en: Record<string, string> = {
   "auth.yourName": "Your name",
   "auth.email": "Email",
   "auth.password": "Password",
+  "auth.welcomeTitle": "Welcome back",
+  "auth.createAccountTitle": "Create your DarAI account",
+  "auth.authSubtitle": "Your AI-powered life dashboard",
   "auth.signIn": "Sign In",
   "auth.createAccount": "Create Account",
   "auth.dontHaveAccount": "Don't have an account? Sign up",
@@ -640,6 +644,8 @@ const en: Record<string, string> = {
   "auth.forgotPassword": "Forgot password?",
   "auth.resetInstructions": "Enter your email and we'll send you a reset link",
   "auth.sendResetLink": "Send reset link",
+  "auth.emailSent": "Email sent",
+  "auth.checkInbox": "Check your inbox for the reset link",
   "auth.checkYourEmail": "Check your email",
   "auth.resetLinkSent": "We've sent a password reset link to your email",
   "auth.backToLogin": "Back to login",
@@ -648,6 +654,16 @@ const en: Record<string, string> = {
   "auth.confirmPassword": "Confirm Password",
   "auth.passwordUpdated": "Password Updated",
   "auth.passwordUpdatedDesc": "Your password has been successfully updated.",
+  "auth.error": "Error",
+  "auth.passwordsDontMatch": "Passwords do not match",
+  "auth.passwordTooShort": "Password must be at least 8 characters",
+  "auth.passwordRequirement": "At least 8 characters",
+  "auth.canNowLogin": "You can now log in with your new password",
+  "auth.passwordReset": "Password reset!",
+  "auth.redirectingToLogin": "Redirecting you to login...",
+  "auth.setNewPassword": "Set new password",
+  "auth.enterNewPassword": "Enter your new password below",
+  "auth.updatePassword": "Update password",
 
   // Life Score
   "lifeScore.title": "Life Score",

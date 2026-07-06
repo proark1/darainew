@@ -113,12 +113,12 @@ function applyColorScheme(scheme: ColorScheme) {
   const root = document.documentElement;
 
   const schemes: Record<ColorScheme, { primary: string; accent: string; ghost: string }> = {
-    emerald: { primary: "160 84% 39%", accent: "173 80% 40%", ghost: "160 84% 45%" },
-    cyan: { primary: "187 94% 43%", accent: "270 60% 50%", ghost: "270 80% 60%" },
-    purple: { primary: "270 60% 50%", accent: "187 94% 43%", ghost: "270 80% 60%" },
-    green: { primary: "142 71% 45%", accent: "187 94% 43%", ghost: "142 80% 50%" },
-    orange: { primary: "25 95% 53%", accent: "270 60% 50%", ghost: "25 90% 55%" },
-    pink: { primary: "330 80% 55%", accent: "270 60% 50%", ghost: "330 85% 60%" },
+    emerald: { primary: "163 94% 24%", accent: "173 80% 28%", ghost: "160 84% 35%" },
+    cyan: { primary: "188 94% 30%", accent: "270 60% 38%", ghost: "270 80% 44%" },
+    purple: { primary: "270 60% 38%", accent: "188 94% 30%", ghost: "270 80% 44%" },
+    green: { primary: "142 70% 30%", accent: "188 94% 30%", ghost: "142 80% 34%" },
+    orange: { primary: "25 95% 36%", accent: "270 60% 38%", ghost: "25 90% 40%" },
+    pink: { primary: "330 80% 36%", accent: "270 60% 38%", ghost: "330 85% 42%" },
   };
 
   const colors = schemes[scheme];

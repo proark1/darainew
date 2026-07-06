@@ -1,5 +1,20 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { type Language, SUPPORTED_LANGUAGES, translate } from "@/i18n";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  EN_TRANSLATIONS,
+  type Language,
+  loadTranslations,
+  SUPPORTED_LANGUAGES,
+  translate,
+  type TranslationBundle,
+} from "@/i18n";
 
 interface LanguageContextType {
   language: Language;
@@ -18,6 +33,23 @@ function readInitialLanguage(): Language {
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>(readInitialLanguage);
+  const [messages, setMessages] = useState<TranslationBundle>(EN_TRANSLATIONS);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void loadTranslations(language)
+      .then((loadedMessages) => {
+        if (!cancelled) setMessages(loadedMessages);
+      })
+      .catch(() => {
+        if (!cancelled) setMessages(EN_TRANSLATIONS);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [language]);
 
   const setLanguage = useCallback((lang: Language) => {
     setLanguageState(lang);
@@ -28,7 +60,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const t = useCallback((key: string) => translate(language, key), [language]);
+  const t = useCallback((key: string) => translate(messages, key), [messages]);
 
   const value = useMemo(() => ({ language, setLanguage, t }), [language, setLanguage, t]);
 

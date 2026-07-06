@@ -45,14 +45,6 @@ export default function ForgotPassword() {
 
   return (
     <main className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Floating orbs */}
-      <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-primary/5 rounded-full blur-3xl animate-pulse" />
-      <div
-        className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-primary/8 rounded-full blur-3xl animate-pulse"
-        style={{ animationDelay: "1s" }}
-      />
-
-      <h1 className="sr-only">Reset your password</h1>
       <motion.div
         className="w-full max-w-md relative z-10"
         initial={{ opacity: 0, y: 20 }}
@@ -83,9 +75,9 @@ export default function ForgotPassword() {
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mx-auto">
                 <CheckCircle className="w-8 h-8 text-primary" />
               </div>
-              <h2 className="text-xl font-semibold text-foreground">
+              <h1 className="text-xl font-semibold text-foreground">
                 {t("auth.checkYourEmail") || "Check your email"}
-              </h2>
+              </h1>
               <p className="text-muted-foreground text-sm">
                 {t("auth.resetLinkSent") || `We've sent a password reset link to ${email}`}
               </p>
@@ -99,9 +91,9 @@ export default function ForgotPassword() {
           ) : (
             <>
               <div className="text-center mb-6">
-                <h2 className="text-xl font-semibold text-foreground mb-2">
+                <h1 className="text-xl font-semibold text-foreground mb-2">
                   {t("auth.forgotPassword") || "Forgot password?"}
-                </h2>
+                </h1>
                 <p className="text-muted-foreground text-sm">
                   {t("auth.resetInstructions") ||
                     "Enter your email and we'll send you a reset link"}
@@ -110,17 +102,18 @@ export default function ForgotPassword() {
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="space-y-3">
-                  <label className="text-sm font-medium text-foreground">
+                  <label htmlFor="forgot-email" className="text-sm font-medium text-foreground">
                     {t("auth.email") || "Email"}
                   </label>
                   <div className="relative">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                     <Input
+                      id="forgot-email"
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@example.com"
-                      className="pl-12 h-12 text-base"
+                      className="h-12 pl-12 text-base sm:h-12"
                       autoComplete="email"
                       required
                     />
@@ -135,7 +128,7 @@ export default function ForgotPassword() {
               <div className="mt-6 text-center">
                 <Link
                   to="/auth"
-                  className="text-sm text-muted-foreground hover:text-primary transition-colors inline-flex items-center gap-1"
+                  className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-primary"
                 >
                   <ArrowLeft className="w-4 h-4" />
                   {t("auth.backToLogin") || "Back to login"}
