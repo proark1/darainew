@@ -32,6 +32,28 @@ export function isTelegramQuickCommand(text: string, command: TelegramQuickComma
   return (TELEGRAM_QUICK_COMMAND_ALIASES[command] as readonly string[]).includes(normalized);
 }
 
+// Transcript-only mode. A plain voice note is transcribed *and* acted on; these
+// commands switch to "just give me the text back" and skip the action pipeline.
+export const TELEGRAM_TRANSCRIBE_ALIASES = [
+  "transcript",
+  "transcribe",
+  "transkript",
+  "transkribiere",
+  "transkribieren",
+  "stt",
+] as const;
+
+/**
+ * True for "/transkript", "/transcribe@darai_bot", "/transcript bitte", … —
+ * the leading slash is required so ordinary chat containing the word
+ * "Transkript" never silently suppresses an action.
+ */
+export function isTelegramTranscribeCommand(text: string): boolean {
+  if (!text.trim().startsWith("/")) return false;
+  const normalized = normalizeTelegramCommand(text);
+  return (TELEGRAM_TRANSCRIBE_ALIASES as readonly string[]).includes(normalized);
+}
+
 export const TELEGRAM_COMMANDS = [
   { command: "me", description: "🌤 Your day — digest with overdue, today, tomorrow" },
   { command: "cockpit", description: "🕹 Open the Dori assistant cockpit" },
@@ -103,6 +125,8 @@ export const TELEGRAM_COMMANDS = [
   { command: "chores", description: "🧹 Recurring household chores" },
   { command: "quiet", description: "Quiet hours — /quiet on|off" },
   { command: "voice", description: "Voice replies — /voice on|off" },
+  { command: "transcript", description: "📝 Voice → text only, no action taken" },
+  { command: "transkript", description: "📝 Alias for /transcript" },
   { command: "linkme", description: "Link your Telegram to your Dori user" },
   { command: "linkworkspace", description: "Link this group to a workspace" },
   // Phase 4: new gap-closure commands
@@ -140,6 +164,7 @@ export const TELEGRAM_PRIVATE_COMMANDS = [
   { command: "focus", description: "Focus mode on/off" },
   { command: "undo", description: "Undo the last action" },
   { command: "voice", description: "Voice replies on/off" },
+  { command: "transcript", description: "Voice note to text only, no action" },
   { command: "lang", description: "Switch language de/en" },
   { command: "help", description: "Show Telegram help" },
 ] as const satisfies readonly TelegramBotCommand[];
@@ -157,6 +182,7 @@ export const TELEGRAM_PRIVATE_COMMANDS_DE = [
   { command: "focus", description: "Fokusmodus ein/aus" },
   { command: "undo", description: "Letzte Aktion rueckgaengig machen" },
   { command: "voice", description: "Sprachantworten ein/aus" },
+  { command: "transkript", description: "Sprachnachricht nur als Text, ohne Aktion" },
   { command: "lang", description: "Sprache wechseln de/en" },
   { command: "help", description: "Telegram Hilfe anzeigen" },
 ] as const satisfies readonly TelegramBotCommand[];
@@ -174,6 +200,7 @@ export const TELEGRAM_GROUP_COMMANDS = [
   { command: "undo", description: "Undo the last action" },
   { command: "linkme", description: "Link your Telegram user" },
   { command: "voice", description: "Group voice replies on/off" },
+  { command: "transcript", description: "Voice note to text only, no action" },
   { command: "help", description: "Show group help" },
 ] as const satisfies readonly TelegramBotCommand[];
 
@@ -190,6 +217,7 @@ export const TELEGRAM_GROUP_COMMANDS_DE = [
   { command: "undo", description: "Letzte Aktion rueckgaengig machen" },
   { command: "linkme", description: "Telegram Nutzer verknuepfen" },
   { command: "voice", description: "Sprachantworten ein/aus" },
+  { command: "transkript", description: "Sprachnachricht nur als Text, ohne Aktion" },
   { command: "help", description: "Gruppenhilfe anzeigen" },
 ] as const satisfies readonly TelegramBotCommand[];
 

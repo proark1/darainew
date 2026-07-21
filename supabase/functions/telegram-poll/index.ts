@@ -64,7 +64,10 @@ import {
   decodeCallback,
   tgEditReplyMarkup,
 } from "../_shared/telegram-inline.ts";
-import { isTelegramGroupActionableText } from "../_shared/telegram-commands.ts";
+import {
+  isTelegramGroupActionableText,
+  isTelegramTranscribeCommand,
+} from "../_shared/telegram-commands.ts";
 import { transcribeTelegramVoice } from "../_shared/telegram-stt.ts";
 import { buildDoriContext } from "../_shared/dori-context.ts";
 import {
@@ -109,10 +112,30 @@ async function tg(method: string, body: Record<string, unknown>, tgKey: string) 
   return data;
 }
 
-async function sendMessage(chatId: number, text: string, tgKey: string) {
+async function sendMessage(
+  chatId: number,
+  text: string,
+  tgKey: string,
+  opts?: { replyToMessageId?: number | null },
+) {
   try {
+    let replyTo = opts?.replyToMessageId ?? null;
     for (const chunk of chunkForTelegram(text)) {
-      await tg("sendMessage", { chat_id: chatId, text: chunk, parse_mode: "HTML" }, tgKey);
+      await tg(
+        "sendMessage",
+        {
+          chat_id: chatId,
+          text: chunk,
+          parse_mode: "HTML",
+          // Thread only the first chunk onto the original message; quoting every
+          // chunk of a long transcript would be noise.
+          ...(replyTo
+            ? { reply_parameters: { message_id: replyTo, allow_sending_without_reply: true } }
+            : {}),
+        },
+        tgKey,
+      );
+      replyTo = null;
     }
   } catch (e) {
     console.error("sendMessage failed:", e);
@@ -346,6 +369,134 @@ function voiceTranscriptEcho(text: string, confidence?: number | null): string {
       ? "Heard, low confidence"
       : "Heard";
   return `🎙️ <b>${label}:</b> <i>${escapeTelegramHtml(clipped)}</i>`;
+}
+
+// ─── Transcript-only mode (/transcript) ──────────────────────────────
+// A plain voice note is transcribed AND acted on. /transcript switches to
+// "just give me the text": full transcript, no tools, no router call.
+
+interface TelegramAudioAttachment {
+  fileId: string;
+  mime: string;
+  fileSize: number | null;
+  durationSeconds: number | null;
+}
+
+/**
+ * Any audio-ish attachment on a message: a voice note, a music/audio file, a
+ * round video note, or a file sent as a document with an audio mime type.
+ * Whisper accepts all of these containers.
+ */
+function pickTelegramAudio(msg: DbRow): TelegramAudioAttachment | null {
+  if (!msg || typeof msg !== "object") return null;
+  const candidates: Array<[DbRow, string]> = [
+    [msg.voice, "audio/ogg"],
+    [msg.audio, "audio/mpeg"],
+    [msg.video_note, "video/mp4"],
+  ];
+  if (typeof msg.document?.mime_type === "string" && msg.document.mime_type.startsWith("audio/")) {
+    candidates.push([msg.document, msg.document.mime_type]);
+  }
+  for (const [media, fallbackMime] of candidates) {
+    if (!media?.file_id) continue;
+    return {
+      fileId: media.file_id as string,
+      mime: (media.mime_type as string | undefined) || fallbackMime,
+      fileSize: (media.file_size as number | undefined) ?? null,
+      durationSeconds: (media.duration as number | undefined) ?? null,
+    };
+  }
+  return null;
+}
+
+// Long enough to record and send a voice note, short enough that a forgotten
+// /transcript never silently swallows a later command.
+const TRANSCRIBE_ARM_MINUTES = 10;
+
+async function armTranscribeMode(
+  supabase: SupabaseClient,
+  chatId: number,
+  telegramUserId: number,
+): Promise<void> {
+  await supabase.from("telegram_transcribe_mode").upsert(
+    {
+      chat_id: chatId,
+      telegram_user_id: telegramUserId,
+      armed_until: new Date(Date.now() + TRANSCRIBE_ARM_MINUTES * 60_000).toISOString(),
+    },
+    { onConflict: "chat_id,telegram_user_id" },
+  );
+}
+
+/**
+ * True when this sender armed transcript-only mode and it hasn't expired.
+ * Delete-and-return makes it single-use: the arm is spent on this voice note,
+ * so the next one goes back through the normal action pipeline.
+ */
+async function consumeTranscribeMode(
+  supabase: SupabaseClient,
+  chatId: number,
+  telegramUserId: number | null | undefined,
+): Promise<boolean> {
+  if (!telegramUserId) return false;
+  try {
+    const { data } = await supabase
+      .from("telegram_transcribe_mode")
+      .delete()
+      .eq("chat_id", chatId)
+      .eq("telegram_user_id", telegramUserId)
+      .gt("armed_until", new Date().toISOString())
+      .select("chat_id");
+    return Array.isArray(data) && data.length > 0;
+  } catch (e) {
+    console.warn("[telegram-poll] transcribe-mode consume failed", e);
+    return false;
+  }
+}
+
+/**
+ * Transcription is a paid API call, so only serve chats we know: a linked
+ * private chat, or a group linked to a family space or workspace. Returns the
+ * app user the transcript should be attributed to, or null to refuse.
+ */
+async function transcribeAccessUserId(
+  supabase: SupabaseClient,
+  chatId: number,
+  telegramUserId: number | null | undefined,
+  isGroup: boolean,
+): Promise<string | null> {
+  if (isGroup) {
+    const [{ data: glink }, { data: wsLink }] = await Promise.all([
+      supabase
+        .from("telegram_group_links")
+        .select("id")
+        .eq("chat_id", chatId)
+        .eq("is_active", true)
+        .maybeSingle(),
+      supabase
+        .from("workspace_telegram_links")
+        .select("workspace_id")
+        .eq("chat_id", chatId)
+        .eq("is_active", true)
+        .maybeSingle(),
+    ]);
+    if (!glink && !wsLink) return null;
+  }
+  return await resolveTelegramMessageUserId(supabase, chatId, telegramUserId);
+}
+
+function transcriptOnlyMessage(
+  text: string,
+  meta: { language?: string | null; durationSeconds?: number | null; confidence?: number | null },
+): string {
+  const bits: string[] = [];
+  if (meta.language) bits.push(meta.language.toUpperCase());
+  if (meta.durationSeconds) bits.push(`${Math.round(meta.durationSeconds)}s`);
+  if (meta.confidence !== null && meta.confidence !== undefined && meta.confidence < 0.55) {
+    bits.push("low confidence");
+  }
+  const footer = bits.length ? `\n\n<i>${escapeTelegramHtml(bits.join(" · "))}</i>` : "";
+  return `📝 <b>Transcript</b>\n\n${escapeTelegramHtml(text)}${footer}`;
 }
 
 async function resolveTelegramMessageUserId(
@@ -1918,6 +2069,141 @@ Deno.serve(async (req) => {
         try {
           const chatId = msg.chat.id;
           const chatType = msg.chat.type as string;
+
+          // ---------- /transcript → TRANSCRIPT ONLY (no action) ----------
+          // Three ways to ask for it, because people reach for all three:
+          //   1. reply "/transcript" to any voice note (also works on someone
+          //      else's, and on notes sent before the feature existed)
+          //   2. send the voice note with "/transcript" as its caption
+          //   3. send a bare "/transcript", then the voice note (one-shot arm)
+          // Everything else keeps the existing behaviour: transcribe *and* act.
+          {
+            const isGroupChat = chatType === "group" || chatType === "supergroup";
+            const senderId = msg.from?.id as number | undefined;
+            const ownAudio = pickTelegramAudio(msg);
+            const repliedAudio = pickTelegramAudio(msg.reply_to_message);
+            const captionAsks =
+              typeof msg.caption === "string" && isTelegramTranscribeCommand(msg.caption);
+            const textAsks = typeof msg.text === "string" && isTelegramTranscribeCommand(msg.text);
+
+            let target: TelegramAudioAttachment | null = null;
+            let targetMessageId: number | null = null;
+            let armOnly = false;
+
+            if (textAsks && msg.reply_to_message && !repliedAudio) {
+              await sendMessage(
+                chatId,
+                "🎙️ That message has no audio in it. Reply <code>/transcript</code> to a voice note instead — or send <code>/transcript</code> on its own and then record one.",
+                TELEGRAM_API_KEY,
+              );
+              continue;
+            }
+
+            if (textAsks && repliedAudio) {
+              target = repliedAudio;
+              targetMessageId = (msg.reply_to_message?.message_id as number | undefined) ?? null;
+            } else if (captionAsks && ownAudio) {
+              target = ownAudio;
+              targetMessageId = (msg.message_id as number | undefined) ?? null;
+            } else if (textAsks) {
+              armOnly = true;
+            } else if (ownAudio && !msg.text && !msg.caption) {
+              if (await consumeTranscribeMode(supabase, chatId, senderId)) {
+                target = ownAudio;
+                targetMessageId = (msg.message_id as number | undefined) ?? null;
+              }
+            }
+
+            if (target || armOnly) {
+              const accessUserId = await transcribeAccessUserId(
+                supabase,
+                chatId,
+                senderId,
+                isGroupChat,
+              );
+              if (!accessUserId) {
+                await sendMessage(
+                  chatId,
+                  isGroupChat
+                    ? "🔒 This group isn't linked yet. Use /linkfamily or /linkworkspace with a code from the app, then I can transcribe here."
+                    : "🔒 This chat isn't linked yet. Open Dori → Settings → Telegram to connect.",
+                  TELEGRAM_API_KEY,
+                );
+                continue;
+              }
+
+              if (armOnly) {
+                if (!senderId) {
+                  await sendMessage(
+                    chatId,
+                    "🎙️ Reply <code>/transcript</code> to a voice note and I'll send back just the text.",
+                    TELEGRAM_API_KEY,
+                  );
+                  continue;
+                }
+                await armTranscribeMode(supabase, chatId, senderId);
+                await sendMessage(
+                  chatId,
+                  `📝 <b>Transcript mode armed.</b>\n\nSend a voice note in the next ${TRANSCRIBE_ARM_MINUTES} minutes and I'll reply with the text only — no tasks, no events, no actions.\n\n<i>You can also reply <code>/transcript</code> to any voice note, or send one with <code>/transcript</code> as its caption.</i>`,
+                  TELEGRAM_API_KEY,
+                );
+                continue;
+              }
+
+              if (target) {
+                try {
+                  await tg(
+                    "sendChatAction",
+                    { chat_id: chatId, action: "typing" },
+                    TELEGRAM_API_KEY,
+                  );
+                } catch {
+                  /* ignore */
+                }
+                const result = await transcribeTelegramVoice({
+                  fileId: target.fileId,
+                  mime: target.mime,
+                  telegramKey: TELEGRAM_API_KEY,
+                  fileSize: target.fileSize,
+                  durationSeconds: target.durationSeconds,
+                });
+                if (!result.transcript) {
+                  console.warn("[telegram-poll] transcript-only failed", result.error);
+                  await sendMessage(
+                    chatId,
+                    "🎙️ I couldn't transcribe that one. Try re-recording it, or send it as an audio file.",
+                    TELEGRAM_API_KEY,
+                    { replyToMessageId: targetMessageId },
+                  );
+                  continue;
+                }
+                await persistTelegramVoiceTranscript(supabase, {
+                  updateId: u.update_id,
+                  chatId,
+                  telegramUserId: senderId ?? null,
+                  transcript: result.transcript,
+                  language: result.language,
+                  confidence: result.confidence,
+                  provider: result.provider,
+                  durationSeconds: result.durationSeconds,
+                  fileSize: result.fileSize,
+                });
+                await sendMessage(
+                  chatId,
+                  transcriptOnlyMessage(result.transcript, {
+                    language: result.language,
+                    durationSeconds: result.durationSeconds,
+                    confidence: result.confidence,
+                  }),
+                  TELEGRAM_API_KEY,
+                  { replyToMessageId: targetMessageId },
+                );
+                await markTelegramProcessed(supabase, u.update_id, chatId, "[Transcript]", u);
+                processed++;
+                continue;
+              }
+            }
+          }
 
           // ---------- VOICE / AUDIO → transcribe, then treat as text ----------
           let textFromVoice: string | null = null;

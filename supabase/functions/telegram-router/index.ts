@@ -178,7 +178,8 @@ const HELP_TEXT = `<b>🤖 Dori — Your Assistant</b>
 
 Just talk naturally — I'll save tasks, shopping, events, and more.
 Send a <b>photo</b> (receipt, bill, business card, prescription) and I'll
-read it. Send a <b>voice note</b> and I'll act on what you said.
+read it. Send a <b>voice note</b> and I'll act on what you said —
+or use <b>/transcript</b> if you only want the text back.
 
 <b>📅 Schedule</b>
 /me — your day at a glance
@@ -246,6 +247,11 @@ Reply <b>yes</b> / <b>no</b> to confirm any action I propose.
 /zakat 10000 · /summary (unread emails digest)
 /subtask &lt;parent&gt; :: &lt;child&gt; · /tag &lt;task&gt; +work · /estimate &lt;task&gt; 30
 
+<b>🎙 Voice notes</b>
+Send one and I act on it. For the text only, without any action:
+reply <b>/transcript</b> to a voice note, send one captioned <b>/transcript</b>,
+or send <b>/transcript</b> on its own and then record.
+
 <b>⚙️ Settings</b>
 /quiet on|off · /voice on|off
 
@@ -257,6 +263,11 @@ const HELP_TEXT_DE = `<b>🤖 Dori — dein Assistent</b>
 
 Schreib einfach normal. Ich speichere Aufgaben, Einkaeufe, Termine, Erinnerungen und Notizen.
 Sende ein <b>Foto</b> (Rechnung, Beleg, Visitenkarte, Rezept, Screenshot) oder eine <b>Sprachnachricht</b>.
+
+<b>🎙 Sprachnachrichten</b>
+Normal fuehre ich aus, was du sagst. Wenn du <b>nur den Text</b> willst:
+antworte <b>/transkript</b> auf eine Sprachnachricht, sende eine mit <b>/transkript</b> als Bildunterschrift,
+oder schick <b>/transkript</b> allein und nimm danach auf.
 
 <b>📅 Planung</b>
 /me — dein Tag auf einen Blick

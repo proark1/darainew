@@ -10,6 +10,7 @@ import {
   TELEGRAM_WORKSPACE_COMMANDS_DE,
   isTelegramGroupActionableText,
   isTelegramQuickCommand,
+  isTelegramTranscribeCommand,
   normalizeTelegramCommand,
   telegramCommandSet,
   validateTelegramCommands,
@@ -113,5 +114,46 @@ describe("Telegram quick command aliases", () => {
     expect(isTelegramQuickCommand("/memory", "now")).toBe(false);
     expect(isTelegramQuickCommand("/briefing", "brief")).toBe(true);
     expect(isTelegramQuickCommand("/preferences", "settings")).toBe(true);
+  });
+});
+
+describe("Telegram transcript-only command", () => {
+  it("matches the English and German aliases, with bot suffix and trailing words", () => {
+    expect(isTelegramTranscribeCommand("/transcript")).toBe(true);
+    expect(isTelegramTranscribeCommand("/transkript")).toBe(true);
+    expect(isTelegramTranscribeCommand("/transcribe")).toBe(true);
+    expect(isTelegramTranscribeCommand("/transkribiere")).toBe(true);
+    expect(isTelegramTranscribeCommand("  /TRANSKRIPT  ")).toBe(true);
+    expect(isTelegramTranscribeCommand("/transcript@darai_bot")).toBe(true);
+    expect(isTelegramTranscribeCommand("/transkript bitte")).toBe(true);
+  });
+
+  it("requires the slash so ordinary chat never suppresses an action", () => {
+    // Without this, "schick mir das Transkript" would silently turn a voice
+    // note into text-only instead of letting Dori act on it.
+    expect(isTelegramTranscribeCommand("transkript")).toBe(false);
+    expect(isTelegramTranscribeCommand("schick mir das Transkript")).toBe(false);
+    expect(isTelegramTranscribeCommand("/transcripts")).toBe(false);
+    expect(isTelegramTranscribeCommand("/voice")).toBe(false);
+    expect(isTelegramTranscribeCommand("")).toBe(false);
+  });
+
+  it("registers the command in the menus users actually see", () => {
+    expect(TELEGRAM_COMMANDS.map((c) => c.command)).toEqual(
+      expect.arrayContaining(["transcript", "transkript"]),
+    );
+    expect(TELEGRAM_PRIVATE_COMMANDS.map((c) => c.command)).toContain("transcript");
+    expect(TELEGRAM_PRIVATE_COMMANDS_DE.map((c) => c.command)).toContain("transkript");
+    expect(TELEGRAM_GROUP_COMMANDS.map((c) => c.command)).toContain("transcript");
+    expect(TELEGRAM_GROUP_COMMANDS_DE.map((c) => c.command)).toContain("transkript");
+  });
+
+  it("keeps every registered alias reachable from the command menu", () => {
+    for (const menu of [TELEGRAM_COMMANDS, TELEGRAM_PRIVATE_COMMANDS, TELEGRAM_GROUP_COMMANDS]) {
+      for (const cmd of menu) {
+        if (!cmd.command.startsWith("trans")) continue;
+        expect(isTelegramTranscribeCommand(`/${cmd.command}`)).toBe(true);
+      }
+    }
   });
 });
