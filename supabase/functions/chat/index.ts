@@ -32,7 +32,7 @@ import {
   type TriageResult,
 } from "../_shared/dori-triage.ts";
 import { recallEntities } from "../_shared/dori-kg-recall.ts";
-import { estimateCostUsd, usageFooter } from "../_shared/ai-pricing.ts";
+import { estimateCostUsd, isUsageFooterEnabled, usageFooter } from "../_shared/ai-pricing.ts";
 import { strictAppOrigin } from "../_shared/cors.ts";
 import { mintInternalToken, resolveUserId } from "../_shared/auth.ts";
 import { asRecord, type DbClient, type DbResult, type DbRow } from "../_shared/supabase-edge.ts";
@@ -1070,22 +1070,8 @@ async function logAIUsage(
   }
 }
 
-// Admin-controlled flag (app_settings.telegram_token_usage_enabled) gating the
-// per-reply token/cost footer on Telegram. Defaults to ON (fails open) so a
-// missing row or read error still shows usage.
-async function isUsageFooterEnabled(supabase: SupabaseClient): Promise<boolean> {
-  try {
-    const { data } = await supabase
-      .from("app_settings")
-      .select("value")
-      .eq("key", "telegram_token_usage_enabled")
-      .maybeSingle();
-    if (!data) return true;
-    return data.value === true || data.value === "true";
-  } catch {
-    return true;
-  }
-}
+// isUsageFooterEnabled lives in _shared/ai-pricing.ts, next to the footer it
+// gates, so the transcript path in telegram-poll reads the same flag.
 
 // Detect if user's message likely needs a web search (avoids two-pass)
 function detectWebSearchIntent(msg: string): boolean {

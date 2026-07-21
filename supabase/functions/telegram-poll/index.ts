@@ -45,6 +45,11 @@ import {
   sendVoiceMessage,
   type TelegramAudioAttachment,
 } from "../_shared/telegram-voice.ts";
+import {
+  isUsageFooterEnabled,
+  transcriptionFooter,
+  type TranscriptionUsage,
+} from "../_shared/ai-pricing.ts";
 import { generateNews, type NewsItem } from "../_shared/briefingNews.ts";
 import {
   approveAndExecutePending,
@@ -475,7 +480,12 @@ async function transcribeAccessUserId(
 
 function transcriptOnlyMessage(
   text: string,
-  meta: { language?: string | null; durationSeconds?: number | null; confidence?: number | null },
+  meta: {
+    language?: string | null;
+    durationSeconds?: number | null;
+    confidence?: number | null;
+    usage?: TranscriptionUsage | null;
+  },
 ): string {
   const bits: string[] = [];
   if (meta.language) bits.push(meta.language.toUpperCase());
@@ -483,8 +493,11 @@ function transcriptOnlyMessage(
   if (meta.confidence !== null && meta.confidence !== undefined && meta.confidence < 0.55) {
     bits.push("low confidence");
   }
-  const footer = bits.length ? `\n\n<i>${escapeTelegramHtml(bits.join(" · "))}</i>` : "";
-  return `📝 <b>Transcript</b>\n\n${escapeTelegramHtml(text)}${footer}`;
+  const meta_ = bits.length ? `\n\n<i>${escapeTelegramHtml(bits.join(" · "))}</i>` : "";
+  // Same cost footer the AI replies carry, so a transcript is accounted for
+  // the same way every other message is.
+  const cost = meta.usage ? transcriptionFooter(meta.usage) : "";
+  return `📝 <b>Transcript</b>\n\n${escapeTelegramHtml(text)}${meta_}${cost}`;
 }
 
 async function resolveTelegramMessageUserId(
@@ -2205,6 +2218,17 @@ Deno.serve(async (req) => {
                     language: result.language,
                     durationSeconds: result.durationSeconds,
                     confidence: result.confidence,
+                    // Same admin toggle the AI replies honour, so turning
+                    // footers off turns them off everywhere.
+                    usage: (await isUsageFooterEnabled(supabase))
+                      ? {
+                          provider: result.provider,
+                          model: result.model,
+                          durationSeconds: result.durationSeconds,
+                          promptTokens: result.promptTokens,
+                          completionTokens: result.completionTokens,
+                        }
+                      : null,
                   }),
                   TELEGRAM_API_KEY,
                   { replyToMessageId: targetMessageId },

@@ -8,9 +8,22 @@ export interface TelegramTranscriptionResult {
   provider: "openai" | "gemini" | null;
   error?: string;
   fileSize?: number | null;
+  /** Exact model that produced the transcript, for cost attribution. */
+  model?: string | null;
+  /**
+   * Gemini reports real token usage for audio and we pass it through rather
+   * than estimating from duration. Whisper bills per minute and reports no
+   * tokens at all, so these stay null there — see transcriptionFooter.
+   */
+  promptTokens?: number | null;
+  completionTokens?: number | null;
 }
 
 const TELEGRAM_PUBLIC_FILE_LIMIT_BYTES = 20 * 1024 * 1024;
+
+// Named so the cost footer can price the exact model that ran.
+export const OPENAI_STT_MODEL = "whisper-1";
+export const GEMINI_STT_MODEL = "gemini-2.5-flash";
 
 async function tg(
   method: string,
@@ -79,7 +92,7 @@ async function transcribeWithOpenAi(
     };
 
   const fd = new FormData();
-  fd.append("model", "whisper-1");
+  fd.append("model", OPENAI_STT_MODEL);
   fd.append(
     "file",
     new Blob([bytes as unknown as BlobPart], { type: mime }),
@@ -110,6 +123,8 @@ async function transcribeWithOpenAi(
     confidence: null,
     durationSeconds: typeof data?.duration === "number" ? data.duration : null,
     provider: "openai",
+    // Whisper is billed per minute of audio and returns no token usage.
+    model: OPENAI_STT_MODEL,
   };
 }
 
@@ -129,7 +144,7 @@ async function transcribeWithGemini(
     };
 
   const r = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_STT_MODEL}:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -164,6 +179,13 @@ async function transcribeWithGemini(
     };
   }
 
+  // Gemini bills audio as input tokens and reports the real count; use it
+  // rather than deriving one from the clip length.
+  const usage = data?.usageMetadata ?? {};
+  const promptTokens = typeof usage.promptTokenCount === "number" ? usage.promptTokenCount : null;
+  const completionTokens =
+    typeof usage.candidatesTokenCount === "number" ? usage.candidatesTokenCount : null;
+
   const raw = String(data?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
   const cleaned = raw
     .replace(/^```json\s*/i, "")
@@ -178,6 +200,9 @@ async function transcribeWithGemini(
       confidence: typeof parsed?.confidence === "number" ? parsed.confidence : null,
       durationSeconds: null,
       provider: "gemini",
+      model: GEMINI_STT_MODEL,
+      promptTokens,
+      completionTokens,
     };
   } catch {
     return {
@@ -186,6 +211,9 @@ async function transcribeWithGemini(
       confidence: null,
       durationSeconds: null,
       provider: "gemini",
+      model: GEMINI_STT_MODEL,
+      promptTokens,
+      completionTokens,
     };
   }
 }
