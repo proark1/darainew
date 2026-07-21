@@ -25,6 +25,31 @@ const TELEGRAM_PUBLIC_FILE_LIMIT_BYTES = 20 * 1024 * 1024;
 export const OPENAI_STT_MODEL = "whisper-1";
 export const GEMINI_STT_MODEL = "gemini-2.5-flash";
 
+/**
+ * Why Gemini refused to produce a transcript, or null if it answered normally.
+ *
+ * Gemini is a language model asked to return JSON, so it can decline or get
+ * cut off instead of transcribing. Its reply is then prose ("I can't help with
+ * that"), which the lenient parse below would happily hand back AS the
+ * transcript — and because a non-empty transcript ends the provider loop, the
+ * next provider would never get a turn. Reading finishReason/blockReason turns
+ * that into an explicit failure so the fallback runs.
+ */
+export function geminiDeclineReason(data: unknown): string | null {
+  const d = (data ?? {}) as {
+    candidates?: Array<{ finishReason?: string }>;
+    promptFeedback?: { blockReason?: string };
+  };
+  const blockReason = d.promptFeedback?.blockReason;
+  if (blockReason) return blockReason;
+  const candidate = d.candidates?.[0];
+  if (!candidate) return "NO_CANDIDATES";
+  const finishReason = candidate.finishReason;
+  // Absent finishReason is normal on a complete response.
+  if (finishReason && finishReason !== "STOP") return finishReason;
+  return null;
+}
+
 async function tg(
   method: string,
   body: Record<string, unknown>,
@@ -186,6 +211,21 @@ async function transcribeWithGemini(
   const completionTokens =
     typeof usage.candidatesTokenCount === "number" ? usage.candidatesTokenCount : null;
 
+  const declined = geminiDeclineReason(data);
+  if (declined) {
+    return {
+      transcript: null,
+      language: null,
+      confidence: null,
+      durationSeconds: null,
+      provider: "gemini",
+      model: GEMINI_STT_MODEL,
+      promptTokens,
+      completionTokens,
+      error: `Gemini returned no transcript (${declined})`,
+    };
+  }
+
   const raw = String(data?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
   const cleaned = raw
     .replace(/^```json\s*/i, "")
@@ -233,7 +273,11 @@ export async function transcribeTelegramVoice(args: {
       expectedFileSize: args.fileSize,
     });
 
-    const providers = Deno.env.get("TELEGRAM_STT_PROVIDER_ORDER") || "openai,gemini";
+    // Gemini first: it transcribes as well as Whisper on these clips, costs
+    // roughly a thirtieth as much, and reports real token usage so the cost
+    // footer can show a breakdown. Whisper stays as the fallback for anything
+    // Gemini declines or garbles. Override with TELEGRAM_STT_PROVIDER_ORDER.
+    const providers = Deno.env.get("TELEGRAM_STT_PROVIDER_ORDER") || "gemini,openai";
     const errors: string[] = [];
     for (const provider of providers
       .split(",")
