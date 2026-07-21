@@ -2,11 +2,20 @@
 # Incremental migration runner for Railway Postgres.
 #
 # Applies any supabase/migrations/*.sql not yet recorded in
-# public.schema_migrations, in filename (timestamp) order. Designed to run on
+# public.app_schema_migrations, in filename (timestamp) order. Designed to run on
 # every deploy as a Railway one-shot service (see db/Dockerfile + db/railway.json),
 # but also runnable by hand:
 #
 #   DATABASE_URL=postgres://... MIG_DIR=supabase/migrations ./db/migrate.sh
+#
+# Why app_schema_migrations and not schema_migrations:
+#   supabase/realtime runs Ecto migrations and owns public.schema_migrations —
+#   21 rows, and `version` is a BIGINT. Sharing that name is silently wrong in
+#   both directions: CREATE TABLE IF NOT EXISTS quietly adopts Realtime's table,
+#   the non-empty read then skips the baseline branch below (so every historical
+#   migration looks pending), and recording a version like
+#   "20260721090000_foo.sql" fails on the bigint column. Keep this table
+#   separate and clearly ours.
 #
 # Why a baseline:
 #   The Railway DB is provisioned from db/bootstrap (the squash), which already
@@ -39,7 +48,7 @@ fi
 # Run a statement and return the bare scalar/rows (tuples-only, unaligned).
 scalar() { psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c "$1"; }
 
-scalar "CREATE TABLE IF NOT EXISTS public.schema_migrations (
+scalar "CREATE TABLE IF NOT EXISTS public.app_schema_migrations (
   version text PRIMARY KEY,
   applied_at timestamptz NOT NULL DEFAULT now()
 );" >/dev/null
@@ -55,7 +64,7 @@ fi
 declare -A APPLIED=()
 while IFS= read -r ver; do
   [[ -n "$ver" ]] && APPLIED["$ver"]=1
-done < <(scalar "SELECT version FROM public.schema_migrations;")
+done < <(scalar "SELECT version FROM public.app_schema_migrations;")
 
 # Batch-insert a newline-free list of versions as applied (one round-trip) and
 # mark them in the cache. Usage: mark_applied "v1" "v2" ...
@@ -63,7 +72,7 @@ mark_applied() {
   (( $# )) || return 0
   local vals="" v
   for v in "$@"; do vals+="('$v'),"; APPLIED["$v"]=1; done
-  scalar "INSERT INTO public.schema_migrations(version) VALUES ${vals%,} ON CONFLICT DO NOTHING;" >/dev/null
+  scalar "INSERT INTO public.app_schema_migrations(version) VALUES ${vals%,} ON CONFLICT DO NOTHING;" >/dev/null
 }
 
 # ---- First-run baseline ----------------------------------------------------
@@ -106,7 +115,7 @@ for f in "${files[@]}"; do
   # Migration body + its bookkeeping row, applied as one transaction (-1).
   {
     cat "$f"
-    printf '\nINSERT INTO public.schema_migrations(version) VALUES (%s);\n' "'$v'"
+    printf '\nINSERT INTO public.app_schema_migrations(version) VALUES (%s);\n' "'$v'"
   } | psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 -q -f -
   APPLIED["$v"]=1
   applied=$((applied + 1))
