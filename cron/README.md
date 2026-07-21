@@ -48,6 +48,33 @@ send. The fixed-time daily jobs (`0 h * * *`) run once per day in **UTC**.
 > per local day, so it's scheduled once daily; don't raise its frequency without
 > first adding a per-day send gate, or it will message users on every tick.
 
+### Boot tasks (once per deploy, not scheduled)
+
+| Function                     | Purpose                                    |
+| ---------------------------- | ------------------------------------------ |
+| `telegram-register-commands` | Push the `/` autocomplete menu to Telegram |
+
+Telegram stores the slash-command menu on its side (`setMyCommands`), so a deploy
+that changes
+[`telegram-commands.ts`](../supabase/functions/_shared/telegram-commands.ts)
+has to push it — otherwise a new command works when typed but never appears in
+the menu. Re-running is harmless; `setMyCommands` replaces the whole menu.
+
+Because this service and `edge-runtime` redeploy in parallel, the first attempt
+often lands while the runtime is still booting, so it retries
+(`CRON_BOOT_TASK_ATTEMPTS`, default 5, `CRON_BOOT_TASK_RETRY_MS` apart). A
+failure is logged and never takes the scheduler down.
+
+To push it by hand — after editing the command list, or from a laptop:
+
+```sh
+SUPABASE_SERVICE_ROLE_KEY=... \
+  node scripts/register-telegram-commands.mjs https://<gateway>/functions/v1
+```
+
+Or `bun run telegram:commands` when `EDGE_FUNCTIONS_URL` / `SUPABASE_URL` is
+already in the environment.
+
 ## ⚠️ If the cron service keeps failing every run
 
 Symptom (Railway → cron → Cron Runs): every execution is red, lasts ~1s, and the
@@ -94,7 +121,9 @@ scheduler instead of the curl image:
 | `EDGE_FUNCTIONS_URL`        | `http://edge-runtime.railway.internal:9000` | Base URL of the edge-runtime service (same value the gateway uses). Override if your edge service has a different internal name. |
 | `SUPABASE_SERVICE_ROLE_KEY` | The service-role JWT                        | **Required.** The dispatcher functions gate on exactly this token. Must match the value set on the `edge-runtime` service.       |
 | `PORT`                      | (Railway sets this)                         | Health server port. Defaults to 8080.                                                                                            |
-| `CRON_DISABLED`             | `1` to pause all jobs                       | Health server still runs; useful for temporarily disabling without deleting the service.                                         |
+| `CRON_DISABLED`             | `1` to pause all jobs                       | Health server still runs; useful for temporarily disabling without deleting the service. Also skips boot tasks.                  |
+| `CRON_BOOT_TASK_ATTEMPTS`   | Default `5`                                 | Retries for the once-per-deploy boot tasks, for when edge-runtime is still booting.                                              |
+| `CRON_BOOT_TASK_RETRY_MS`   | Default `15000`                             | Delay between those retries.                                                                                                     |
 
 > Why call the internal edge-runtime URL instead of the public gateway?
 > It stays on the private network (faster, no egress) and skips the gateway's

@@ -96,10 +96,12 @@ function cronMatches(expr, d) {
 // ── Job execution ──────────────────────────────────────────────────────────
 const inFlight = new Set();
 
+// Returns true when the function answered 2xx. Scheduled ticks ignore the
+// result; boot tasks use it to decide whether to retry.
 async function fire(job) {
   if (job.solo && inFlight.has(job.name)) {
     console.log(`[cron] ${job.name} still running — skipping this tick`);
-    return;
+    return false;
   }
   inFlight.add(job.name);
   const url = `${BASE}/${job.name}`;
@@ -117,14 +119,49 @@ async function fire(job) {
     const ms = Date.now() - t0;
     if (res.ok) {
       console.log(`[cron] ${job.name} -> ${res.status} (${ms}ms)`);
-    } else {
-      const body = await res.text().catch(() => "");
-      console.error(`[cron] ${job.name} -> ${res.status} (${ms}ms) ${body.slice(0, 300)}`);
+      return true;
     }
+    const body = await res.text().catch(() => "");
+    console.error(`[cron] ${job.name} -> ${res.status} (${ms}ms) ${body.slice(0, 300)}`);
+    return false;
   } catch (e) {
     console.error(`[cron] ${job.name} failed:`, e?.message || e);
+    return false;
   } finally {
     inFlight.delete(job.name);
+  }
+}
+
+// ── Boot tasks ─────────────────────────────────────────────────────────────
+// Run once per deploy, not on a schedule. Telegram's "/" autocomplete menu
+// lives on Telegram's side (setMyCommands) rather than being read from our
+// code, so a deploy that changes the command list has to push it — otherwise
+// new commands work when typed but never show up in the menu. Re-running is
+// harmless: setMyCommands replaces the whole menu every time.
+const BOOT_TASKS = [{ name: "telegram-register-commands" }];
+const BOOT_TASK_ATTEMPTS = Number(process.env.CRON_BOOT_TASK_ATTEMPTS) || 5;
+const BOOT_TASK_RETRY_MS = Number(process.env.CRON_BOOT_TASK_RETRY_MS) || 15_000;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// This service and edge-runtime redeploy in parallel, so the first attempt
+// often lands while the runtime is still booting. Retry before giving up —
+// and never throw: a failed menu refresh must not take the scheduler down.
+async function runBootTasks() {
+  for (const task of BOOT_TASKS) {
+    for (let attempt = 1; attempt <= BOOT_TASK_ATTEMPTS; attempt++) {
+      if (await fire(task)) break;
+      if (attempt === BOOT_TASK_ATTEMPTS) {
+        console.error(
+          `[cron] boot task ${task.name} still failing after ${attempt} attempts — giving up`,
+        );
+        break;
+      }
+      console.log(
+        `[cron] boot task ${task.name} attempt ${attempt}/${BOOT_TASK_ATTEMPTS} failed — retrying in ${BOOT_TASK_RETRY_MS}ms`,
+      );
+      await sleep(BOOT_TASK_RETRY_MS);
+    }
   }
 }
 
@@ -152,6 +189,9 @@ function startScheduler() {
   // even if timers drift slightly.
   setInterval(run, 15_000);
   run(); // evaluate immediately on boot so a fresh deploy fires due jobs at once
+  // Fire-and-forget: boot tasks retry for minutes, and nothing about the
+  // schedule should wait on them.
+  runBootTasks();
   console.log(`[cron] scheduler started — ${JOBS.length} jobs, base=${BASE}`);
   if (!SERVICE_KEY) {
     console.warn(
