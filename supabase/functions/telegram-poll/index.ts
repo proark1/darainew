@@ -413,19 +413,36 @@ function pickTelegramAudio(msg: DbRow): TelegramAudioAttachment | null {
 // /transcript never silently swallows a later command.
 const TRANSCRIBE_ARM_MINUTES = 10;
 
+/**
+ * Returns false if the arm could not be stored. PostgREST reports a missing
+ * table as an error value rather than throwing, so without this check an
+ * un-applied migration would answer "transcript mode armed" and then quietly
+ * act on the next voice note anyway — the one outcome the command exists to
+ * prevent.
+ */
 async function armTranscribeMode(
   supabase: SupabaseClient,
   chatId: number,
   telegramUserId: number,
-): Promise<void> {
-  await supabase.from("telegram_transcribe_mode").upsert(
-    {
-      chat_id: chatId,
-      telegram_user_id: telegramUserId,
-      armed_until: new Date(Date.now() + TRANSCRIBE_ARM_MINUTES * 60_000).toISOString(),
-    },
-    { onConflict: "chat_id,telegram_user_id" },
-  );
+): Promise<boolean> {
+  try {
+    const { error } = await supabase.from("telegram_transcribe_mode").upsert(
+      {
+        chat_id: chatId,
+        telegram_user_id: telegramUserId,
+        armed_until: new Date(Date.now() + TRANSCRIBE_ARM_MINUTES * 60_000).toISOString(),
+      },
+      { onConflict: "chat_id,telegram_user_id" },
+    );
+    if (error) {
+      console.error("[telegram-poll] transcribe-mode arm failed", error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error("[telegram-poll] transcribe-mode arm threw", e);
+    return false;
+  }
 }
 
 /**
@@ -2141,7 +2158,14 @@ Deno.serve(async (req) => {
                   );
                   continue;
                 }
-                await armTranscribeMode(supabase, chatId, senderId);
+                if (!(await armTranscribeMode(supabase, chatId, senderId))) {
+                  await sendMessage(
+                    chatId,
+                    "⚠️ I couldn't arm transcript mode. Reply <code>/transcript</code> directly to a voice note instead — that works without it.",
+                    TELEGRAM_API_KEY,
+                  );
+                  continue;
+                }
                 await sendMessage(
                   chatId,
                   `📝 <b>Transcript mode armed.</b>\n\nSend a voice note in the next ${TRANSCRIBE_ARM_MINUTES} minutes and I'll reply with the text only — no tasks, no events, no actions.\n\n<i>You can also reply <code>/transcript</code> to any voice note, or send one with <code>/transcript</code> as its caption.</i>`,
