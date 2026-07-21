@@ -40,8 +40,10 @@ interface CallbackActor {
 import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 import {
   defaultBriefingVoiceLimit,
+  pickTelegramAudio,
   sendDoriReply,
   sendVoiceMessage,
+  type TelegramAudioAttachment,
 } from "../_shared/telegram-voice.ts";
 import { generateNews, type NewsItem } from "../_shared/briefingNews.ts";
 import {
@@ -375,39 +377,8 @@ function voiceTranscriptEcho(text: string, confidence?: number | null): string {
 // A plain voice note is transcribed AND acted on. /transcript switches to
 // "just give me the text": full transcript, no tools, no router call.
 
-interface TelegramAudioAttachment {
-  fileId: string;
-  mime: string;
-  fileSize: number | null;
-  durationSeconds: number | null;
-}
-
-/**
- * Any audio-ish attachment on a message: a voice note, a music/audio file, a
- * round video note, or a file sent as a document with an audio mime type.
- * Whisper accepts all of these containers.
- */
-function pickTelegramAudio(msg: DbRow): TelegramAudioAttachment | null {
-  if (!msg || typeof msg !== "object") return null;
-  const candidates: Array<[DbRow, string]> = [
-    [msg.voice, "audio/ogg"],
-    [msg.audio, "audio/mpeg"],
-    [msg.video_note, "video/mp4"],
-  ];
-  if (typeof msg.document?.mime_type === "string" && msg.document.mime_type.startsWith("audio/")) {
-    candidates.push([msg.document, msg.document.mime_type]);
-  }
-  for (const [media, fallbackMime] of candidates) {
-    if (!media?.file_id) continue;
-    return {
-      fileId: media.file_id as string,
-      mime: (media.mime_type as string | undefined) || fallbackMime,
-      fileSize: (media.file_size as number | undefined) ?? null,
-      durationSeconds: (media.duration as number | undefined) ?? null,
-    };
-  }
-  return null;
-}
+// pickTelegramAudio lives in _shared/telegram-voice.ts so the "is this file
+// transcribable" rule is covered by `deno test` in CI.
 
 // Long enough to record and send a voice note, short enough that a forgotten
 // /transcript never silently swallows a later command.
@@ -1803,7 +1774,16 @@ Deno.serve(async (req) => {
         try {
           data = await tg(
             "getUpdates",
-            { offset: currentOffset, timeout, allowed_updates: ["message", "callback_query"] },
+            {
+              offset: currentOffset,
+              timeout,
+              // edited_message: attaching an audio file and *then* typing
+              // /transcript as its caption arrives as an edit, and that is how
+              // people reach for the feature. Without it Telegram never
+              // delivers the update at all. Edits are routed to the transcript
+              // path only — see the isEdit guard below.
+              allowed_updates: ["message", "edited_message", "callback_query"],
+            },
             TELEGRAM_API_KEY,
           );
           // (voice/audio arrive inside 'message' updates — no extra allowed_updates needed)
@@ -2076,7 +2056,12 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const msg = u.message;
+        // An edit is accepted only so that adding "/transcript" as a caption to
+        // an already-sent audio file works. It is barred from the action
+        // pipeline further down: re-running an edited instruction through the
+        // AI would create the same task or event a second time.
+        const isEdit = !u.message && Boolean(u.edited_message);
+        const msg = u.message ?? u.edited_message;
         if (!msg) continue;
 
         // Per-update try/finally: once we've pulled an update from Telegram we
@@ -2124,7 +2109,9 @@ Deno.serve(async (req) => {
               targetMessageId = (msg.message_id as number | undefined) ?? null;
             } else if (textAsks) {
               armOnly = true;
-            } else if (ownAudio && !msg.text && !msg.caption) {
+            } else if (!isEdit && ownAudio && !msg.text && !msg.caption) {
+              // Only a freshly-sent note may spend the one-shot arm; an edit
+              // that merely removes a caption must not consume it.
               if (await consumeTranscribeMode(supabase, chatId, senderId)) {
                 target = ownAudio;
                 targetMessageId = (msg.message_id as number | undefined) ?? null;
@@ -2228,6 +2215,10 @@ Deno.serve(async (req) => {
               }
             }
           }
+
+          // Edits reach the transcript path above and stop here. Letting one
+          // through would re-run an already-executed instruction.
+          if (isEdit) continue;
 
           // ---------- VOICE / AUDIO → transcribe, then treat as text ----------
           let textFromVoice: string | null = null;

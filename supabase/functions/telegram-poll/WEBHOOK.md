@@ -28,8 +28,15 @@ GATEWAY="https://<your-gateway>.up.railway.app"   # public gateway (Telegram mus
 curl -s "https://api.telegram.org/bot${TELEGRAM_API_KEY}/setWebhook" \
   -d "url=${GATEWAY}/functions/v1/telegram-poll" \
   -d "secret_token=${SECRET}" \
-  --data-urlencode 'allowed_updates=["message","callback_query"]'
+  --data-urlencode 'allowed_updates=["message","edited_message","callback_query"]'
 ```
+
+`edited_message` is required for `/transcript`: attaching an audio file and
+_then_ typing the command as its caption reaches Telegram as an edit, and
+without it in this list Telegram never delivers the update. Re-running
+`setWebhook` after upgrading is what turns that on — the list is stored on
+Telegram's side, so a code deploy alone does not change it. Check the current
+value with `getWebhookInfo`.
 
 The webhook URL must be the **public gateway** (Telegram calls it from the
 internet), not the internal `railway.internal` address.

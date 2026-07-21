@@ -345,3 +345,90 @@ export async function sendDoriReply(opts: SendOpts): Promise<void> {
 
 // Base64 helper (kept here so callers don't need to import separately).
 export { base64Encode };
+
+export interface TelegramAudioAttachment {
+  fileId: string;
+  mime: string;
+  fileSize: number | null;
+  durationSeconds: number | null;
+}
+
+// Audio containers Whisper accepts, matched on the filename. Needed because a
+// forwarded WhatsApp voice note ("WhatsApp Ptt ....ogg") arrives as a *document*
+// and routinely carries application/octet-stream, so a mime-only test rejects
+// exactly the files people most want transcribed.
+const AUDIO_FILE_EXTENSION = /\.(ogg|oga|opus|mp3|m4a|aac|wav|flac|amr|wma)$/i;
+
+// Extension → mime. Used when a document is audio by name but not by mime:
+// the STT layer derives both the upload filename and Gemini's mime_type from
+// this string, and "application/octet-stream" yields the filename
+// "telegram-voice.audio", which Whisper rejects. So resolve a real type here.
+const MIME_FOR_EXTENSION: Record<string, string> = {
+  ogg: "audio/ogg",
+  oga: "audio/ogg",
+  opus: "audio/ogg",
+  mp3: "audio/mpeg",
+  m4a: "audio/mp4",
+  aac: "audio/aac",
+  wav: "audio/wav",
+  flac: "audio/flac",
+  amr: "audio/amr",
+  wma: "audio/x-ms-wma",
+};
+
+/**
+ * Any audio-ish attachment on a Telegram message: a voice note, a music/audio
+ * file, a round video note, or a file sent as a document that is audio by mime
+ * *or* by extension. Returns null when there is nothing transcribable.
+ */
+interface TelegramMedia {
+  file_id?: string;
+  mime_type?: string;
+  file_name?: string;
+  file_size?: number;
+  duration?: number;
+}
+
+export interface TelegramMediaMessage {
+  voice?: TelegramMedia;
+  audio?: TelegramMedia;
+  video_note?: TelegramMedia;
+  document?: TelegramMedia;
+}
+
+export function pickTelegramAudio(
+  msg: TelegramMediaMessage | null | undefined,
+): TelegramAudioAttachment | null {
+  if (!msg || typeof msg !== "object") return null;
+
+  // Each candidate carries the mime we will actually hand to the STT layer,
+  // rather than trusting whatever Telegram attached.
+  const candidates: Array<{ media?: TelegramMedia; mime: string }> = [
+    { media: msg.voice, mime: msg.voice?.mime_type || "audio/ogg" },
+    { media: msg.audio, mime: msg.audio?.mime_type || "audio/mpeg" },
+    { media: msg.video_note, mime: msg.video_note?.mime_type || "video/mp4" },
+  ];
+
+  const doc = msg.document;
+  if (doc?.file_id) {
+    const docMime = typeof doc.mime_type === "string" ? doc.mime_type : "";
+    const docName = typeof doc.file_name === "string" ? doc.file_name : "";
+    const ext = docName.match(AUDIO_FILE_EXTENSION)?.[1]?.toLowerCase();
+    if (docMime.startsWith("audio/")) {
+      candidates.push({ media: doc, mime: docMime });
+    } else if (ext) {
+      candidates.push({ media: doc, mime: MIME_FOR_EXTENSION[ext] ?? "audio/ogg" });
+    }
+  }
+
+  for (const { media, mime } of candidates) {
+    if (!media?.file_id) continue;
+    return {
+      fileId: media.file_id,
+      mime,
+      fileSize: media.file_size ?? null,
+      durationSeconds: media.duration ?? null,
+    };
+  }
+  return null;
+}
