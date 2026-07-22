@@ -92,7 +92,7 @@ export const NATIVE_TOOLS: ToolDef[] = [
     function: {
       name: "manage_event",
       description:
-        "List, update, or delete calendar events. action='list' returns the user's next meetings as a NUMBERED list (use limit for how many, default 5); the user can then edit one by its number. To update/delete a listed meeting, pass index (its number); otherwise match by query (title fragment).",
+        "List, update, or delete calendar events. action='list' returns the user's next meetings as a NUMBERED list (use limit for how many, default 5) so the user can edit one by its number — call list at most once per turn, never repeat it. To update/delete a listed meeting, pass index (its number); otherwise match by query (title fragment).",
       parameters: {
         type: "object",
         properties: {

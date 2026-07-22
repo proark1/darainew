@@ -54,4 +54,15 @@ describe("Telegram confirmation reply ordering", () => {
       "Done.\n\nAdded task: Buy milk.",
     );
   });
+
+  it("collapses an identical tool message repeated across agent rounds", () => {
+    const list = "📅 Your next 2 meetings:\n1. Mon, 03 Aug, 08:45 — A\n2. Mon, 03 Aug, 14:00 — B";
+    const { executed } = splitTelegramToolResults([
+      { queued: false, message: list },
+      { queued: false, message: list },
+      { queued: false, message: list },
+    ]);
+
+    expect(buildTelegramMainReply("", executed, false)).toBe(list);
+  });
 });

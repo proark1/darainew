@@ -9,6 +9,7 @@ import {
 } from "../_shared/dori-context.ts";
 import { findTimeSlots, rankProposedSlots } from "../_shared/dori-scheduling.ts";
 import { applyTimeToIso } from "../_shared/event-time.ts";
+import { clampMeetingLimit, formatMeetingList } from "../_shared/meeting-list.ts";
 import {
   retrieveRelevantMemories,
   rememberSemantic,
@@ -785,8 +786,8 @@ Event JSON fields:
 - "endTime": ISO date string (optional — new end, update only)
 - "location": string (optional — new location, update only)
 
-action="list" returns a NUMBERED list of the user's next meetings. ALWAYS use it when the user says "list meetings", "list meetings 10", "show my meetings", "next N meetings", "termine", etc. — do NOT answer these from context, because the numbering is what lets the user then edit a meeting by its number.
-When the user references a meeting by that number ("change 3 to 16:00", "rename 2 to Dentist", "cancel 4", "3 location Meerbusch"), emit action=update (or delete) with index=<number> plus the changed field (time / title / location).
+action="list" returns a NUMBERED list of the user's next meetings so the user can edit one by its number. Call it at most ONCE per turn — never repeat the same list in one reply. (The common "list meetings" / "list meetings N" phrasings are already handled before you see them, so you mostly need list only for looser wordings like "what meetings do I have coming up?".)
+When the user references a meeting by its number ("change 3 to 16:00", "rename 2 to Dentist", "cancel 4", "3 location Meerbusch"), emit action=update (or delete) with index=<number> plus the changed field (time / title / location).
 
 TOOL: manage_property
 Use this to create, update, delete, or search the user's properties (homes, apartments, rentals).
@@ -2498,7 +2499,7 @@ async function executeToolsServerSide(
       // emits search/update/delete with no query.
       const wantsList = action === "list" || !data.query;
       if (wantsList && action !== "update" && action !== "delete") {
-        const limit = Math.max(1, Math.min(20, Number(data.limit) || 5));
+        const limit = clampMeetingLimit(data.limit);
         const { data: rows } = await supabase
           .from("events")
           .select("id, title, start_time, end_time, location")
@@ -2506,21 +2507,11 @@ async function executeToolsServerSide(
           .gte("start_time", new Date().toISOString())
           .order("start_time")
           .limit(limit);
-        if (!rows || rows.length === 0) {
-          out.push({ tool: "manage_event", ok: true, message: "📭 No upcoming events." });
-        } else {
-          const lines = rows.map(
-            (e: { start_time: string; title: string; location?: string }, i: number) => {
-              const when = fmtEventWhen(e.start_time, opts?.timezone) ?? "";
-              return `${i + 1}. ${when} — ${e.title}${e.location ? ` @ ${e.location}` : ""}`;
-            },
-          );
-          out.push({
-            tool: "manage_event",
-            ok: true,
-            message: `📅 Your next ${rows.length} meeting${rows.length === 1 ? "" : "s"}:\n${lines.join("\n")}\n\nEdit one by its number — e.g. "3 16:00" or "3 title Dentist".`,
-          });
-        }
+        out.push({
+          tool: "manage_event",
+          ok: true,
+          message: formatMeetingList(rows || [], opts?.timezone),
+        });
         continue;
       }
       let target: Record<string, unknown> | null = null;

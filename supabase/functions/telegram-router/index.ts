@@ -23,6 +23,7 @@ import {
   parseTelegramCalendarShortcut,
 } from "../_shared/telegram-calendar-shortcut.ts";
 import { buildTelegramMainReply, splitTelegramToolResults } from "../_shared/telegram-reply.ts";
+import { clampMeetingLimit, formatMeetingList } from "../_shared/meeting-list.ts";
 import {
   buildContractRowKeyboard,
   buildEventRowKeyboard,
@@ -1977,6 +1978,34 @@ Deno.serve(async (req) => {
   }
   if (lower === "/week") {
     await tgSend(chat_id, await handleWeek(supabase, memberIds, household));
+    return new Response('{"ok":true}', { headers: corsHeaders });
+  }
+  // /listmeetings [N] — deterministic NUMBERED list of the caller's next
+  // meetings. Also matches the natural "list meetings [N]" / "meetings [N]" /
+  // "nächste termine [N]". Handled here without an AI round, so the list is
+  // produced exactly once (the model used to repeat it across agent rounds) and
+  // the numbering matches manage_event's index-based edits (same per-user query).
+  const listMeetingsMatch = lower.match(
+    /^\/?(?:listmeetings|list\s+meetings|meetings|n(?:ä|ae)chste\s+termine|termine)\s*(\d{1,2})?$/,
+  );
+  if (listMeetingsMatch) {
+    const limit = clampMeetingLimit(listMeetingsMatch[1]);
+    const { data: rows } = await supabase
+      .from("events")
+      .select("id, title, start_time, location")
+      .eq("user_id", userForChat)
+      .gte("start_time", new Date().toISOString())
+      .order("start_time")
+      .limit(limit);
+    const msg = formatMeetingList(rows || [], userTimezone);
+    await tgSend(chat_id, msg);
+    // Persist so the numbered list is in the next turn's context — lets the
+    // model resolve a follow-up like "change 3 to 16:00".
+    try {
+      await supabase.from("telegram_assistant_replies").insert({ chat_id, reply: msg });
+    } catch {
+      /* ignore */
+    }
     return new Response('{"ok":true}', { headers: corsHeaders });
   }
   if (
