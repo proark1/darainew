@@ -91,18 +91,36 @@ export const NATIVE_TOOLS: ToolDef[] = [
     type: "function",
     function: {
       name: "manage_event",
-      description: "Update or delete an existing calendar event by fuzzy match on title.",
+      description:
+        "List, update, or delete calendar events. action='list' returns the user's next meetings as a NUMBERED list (use limit for how many, default 5); the user can then edit one by its number. To update/delete a listed meeting, pass index (its number); otherwise match by query (title fragment).",
       parameters: {
         type: "object",
         properties: {
-          action: { type: "string", enum: ["update", "delete", "search"] },
+          action: { type: "string", enum: ["list", "update", "delete", "search"] },
           event: {
             type: "object",
             properties: {
-              query: { type: "string", description: "Title fragment to find the event" },
+              query: {
+                type: "string",
+                description:
+                  "Title fragment to find the event (update/delete/search when no index)",
+              },
+              index: {
+                type: "number",
+                description:
+                  "1-based position from the numbered 'list' reply. Preferred way to pick a meeting the user referenced by number, e.g. 'change 3 to 16:00' → index 3.",
+              },
+              time: {
+                type: "string",
+                description:
+                  "New clock time 'HH:MM' for a time-only change (update). Keeps the meeting's date; the server applies it in the user's timezone. Prefer this over startTime for 'change meeting N to 16:00'.",
+              },
+              limit: {
+                type: "number",
+                description: "How many meetings to list (action='list', default 5, max 20).",
+              },
               ...eventFields,
             },
-            required: ["query"],
           },
         },
         required: ["action", "event"],

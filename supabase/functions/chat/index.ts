@@ -8,6 +8,7 @@ import {
   tzOffset,
 } from "../_shared/dori-context.ts";
 import { findTimeSlots, rankProposedSlots } from "../_shared/dori-scheduling.ts";
+import { applyTimeToIso } from "../_shared/event-time.ts";
 import {
   retrieveRelevantMemories,
   rememberSemantic,
@@ -772,17 +773,20 @@ When to use:
 - Always confirm what you set and when it will trigger
 
 TOOL: manage_event
-Use this to UPDATE, DELETE, SEARCH, or LIST existing calendar events (use schedule_event for creation).
-Format: <tool>manage_event</tool><action>update|delete|search|list</action><event>JSON_OBJECT</event>
+Use this to LIST, UPDATE, DELETE, or SEARCH existing calendar events (use schedule_event for creation).
+Format: <tool>manage_event</tool><action>list|update|delete|search</action><event>JSON_OBJECT</event>
 Event JSON fields:
-- "query": string (REQUIRED for update / delete / search — matches event title, e.g. "dentist", "team meeting"). OMIT for action="list".
-- "limit": number (optional, used with action="list", default 5, max 20)
+- "query": string (matches event title, e.g. "dentist", "team meeting" — for update / delete / search when you have no index). OMIT for action="list".
+- "index": number (1-based position from the numbered action="list" reply — the preferred way to update/delete a meeting the user named by number, e.g. "change 3 to 16:00" → index 3).
+- "limit": number (optional, action="list", default 5, max 20)
 - "title": string (optional — new title, update only)
-- "startTime": ISO date string (optional — new start, update only)
+- "time": string "HH:MM" (optional, update only — change ONLY the clock time and keep the meeting's date; the server applies it in the user's timezone. PREFER this for "change meeting N to 16:00").
+- "startTime": ISO date string (optional — new start incl. a new date, update only)
 - "endTime": ISO date string (optional — new end, update only)
 - "location": string (optional — new location, update only)
 
-Use action="list" when the user says "show me my next events", "what's on my calendar", "next N entries", etc. Prefer answering from the LIVE CONTEXT block when those events are already there; fall back to action="list" only if context doesn't have them.
+action="list" returns a NUMBERED list of the user's next meetings. ALWAYS use it when the user says "list meetings", "list meetings 10", "show my meetings", "next N meetings", "termine", etc. — do NOT answer these from context, because the numbering is what lets the user then edit a meeting by its number.
+When the user references a meeting by that number ("change 3 to 16:00", "rename 2 to Dentist", "cancel 4", "3 location Meerbusch"), emit action=update (or delete) with index=<number> plus the changed field (time / title / location).
 
 TOOL: manage_property
 Use this to create, update, delete, or search the user's properties (homes, apartments, rentals).
@@ -2505,20 +2509,35 @@ async function executeToolsServerSide(
         if (!rows || rows.length === 0) {
           out.push({ tool: "manage_event", ok: true, message: "📭 No upcoming events." });
         } else {
-          const lines = rows.map((e: { start_time: string; title: string; location?: string }) => {
-            const when = fmtEventWhen(e.start_time, opts?.timezone) ?? "";
-            return `• ${when} — ${e.title}${e.location ? ` @ ${e.location}` : ""}`;
-          });
+          const lines = rows.map(
+            (e: { start_time: string; title: string; location?: string }, i: number) => {
+              const when = fmtEventWhen(e.start_time, opts?.timezone) ?? "";
+              return `${i + 1}. ${when} — ${e.title}${e.location ? ` @ ${e.location}` : ""}`;
+            },
+          );
           out.push({
             tool: "manage_event",
             ok: true,
-            message: `📅 Next ${rows.length} event${rows.length === 1 ? "" : "s"}:\n${lines.join("\n")}`,
+            message: `📅 Your next ${rows.length} meeting${rows.length === 1 ? "" : "s"}:\n${lines.join("\n")}\n\nEdit one by its number — e.g. "3 16:00" or "3 title Dentist".`,
           });
         }
         continue;
       }
       let target: Record<string, unknown> | null = null;
-      if (data.query) {
+      const idx = Number(data.index);
+      if (Number.isInteger(idx) && idx >= 1) {
+        // Reference by the number shown in a prior action="list" reply: the
+        // N-th upcoming meeting in start-time order (same ordering as the list).
+        const { data: rows } = await supabase
+          .from("events")
+          .select("*")
+          .eq("user_id", userId)
+          .gte("start_time", new Date().toISOString())
+          .order("start_time")
+          .limit(idx);
+        target = rows && rows.length >= idx ? (rows[idx - 1] as Record<string, unknown>) : null;
+      }
+      if (!target && data.query) {
         const { data: rows } = await supabase
           .from("events")
           .select("*")
@@ -2530,10 +2549,12 @@ async function executeToolsServerSide(
         target = rows?.[0];
       }
       if (!target) {
+        const ref =
+          Number.isInteger(idx) && idx >= 1 ? `#${idx}` : `matching "${data.query ?? ""}"`;
         out.push({
           tool: "manage_event",
           ok: false,
-          message: `Could not find event matching "${data.query}"`,
+          message: `Could not find meeting ${ref}`,
         });
         continue;
       }
@@ -2554,8 +2575,31 @@ async function executeToolsServerSide(
       } else if (action === "update") {
         const upd: Record<string, unknown> = {};
         if (data.title) upd.title = data.title;
-        if (data.startTime) upd.start_time = isoOrNull(data.startTime as string | undefined);
-        if (data.endTime) upd.end_time = isoOrNull(data.endTime as string | undefined);
+        if (data.startTime) {
+          upd.start_time = isoOrNull(data.startTime as string | undefined);
+        } else if (data.time && target.start_time) {
+          // Time-only change ("change meeting 3 to 16:00"): keep the meeting's
+          // calendar date and move only the clock time, in the user's timezone.
+          const moved = applyTimeToIso(
+            String(target.start_time),
+            String(data.time),
+            opts?.timezone,
+          );
+          if (moved) upd.start_time = moved;
+        }
+        if (data.endTime) {
+          upd.end_time = isoOrNull(data.endTime as string | undefined);
+        } else if (upd.start_time && target.start_time && target.end_time) {
+          // Preserve the original duration when only the start moved.
+          const durMs =
+            new Date(String(target.end_time)).getTime() -
+            new Date(String(target.start_time)).getTime();
+          if (durMs > 0) {
+            upd.end_time = new Date(
+              new Date(String(upd.start_time)).getTime() + durMs,
+            ).toISOString();
+          }
+        }
         if (data.location !== undefined) upd.location = data.location;
         const oldPatch: Record<string, unknown> = {};
         for (const k of Object.keys(upd))
@@ -2570,17 +2614,9 @@ async function executeToolsServerSide(
         );
         const updatedTitle = upd.title || target.title;
         // Echo the new time/location too so users see what actually changed,
-        // not just the (possibly unchanged) title.
+        // not just the (possibly unchanged) title. Format in the user's tz.
         const newStart = upd.start_time || target.start_time;
-        const whenStr = newStart
-          ? new Date(String(newStart)).toLocaleString("en-GB", {
-              weekday: "short",
-              day: "2-digit",
-              month: "short",
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-          : "";
+        const whenStr = fmtEventWhen(String(newStart), opts?.timezone) ?? "";
         const locStr = upd.location !== undefined ? upd.location : target.location;
         const bits = [updatedTitle];
         if (whenStr) bits.push(`→ ${whenStr}`);
