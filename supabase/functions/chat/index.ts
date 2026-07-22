@@ -1160,7 +1160,12 @@ interface MutatingTool {
 // Short, human-readable date for confirmation/summary lines, e.g. "Sat 06 Jun, 18:00".
 // Formats in the user's timezone when known; Edge Functions default to UTC
 // otherwise, and an invalid tz falls back to UTC rather than throwing.
-const fmtEventWhen = (s?: string | null, tz?: string): string | null => {
+// The bot is used from Germany and users speak times in local (Berlin) time, so
+// when a profile has no timezone set we display in Berlin rather than the Deno
+// server's UTC — a bare toLocaleString() would otherwise show times 1–2h off.
+const DEFAULT_TIMEZONE = "Europe/Berlin";
+
+const fmtEventWhen = (s?: string | null, tz: string = DEFAULT_TIMEZONE): string | null => {
   if (!s) return null;
   const dt = new Date(s);
   if (isNaN(dt.getTime())) return null;
@@ -1478,8 +1483,8 @@ const MUTATING_TOOLS: MutatingTool[] = [
       return { action: "create", data, fullMatch: m[0] };
     },
     classify: () => "create",
-    summarize: (_a, d) =>
-      `Set reminder${d.triggerAt ? ` for ${new Date(String(d.triggerAt)).toLocaleString()}` : ""}: ${d.message || ""}`,
+    summarize: (_a, d, tz) =>
+      `Set reminder${d.triggerAt ? ` for ${fmtEventWhen(String(d.triggerAt), tz) ?? ""}` : ""}: ${d.message || ""}`,
   },
   {
     // send_email is always gated: sending is irreversible so the user must
@@ -2423,14 +2428,7 @@ async function executeToolsServerSide(
           .limit(2);
         if (clash && clash.length > 0) {
           const first = clash[0];
-          const when = new Date(first.start_time).toLocaleString("en-GB", {
-            weekday: "short",
-            day: "2-digit",
-            month: "short",
-            hour: "2-digit",
-            minute: "2-digit",
-            timeZone: opts?.timezone,
-          });
+          const when = fmtEventWhen(first.start_time, opts?.timezone) ?? "";
           conflictNote = ` ⚠️ Overlaps "${first.title}" (${when})${clash.length > 1 ? ` and ${clash.length - 1} more` : ""}`;
         }
       } catch (e) {
@@ -2468,10 +2466,11 @@ async function executeToolsServerSide(
         notifyAssignee(assigneeId, "event", e.id, e.title, assigneeName, self);
       }
       const recurrenceLabel = summarizeRRule(data.recurrenceRule);
+      const whenLabel = fmtEventWhen(e.start_time, opts?.timezone) ?? "";
       out.push({
         tool: "schedule_event",
         ok: true,
-        message: `📅 Scheduled: ${e.title} — ${recurrenceLabel ? `🔁 ${recurrenceLabel}, starting ` : ""}${new Date(e.start_time).toLocaleString()}${conflictNote}`,
+        message: `📅 Scheduled: ${e.title} — ${recurrenceLabel ? `🔁 ${recurrenceLabel}, starting ` : ""}${whenLabel}${conflictNote}`,
         data: e,
         undoId,
         entityId: e.id,
@@ -2507,14 +2506,7 @@ async function executeToolsServerSide(
           out.push({ tool: "manage_event", ok: true, message: "📭 No upcoming events." });
         } else {
           const lines = rows.map((e: { start_time: string; title: string; location?: string }) => {
-            const when = new Date(e.start_time).toLocaleString("en-GB", {
-              weekday: "short",
-              day: "2-digit",
-              month: "short",
-              hour: "2-digit",
-              minute: "2-digit",
-              timeZone: opts?.timezone,
-            });
+            const when = fmtEventWhen(e.start_time, opts?.timezone) ?? "";
             return `• ${when} — ${e.title}${e.location ? ` @ ${e.location}` : ""}`;
           });
           out.push({
@@ -2606,7 +2598,7 @@ async function executeToolsServerSide(
         out.push({
           tool: "manage_event",
           ok: true,
-          message: `Found: ${target.title} on ${new Date(String(target.start_time)).toLocaleString()}`,
+          message: `Found: ${target.title} on ${fmtEventWhen(String(target.start_time), opts?.timezone) ?? ""}`,
           entityId: target.id,
           title: target.title,
           entityKind: "event",
@@ -3351,7 +3343,7 @@ async function executeToolsServerSide(
       out.push({
         tool: "set_reminder",
         ok: true,
-        message: `⏰ Reminder set for ${new Date(trigger).toLocaleString()}${recurrenceLabel ? ` (🔁 ${recurrenceLabel})` : ""}: ${data.message}`,
+        message: `⏰ Reminder set for ${fmtEventWhen(trigger, opts?.timezone) ?? ""}${recurrenceLabel ? ` (🔁 ${recurrenceLabel})` : ""}: ${data.message}`,
       });
     } catch (e) {
       out.push({ tool: "set_reminder", ok: false, message: `Failed: ${(e as Error).message}` });
